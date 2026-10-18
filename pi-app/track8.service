@@ -1,0 +1,22 @@
+[Unit]
+Description=Track8 recorder
+After=systemd-user-sessions.service sound.target
+Conflicts=getty@tty1.service
+
+[Service]
+User=pi
+Group=pi
+SupplementaryGroups=video render input audio
+WorkingDirectory=/home/pi/track8/pi-app
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=TRACK8_NO_TERMINAL_KEYS=1
+ExecStart=/usr/bin/python3 /home/pi/track8/pi-app/track8.py
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

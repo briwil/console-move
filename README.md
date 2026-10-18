@@ -42,3 +42,8 @@ personal access token in place of your password.
 
 - **Screen rotation:** `~/.config/labwc/autostart` contains
   `(sleep 3; wlr-randr --output HDMI-A-1 --transform 270) &`
+
+## Tools
+
+- `tools/screen-designer.html` is a visual designer for the 1280×400 screen.
+  Open it in a browser, lay out the screen and copy the generated `ui.*` code.

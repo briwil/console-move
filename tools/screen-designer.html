@@ -1,0 +1,755 @@
+<title>Track8 Screen Designer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: the 1280x400 screen across the top, tools above it, properties and item list below, code at the bottom. */
+  :root {
+    --bg: #eef0f2;
+    --panel: #ffffff;
+    --line: #cfd4da;
+    --fg: #15181c;
+    --dim: #5c6670;
+    --accent: #c2410c;
+    --accent-fg: #ffffff;
+    --field: #f6f7f8;
+    --stage: #b9c0c8;
+    --sel: #ff8a4c;
+    --marq: #4cc2ff;
+    --ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101316; --panel: #1a1e23; --line: #323941; --fg: #e8ebee; --dim: #9aa4ae;
+      --accent: #ff8a4c; --accent-fg: #1a0d04; --field: #12161a; --stage: #262c33; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101316; --panel: #1a1e23; --line: #323941; --fg: #e8ebee; --dim: #9aa4ae;
+    --accent: #ff8a4c; --accent-fg: #1a0d04; --field: #12161a; --stage: #262c33; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg); color: var(--fg); font: 14px/1.45 var(--ui);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+  }
+  main { max-width: 1340px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+  .sub { color: var(--dim); margin: 2px 0 0; max-width: 72ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .row > * { flex: 1 1 340px; min-width: 0; }
+  .stage { background: var(--stage); padding: 12px; border: 1px solid var(--line); }
+  .screen { position: relative; width: 100%; max-width: 100%; aspect-ratio: 1280 / 400; background: #000; }
+  .screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #over { touch-action: none; cursor: default; }
+  .panel { background: var(--panel); border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim); font-weight: 600; margin: 0; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+  button, select, input, textarea { font: inherit; color: var(--fg); }
+  button { background: var(--field); border: 1px solid var(--line); padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  button kbd { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 4px; }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  button[aria-pressed="true"] kbd { color: inherit; opacity: .75; }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .layer:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .fields label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; min-width: 0; }
+  .fields label.wide { grid-column: 1 / -1; }
+  input[type=number], input[type=text], select { width: 100%; background: var(--field); border: 1px solid var(--line); padding: 5px 7px; font-family: var(--mono); font-size: 13px; }
+  .colorrow { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  .colorrow label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .colorrow input[type=color] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--line); background: var(--field); }
+  .sw { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sw button { width: 24px; height: 24px; padding: 0; border: 1px solid var(--dim); }
+  .layers { display: flex; flex-direction: column; max-height: 300px; overflow: auto; border: 1px solid var(--line); background: var(--field); }
+  .layer { display: flex; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; font-family: var(--mono); font-size: 12px; border-bottom: 1px solid var(--line); }
+  .layer:last-child { border-bottom: 0; }
+  .layer[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); }
+  .layer .chip { width: 12px; height: 12px; border: 1px solid var(--dim); flex: none; }
+  .layer .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer .ty { color: var(--dim); flex: none; }
+  .layer[aria-selected="true"] .ty { color: inherit; opacity: .75; }
+  .hint { color: var(--dim); font-size: 12px; margin: 0; }
+  .hint code, .sub code { font-family: var(--mono); font-size: 12px; }
+  .codehead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  textarea { width: 100%; min-height: 260px; background: var(--field); border: 1px solid var(--line); padding: 10px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; resize: vertical; white-space: pre; overflow: auto; }
+  .opts { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+  .opts label { display: flex; gap: 6px; align-items: center; }
+  .opts select { width: auto; }
+  .status { color: var(--dim); font-size: 12px; min-height: 1.4em; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  @media (max-width: 520px) { .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+
+<main>
+  <div>
+    <h1>Track8 Screen Designer</h1>
+    <p class="sub">A 1280 × 400 copy of the Track8 screen. Draw boxes, text, lines, circles, waveforms and level meters, drag them into place, and the code for the Pi app appears underneath. You can also paste code in and watch it draw. Your layout is kept in this browser between visits.</p>
+  </div>
+
+  <div class="panel">
+    <div class="tools" role="toolbar" aria-label="Tools">
+      <button id="t-select" aria-pressed="true">Select / move<kbd>V</kbd></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="t-rect" aria-pressed="false">Box<kbd>R</kbd></button>
+      <button id="t-frame" aria-pressed="false">Outline box<kbd>F</kbd></button>
+      <button id="t-text" aria-pressed="false">Text<kbd>T</kbd></button>
+      <button id="t-line" aria-pressed="false">Line<kbd>L</kbd></button>
+      <button id="t-circle" aria-pressed="false">Circle<kbd>C</kbd></button>
+      <button id="t-wave" aria-pressed="false">Waveform<kbd>W</kbd></button>
+      <button id="t-meter" aria-pressed="false">Level meter<kbd>M</kbd></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="b-undo">Undo</button>
+      <button id="b-redo">Redo</button>
+    </div>
+    <div class="opts">
+      <label>Snap <select id="snap" aria-label="Snap to grid"><option value="1">off</option><option value="2">2 px</option><option value="4" selected>4 px</option><option value="8">8 px</option><option value="10">10 px</option><option value="20">20 px</option></select></label>
+      <label><input type="checkbox" id="grid"> Show 40 px grid</label>
+      <label><input type="checkbox" id="names"> Show names</label>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="screen">
+      <canvas id="view" width="1280" height="400"></canvas>
+      <canvas id="over" width="2560" height="800"></canvas>
+    </div>
+  </div>
+  <div class="status" id="status">x 0  y 0</div>
+
+  <div class="row">
+    <div class="panel" id="props">
+      <h2>Selected item</h2>
+      <div id="noprops" class="hint">Nothing selected. Pick an item on the screen or in the list.</div>
+      <div id="propsbody" hidden>
+        <div class="fields" id="fieldsbox"></div>
+        <div class="colorrow" id="colorbox" style="margin-top:10px">
+          <label>Colour<input type="color" id="p-cpick" aria-label="Colour picker"></label>
+          <label style="flex:1;min-width:110px">Hex<input type="text" id="p-c" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="sw" id="swatches" aria-label="Palette" style="margin-top:8px"></div>
+      </div>
+      <div id="multinote" class="hint" hidden></div>
+      <div class="tools" id="itemtools" hidden>
+        <button id="b-dup">Duplicate</button>
+        <button id="b-front">Bring forward</button>
+        <button id="b-back">Send back</button>
+        <button id="b-del">Delete</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Items (top of the list is drawn last)</h2>
+      <div class="layers" id="layers" role="listbox" aria-label="Items"></div>
+      <div class="tools">
+        <button id="b-example">Load Track8 example</button>
+        <button id="b-clear">Clear all</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="codehead">
+      <h2>Code for the Pi app</h2>
+      <div class="tools"><button class="primary" id="b-copy">Copy code</button></div>
+    </div>
+    <textarea id="code" spellcheck="false" aria-label="Layout code"></textarea>
+    <div class="status" id="codestat"></div>
+    <p class="hint">Each line draws one item, and the first value is its name. The Pi app uses names to update live items, such as <code>track1_wave</code> or <code>clock</code>. Commands:
+      <code>ui.fill(name, x, y, w, h, colour, radius)</code>,
+      <code>ui.frame(name, x, y, w, h, line, colour, radius)</code>,
+      <code>ui.text(name, x, y, size, colour, font, weight, align, "TEXT")</code>,
+      <code>ui.line(name, x1, y1, x2, y2, width, colour)</code>,
+      <code>ui.circle(name, x, y, radius, line, colour)</code> (line 0 means filled),
+      <code>ui.wave(name, x, y, w, h, colour)</code>,
+      <code>ui.meter(name, x, y, w, h, colour, level)</code>.
+      Waveforms show sample audio here; on the Pi they show the real recording. Copy the code and paste it to Claude to put it in the app.</p>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var W = 1280, H = 400;
+  var FONTS = { sans: '"Inter Tight", "Helvetica Neue", Arial, sans-serif', mono: '"IBM Plex Mono", Menlo, Consolas, monospace' };
+  var PAL = [
+    ["track 1 blue", "#4F8CFF"], ["track 2 green", "#3CCB7F"], ["track 3 yellow", "#F2C230"], ["track 4 red", "#FF5A4E"],
+    ["track 5 violet", "#B07CFF"], ["track 6 cyan", "#2EC8D8"], ["track 7 orange", "#FF8A3D"], ["track 8 pink", "#E86FB0"],
+    ["white", "#F2F3F5"], ["grey", "#7D838C"], ["lane", "#17191E"], ["panel", "#14161A"], ["background", "#0C0D10"], ["black", "#000000"]
+  ];
+  var STORE = "track8-screen-designer-code";
+  var view = document.getElementById("view"), vctx = view.getContext("2d");
+  var over = document.getElementById("over"), octx = over.getContext("2d");
+  var codeEl = document.getElementById("code");
+  var items = [], sel = -1, ms = [], tool = "select", drag = null;
+  var hist = [], hidx = -1, restoring = false;
+
+  function $(id) { return document.getElementById(id); }
+  function multi() { return ms.length > 1 && ms.every(function (i) { return items[i]; }); }
+  function chosen() { return multi() ? ms.slice() : (sel >= 0 && items[sel] ? [sel] : []); }
+  function toggle(i) {
+    var cur = chosen(), k = cur.indexOf(i);
+    if (k >= 0) cur.splice(k, 1); else cur.push(i);
+    sel = cur.length ? cur[cur.length - 1] : -1;
+    ms = cur.length > 1 ? cur : [];
+  }
+  function snapv(v) { var g = +$("snap").value; return g > 1 ? Math.round(v / g) * g : Math.round(v); }
+  function okHex(s) { return /^#[0-9a-fA-F]{6}$/.test(s); }
+  function isBox(it) { return it.type === "rect" || it.type === "frame" || it.type === "wave" || it.type === "meter"; }
+
+  // ---------- drawing (the Pi app draws with these same rules) ----------
+  function rrect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    if (r > 0 && ctx.roundRect) ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2)); else ctx.rect(x, y, w, h);
+  }
+  function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function drawWave(ctx, it) {
+    var r = rng(hash(it.name || "wave")), cy = it.y + it.h / 2, env = 0, target = 0, on = r() > .3, run = 0;
+    ctx.fillStyle = it.c;
+    for (var x = it.x; x < it.x + it.w - 1; x += 3) {
+      if (run-- <= 0) { on = r() > .28; run = 10 + Math.floor(r() * 60); target = on ? .35 + r() * .65 : 0; }
+      env += (target - env) * .18;
+      var a = Math.max(env * (.45 + r() * .55), .04) * (it.h - 2);
+      ctx.fillRect(x, Math.round(cy - a / 2), 2, Math.max(1, Math.round(a)));
+    }
+  }
+  function textFont(it) { return it.wt + " " + it.s + "px " + FONTS[it.f]; }
+  function drawItem(ctx, it) {
+    ctx.save();
+    ctx.fillStyle = it.c; ctx.strokeStyle = it.c;
+    if (it.type === "rect") { rrect(ctx, it.x, it.y, it.w, it.h, it.r); ctx.fill(); }
+    else if (it.type === "frame") {
+      var t = Math.max(1, Math.min(it.t, it.w / 2, it.h / 2));
+      ctx.lineWidth = t; rrect(ctx, it.x + t / 2, it.y + t / 2, it.w - t, it.h - t, Math.max(0, it.r - t / 2)); ctx.stroke();
+    }
+    else if (it.type === "text") {
+      ctx.font = textFont(it); ctx.textBaseline = "top"; ctx.textAlign = it.a;
+      ctx.fillText(it.t, it.x, it.y);
+    }
+    else if (it.type === "line") {
+      var ox = (it.t % 2 && it.x1 === it.x2) ? .5 : 0, oy = (it.t % 2 && it.y1 === it.y2) ? .5 : 0;
+      ctx.lineWidth = it.t; ctx.beginPath(); ctx.moveTo(it.x1 + ox, it.y1 + oy); ctx.lineTo(it.x2 + ox, it.y2 + oy); ctx.stroke();
+    }
+    else if (it.type === "circle") {
+      ctx.beginPath();
+      if (it.t > 0) { ctx.lineWidth = it.t; ctx.arc(it.x, it.y, Math.max(.5, it.rad - it.t / 2), 0, Math.PI * 2); ctx.stroke(); }
+      else { ctx.arc(it.x, it.y, it.rad, 0, Math.PI * 2); ctx.fill(); }
+    }
+    else if (it.type === "wave") drawWave(ctx, it);
+    else if (it.type === "meter") {
+      var v = Math.max(0, Math.min(100, it.v)) / 100;
+      ctx.globalAlpha = .25; ctx.fillRect(it.x, it.y, it.w, it.h); ctx.globalAlpha = 1;
+      if (it.w >= it.h) ctx.fillRect(it.x, it.y, Math.round(it.w * v), it.h);
+      else { var fh = Math.round(it.h * v); ctx.fillRect(it.x, it.y + it.h - fh, it.w, fh); }
+    }
+    ctx.restore();
+  }
+  function bbox(it) {
+    if (isBox(it)) return { x: it.x, y: it.y, w: it.w, h: it.h };
+    if (it.type === "circle") return { x: it.x - it.rad, y: it.y - it.rad, w: it.rad * 2, h: it.rad * 2 };
+    if (it.type === "line") {
+      var p = Math.max(2, it.t / 2);
+      return { x: Math.min(it.x1, it.x2) - p, y: Math.min(it.y1, it.y2) - p, w: Math.abs(it.x2 - it.x1) + 2 * p, h: Math.abs(it.y2 - it.y1) + 2 * p };
+    }
+    vctx.save(); vctx.font = textFont(it); var w = Math.max(4, vctx.measureText(it.t).width); vctx.restore();
+    var x = it.a === "center" ? it.x - w / 2 : it.a === "right" ? it.x - w : it.x;
+    return { x: x, y: it.y, w: w, h: Math.round(it.s * 1.15) };
+  }
+
+  // ---------- rendering ----------
+  function kpx() { return over.getBoundingClientRect().width / W || 1; }
+  function render() {
+    vctx.fillStyle = "#000"; vctx.fillRect(0, 0, W, H);
+    items.forEach(function (it) { drawItem(vctx, it); });
+    var k = kpx(), lw = 1 / k;
+    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, over.width, over.height);
+    octx.setTransform(over.width / W, 0, 0, over.height / H, 0, 0);
+    if ($("grid").checked) {
+      octx.save(); octx.strokeStyle = "rgba(120,200,255,.18)"; octx.lineWidth = lw; octx.beginPath();
+      for (var gx = 40; gx < W; gx += 40) { octx.moveTo(gx, 0); octx.lineTo(gx, H); }
+      for (var gy = 40; gy < H; gy += 40) { octx.moveTo(0, gy); octx.lineTo(W, gy); }
+      octx.stroke(); octx.restore();
+    }
+    if ($("names").checked) {
+      octx.save(); octx.font = (11 / k) + "px " + FONTS.mono; octx.textBaseline = "bottom";
+      items.forEach(function (it) {
+        if (!it.name) return; var b = bbox(it);
+        octx.fillStyle = "rgba(0,0,0,.7)"; var tw = octx.measureText(it.name).width;
+        octx.fillRect(b.x, b.y - 14 / k, tw + 6 / k, 14 / k);
+        octx.fillStyle = "rgba(160,220,255,.95)"; octx.fillText(it.name, b.x + 3 / k, b.y - 1 / k);
+      });
+      octx.restore();
+    }
+    var ch = chosen();
+    ch.forEach(function (i) {
+      var it = items[i], b = bbox(it);
+      octx.save();
+      octx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--sel") || "#ff8a4c";
+      octx.lineWidth = 2 * lw; octx.setLineDash([5 * lw, 3 * lw]);
+      octx.strokeRect(b.x - lw, b.y - lw, b.w + 2 * lw, b.h + 2 * lw);
+      octx.setLineDash([]);
+      if (ch.length === 1) {
+        octx.fillStyle = octx.strokeStyle;
+        handles(it).forEach(function (p) { octx.fillRect(p[0] - 5 * lw, p[1] - 5 * lw, 10 * lw, 10 * lw); });
+      }
+      octx.restore();
+    });
+    if (drag && drag.mode === "marquee") {
+      var q = marq();
+      octx.save(); octx.strokeStyle = "#4cc2ff"; octx.fillStyle = "rgba(76,194,255,.15)"; octx.lineWidth = lw; octx.setLineDash([4 * lw, 3 * lw]);
+      octx.fillRect(q.x, q.y, q.w, q.h); octx.strokeRect(q.x, q.y, q.w, q.h);
+      octx.restore();
+    }
+  }
+  function marq() { return { x: Math.min(drag.sx, drag.x), y: Math.min(drag.sy, drag.y), w: Math.abs(drag.x - drag.sx), h: Math.abs(drag.y - drag.sy) }; }
+  function corners(b) { return [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]; }
+  function handles(it) {
+    if (it.type === "line") return [[it.x1, it.y1], [it.x2, it.y2]];
+    if (isBox(it) || it.type === "circle") return corners(bbox(it));
+    return [];
+  }
+
+  // ---------- code in and out ----------
+  function q(s) { return "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\""; }
+  function lineFor(it) {
+    var n = q(it.name || "");
+    switch (it.type) {
+      case "rect": return "ui.fill(" + [n, it.x, it.y, it.w, it.h, q(it.c), it.r].join(", ") + ");";
+      case "frame": return "ui.frame(" + [n, it.x, it.y, it.w, it.h, it.t, q(it.c), it.r].join(", ") + ");";
+      case "text": return "ui.text(" + [n, it.x, it.y, it.s, q(it.c), q(it.f), it.wt, q(it.a), q(it.t)].join(", ") + ");";
+      case "line": return "ui.line(" + [n, it.x1, it.y1, it.x2, it.y2, it.t, q(it.c)].join(", ") + ");";
+      case "circle": return "ui.circle(" + [n, it.x, it.y, it.rad, it.t, q(it.c)].join(", ") + ");";
+      case "wave": return "ui.wave(" + [n, it.x, it.y, it.w, it.h, q(it.c)].join(", ") + ");";
+      case "meter": return "ui.meter(" + [n, it.x, it.y, it.w, it.h, q(it.c), it.v].join(", ") + ");";
+    }
+    return "";
+  }
+  function makeCode() {
+    return "// Track8 screen layout, 1280 x 400\n" + items.map(lineFor).join("\n");
+  }
+  function splitArgs(s) {
+    var out = [], cur = "", inq = false, quoted = false;
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      if (inq) {
+        if (c === "\\" && i + 1 < s.length) { cur += s[++i]; continue; }
+        if (c === "\"") { inq = false; continue; }
+        cur += c; continue;
+      }
+      if (c === "\"") { if (cur.trim()) return null; cur = ""; inq = true; quoted = true; continue; }
+      if (c === ",") { out.push({ v: quoted ? cur : cur.trim(), q: quoted }); cur = ""; quoted = false; continue; }
+      if (!quoted) cur += c;
+    }
+    if (inq) return null;
+    if (cur.trim() || quoted || out.length) out.push({ v: quoted ? cur : cur.trim(), q: quoted });
+    return out;
+  }
+  var SPEC = {
+    fill: ["rect", "s n n n n c n", ["name", "x", "y", "w", "h", "c", "r"]],
+    frame: ["frame", "s n n n n n c n", ["name", "x", "y", "w", "h", "t", "c", "r"]],
+    text: ["text", "s n n n c s n s s", ["name", "x", "y", "s", "c", "f", "wt", "a", "t"]],
+    line: ["line", "s n n n n n c", ["name", "x1", "y1", "x2", "y2", "t", "c"]],
+    circle: ["circle", "s n n n n c", ["name", "x", "y", "rad", "t", "c"]],
+    wave: ["wave", "s n n n n c", ["name", "x", "y", "w", "h", "c"]],
+    meter: ["meter", "s n n n n c n", ["name", "x", "y", "w", "h", "c", "v"]]
+  };
+  function parseLine(line) {
+    var m = /^\s*ui\.(\w+)\s*\((.*)\)\s*;?\s*(\/\/.*)?$/.exec(line);
+    if (!m || !SPEC[m[1]]) return null;
+    var spec = SPEC[m[1]], kinds = spec[1].split(" "), keys = spec[2], args = splitArgs(m[2]);
+    if (!args || args.length !== kinds.length) return null;
+    var it = { type: spec[0] };
+    for (var i = 0; i < kinds.length; i++) {
+      var a = args[i];
+      if (kinds[i] === "n") { if (a.q || a.v === "" || isNaN(+a.v)) return null; it[keys[i]] = Math.round(+a.v); }
+      else if (kinds[i] === "c") { if (!okHex(a.v)) return null; it[keys[i]] = a.v.toUpperCase(); }
+      else it[keys[i]] = a.v;
+    }
+    if (it.type === "text") {
+      if (!FONTS[it.f]) it.f = "sans";
+      if (["left", "center", "right"].indexOf(it.a) < 0) it.a = "left";
+      it.s = Math.max(4, it.s); it.wt = Math.min(900, Math.max(100, it.wt));
+    }
+    if ("w" in it) it.w = Math.max(1, it.w);
+    if ("h" in it) it.h = Math.max(1, it.h);
+    if ("t" in it && typeof it.t === "number") it.t = Math.max(it.type === "circle" ? 0 : 1, it.t);
+    if ("r" in it) it.r = Math.max(0, it.r);
+    if (it.type === "circle") it.rad = Math.max(1, it.rad);
+    return it;
+  }
+  function parseCode(src) {
+    var out = [], bad = 0;
+    src.split("\n").forEach(function (line) {
+      if (!line.trim() || /^\s*\/\//.test(line)) return;
+      var it = parseLine(line);
+      if (it) out.push(it); else bad++;
+    });
+    return { items: out, bad: bad };
+  }
+  function syncCode() {
+    var code = makeCode();
+    codeEl.value = code;
+    $("codestat").textContent = items.length + (items.length === 1 ? " item" : " items");
+    try { localStorage.setItem(STORE, code); } catch (e) {}
+    if (!restoring && hist[hidx] !== code) {
+      hist = hist.slice(0, hidx + 1); hist.push(code); if (hist.length > 300) hist.shift(); hidx = hist.length - 1;
+    }
+  }
+  function restore(code) {
+    restoring = true;
+    items = parseCode(code).items; sel = -1; ms = [];
+    renderAll(); restoring = false;
+  }
+  function undo() { if (hidx > 0) { hidx--; restore(hist[hidx]); } }
+  function redo() { if (hidx < hist.length - 1) { hidx++; restore(hist[hidx]); } }
+
+  // ---------- names ----------
+  var PREFIX = { rect: "box", frame: "outline", text: "text", line: "line", circle: "circle", wave: "wave", meter: "meter" };
+  function uniq(base) {
+    base = String(base || "item").replace(/_?\d+$/, "") || "item";
+    var used = {}; items.forEach(function (o) { used[o.name] = 1; });
+    for (var n = 1; ; n++) { var nm = base + n; if (!used[nm]) return nm; }
+  }
+
+  // ---------- panels ----------
+  function select(i) { sel = i; ms = []; renderAll(false); }
+  function renderAll(code) { render(); layers(); props(); if (code !== false) syncCode(); }
+  function describe(it) {
+    if (isBox(it)) return it.w + "×" + it.h;
+    if (it.type === "text") return "\"" + it.t + "\"";
+    if (it.type === "circle") return "r " + it.rad;
+    return it.x1 + "," + it.y1 + " → " + it.x2 + "," + it.y2;
+  }
+  function layers() {
+    var box = $("layers"); box.innerHTML = "";
+    if (!items.length) { var e = document.createElement("div"); e.className = "layer"; e.style.cursor = "default"; e.textContent = "Empty. Pick a tool and draw on the screen."; box.appendChild(e); return; }
+    for (var k = items.length - 1; k >= 0; k--) (function (i) {
+      var it = items[i];
+      var d = document.createElement("div");
+      d.className = "layer"; d.tabIndex = 0; d.setAttribute("role", "option"); d.setAttribute("aria-selected", chosen().indexOf(i) >= 0 ? "true" : "false");
+      var chip = document.createElement("span"); chip.className = "chip"; chip.style.background = it.c;
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = (it.name || "(no name)") + "  " + describe(it);
+      var ty = document.createElement("span"); ty.className = "ty"; ty.textContent = PREFIX[it.type];
+      d.appendChild(chip); d.appendChild(nm); d.appendChild(ty);
+      d.addEventListener("click", function (ev) { if (ev.shiftKey || ev.ctrlKey || ev.metaKey) { toggle(i); renderAll(false); } else select(i); });
+      d.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(i); } });
+      box.appendChild(d);
+    })(k);
+  }
+
+  var POS = [["x", "X"], ["y", "Y"]], SIZE = [["w", "Width"], ["h", "Height"]];
+  var STYLE = ["type", "Style", "sel", [["rect", "Filled"], ["frame", "Outline"]]];
+  var FIELDS = {
+    rect: [STYLE].concat(POS, SIZE, [["r", "Corner radius"]]),
+    frame: [STYLE].concat(POS, SIZE, [["t", "Line width"], ["r", "Corner radius"]]),
+    text: POS.concat([["s", "Size (px)"], ["wt", "Weight", "sel", [[400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"]]],
+      ["f", "Font", "sel", [["sans", "Sans (Inter Tight)"], ["mono", "Mono (Plex Mono)"]]], ["a", "Align to X", "sel", [["left", "Left"], ["center", "Centre"], ["right", "Right"]]],
+      ["t", "Text", "text", null, true]]),
+    line: [["x1", "Start X"], ["y1", "Start Y"], ["x2", "End X"], ["y2", "End Y"], ["t", "Width"]],
+    circle: [["x", "Centre X"], ["y", "Centre Y"], ["rad", "Radius"], ["t", "Line (0 = filled)"]],
+    wave: POS.concat(SIZE),
+    meter: POS.concat(SIZE, [["v", "Level %"]])
+  };
+  var builtFor = null;
+  function props() {
+    var it = items[sel], m = multi();
+    $("noprops").hidden = !!it || m;
+    $("propsbody").hidden = !it || m;
+    $("itemtools").hidden = !it && !m;
+    $("b-front").hidden = $("b-back").hidden = m;
+    var mn = $("multinote"); mn.hidden = !m;
+    if (m) mn.textContent = ms.length + " items selected. Drag one to move them all. Arrow keys nudge them. Duplicate and Delete work on all of them. Shift-click adds or removes an item.";
+    if (!it || m) { builtFor = null; return; }
+    var key = sel + ":" + it.type;
+    if (builtFor !== key) buildFields(it), builtFor = key;
+    var fb = $("fieldsbox");
+    [].forEach.call(fb.querySelectorAll("[data-k]"), function (el) {
+      if (el === document.activeElement) return;
+      el.value = it[el.dataset.k];
+    });
+    if (document.activeElement !== $("p-c")) $("p-c").value = it.c;
+    $("p-cpick").value = it.c.toLowerCase();
+  }
+  function buildFields(it) {
+    var fb = $("fieldsbox"); fb.innerHTML = "";
+    var list = [["name", "Name", "text", null, true]].concat(FIELDS[it.type]);
+    list.forEach(function (f) {
+      var lab = document.createElement("label"), el;
+      if (f[4]) lab.className = "wide";
+      lab.appendChild(document.createTextNode(f[1]));
+      if (f[2] === "sel") {
+        el = document.createElement("select");
+        f[3].forEach(function (o) { var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
+      } else {
+        el = document.createElement("input"); el.type = f[2] === "text" ? "text" : "number";
+        if (el.type === "text") { el.autocomplete = "off"; el.spellcheck = false; } else el.step = 1;
+      }
+      el.id = "p-" + f[0]; el.dataset.k = f[0];
+      el.addEventListener(f[2] === "sel" ? "change" : "input", function () { setField(f, el); });
+      lab.appendChild(el); fb.appendChild(lab);
+    });
+  }
+  var MINS = { w: 1, h: 1, s: 4, rad: 1, r: 0, v: 0 };
+  function setField(f, el) {
+    var it = items[sel]; if (!it) return;
+    var k = f[0], v = el.value;
+    if (k === "type") { it.type = v; if (v === "frame" && !it.t) it.t = 2; builtFor = null; }
+    else if (k === "name") it.name = v.replace(/[^A-Za-z0-9_]/g, "_");
+    else if (k === "t" && it.type === "text") it.t = v;
+    else if (k === "f" || k === "a") it[k] = v;
+    else {
+      var n = Math.round(+v); if (isNaN(n)) return;
+      if (k === "t") n = Math.max(it.type === "circle" ? 0 : 1, n);
+      if (k in MINS) n = Math.max(MINS[k], n);
+      if (k === "v") n = Math.min(100, n);
+      it[k] = n;
+    }
+    render(); layers(); syncCode(); if (k === "type") props();
+  }
+  function setColor(c) { chosen().forEach(function (i) { items[i].c = c; }); render(); layers(); syncCode(); props(); }
+  $("p-c").addEventListener("input", function () { var v = $("p-c").value.trim(); if (v[0] !== "#") v = "#" + v; if (okHex(v)) setColor(v.toUpperCase()); });
+  $("p-cpick").addEventListener("input", function () { setColor($("p-cpick").value.toUpperCase()); });
+  PAL.forEach(function (s) {
+    var b = document.createElement("button"); b.title = s[0] + " " + s[1]; b.setAttribute("aria-label", s[0] + " " + s[1]);
+    b.style.background = s[1];
+    b.addEventListener("click", function () { setColor(s[1]); });
+    $("swatches").appendChild(b);
+  });
+
+  // ---------- item actions ----------
+  function del() {
+    var ch = chosen(); if (!ch.length) return;
+    ch.sort(function (a, b) { return b - a; }).forEach(function (i) { items.splice(i, 1); });
+    sel = Math.min(ch[ch.length - 1], items.length - 1); ms = []; renderAll();
+  }
+  function shift(it, dx, dy) {
+    if (it.type === "line") { it.x1 += dx; it.x2 += dx; it.y1 += dy; it.y2 += dy; } else { it.x += dx; it.y += dy; }
+  }
+  function dup() {
+    var ch = chosen().sort(function (a, b) { return a - b; }); if (!ch.length) return;
+    var n = [];
+    ch.forEach(function (i) { var c = JSON.parse(JSON.stringify(items[i])); shift(c, 8, 8); c.name = uniq(c.name || PREFIX[c.type]); items.push(c); n.push(items.length - 1); });
+    sel = n[n.length - 1]; ms = n.length > 1 ? n : []; renderAll();
+  }
+  $("b-del").addEventListener("click", del);
+  $("b-dup").addEventListener("click", dup);
+  $("b-front").addEventListener("click", function () { if (!multi() && sel >= 0 && sel < items.length - 1) { var t = items[sel]; items[sel] = items[sel + 1]; items[sel + 1] = t; sel++; renderAll(); } });
+  $("b-back").addEventListener("click", function () { if (!multi() && sel > 0) { var t = items[sel]; items[sel] = items[sel - 1]; items[sel - 1] = t; sel--; renderAll(); } });
+  $("b-clear").addEventListener("click", function () { items = []; sel = -1; ms = []; renderAll(); });
+  $("b-undo").addEventListener("click", undo);
+  $("b-redo").addEventListener("click", redo);
+  $("b-example").addEventListener("click", function () { items = parseCode(exampleCode()).items; sel = -1; ms = []; renderAll(); });
+  $("b-copy").addEventListener("click", function () {
+    var done = function () { $("codestat").textContent = "Copied."; };
+    var fb = function () { codeEl.focus(); codeEl.select(); $("codestat").textContent = "Selected. Press Ctrl+C (Cmd+C on a Mac) to copy."; };
+    try { navigator.clipboard.writeText(codeEl.value).then(done, fb); } catch (e) { fb(); }
+  });
+  codeEl.addEventListener("input", function () {
+    var r = parseCode(codeEl.value);
+    items = r.items; if (sel >= items.length) sel = items.length - 1; ms = []; builtFor = null;
+    render(); layers(); props();
+    try { localStorage.setItem(STORE, codeEl.value); } catch (e) {}
+    $("codestat").textContent = items.length + " items" + (r.bad ? ", " + r.bad + " line" + (r.bad > 1 ? "s" : "") + " not understood and skipped" : "");
+  });
+  codeEl.addEventListener("change", function () {
+    var code = makeCode();
+    if (hist[hidx] !== code) { hist = hist.slice(0, hidx + 1); hist.push(code); hidx = hist.length - 1; }
+  });
+
+  // ---------- tools and pointer ----------
+  var TOOLS = ["select", "rect", "frame", "text", "line", "circle", "wave", "meter"];
+  function setTool(t) {
+    tool = t;
+    TOOLS.forEach(function (n) { $("t-" + n).setAttribute("aria-pressed", String(n === t)); });
+    over.style.cursor = t === "select" ? "default" : "crosshair";
+  }
+  TOOLS.forEach(function (n) { $("t-" + n).addEventListener("click", function () { setTool(n); }); });
+  $("grid").addEventListener("change", render);
+  $("names").addEventListener("change", render);
+
+  function pos(e) {
+    var r = over.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H, k: r.width / W };
+  }
+  function segDist(p, it) {
+    var dx = it.x2 - it.x1, dy = it.y2 - it.y1, l = dx * dx + dy * dy;
+    var t = l ? Math.max(0, Math.min(1, ((p.x - it.x1) * dx + (p.y - it.y1) * dy) / l)) : 0;
+    var x = it.x1 + t * dx, y = it.y1 + t * dy;
+    return Math.hypot(p.x - x, p.y - y);
+  }
+  function hit(p) {
+    for (var i = items.length - 1; i >= 0; i--) {
+      var it = items[i];
+      if (it.type === "line") { if (segDist(p, it) <= Math.max(it.t / 2, 6 / p.k)) return i; continue; }
+      var b = bbox(it);
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return i;
+    }
+    return -1;
+  }
+  function handleAt(p) {
+    if (sel < 0 || !items[sel]) return -1;
+    var hs = handles(items[sel]), tol = 9 / p.k;
+    for (var i = 0; i < hs.length; i++) if (Math.abs(p.x - hs[i][0]) <= tol && Math.abs(p.y - hs[i][1]) <= tol) return i;
+    return -1;
+  }
+  function lastColor(fallback) { return sel >= 0 && items[sel] ? items[sel].c : fallback; }
+  over.addEventListener("pointerdown", function (e) {
+    over.setPointerCapture(e.pointerId);
+    var p = pos(e), x = snapv(p.x), y = snapv(p.y), it;
+    if (tool === "text") {
+      it = { type: "text", name: uniq("text"), x: x, y: y, s: 20, c: "#F2F3F5", f: "sans", wt: 500, a: "left", t: "TEXT" };
+      items.push(it); sel = items.length - 1; ms = []; setTool("select"); renderAll();
+      var tf = $("p-t"); if (tf) { tf.focus(); tf.select(); }
+      return;
+    }
+    if (tool !== "select") {
+      var base = { name: uniq(PREFIX[tool]), c: lastColor(tool === "wave" || tool === "meter" ? "#4F8CFF" : "#F2F3F5") };
+      if (tool === "line") it = Object.assign(base, { type: "line", x1: x, y1: y, x2: x, y2: y, t: 2 });
+      else if (tool === "circle") it = Object.assign(base, { type: "circle", x: x, y: y, rad: 1, t: 0 });
+      else it = Object.assign(base, { type: tool, x: x, y: y, w: 1, h: 1, r: 0, t: 2, v: 70 });
+      if (tool === "wave" || tool === "meter") { delete it.r; delete it.t; }
+      if (tool === "rect") delete it.t;
+      if (tool !== "meter") delete it.v;
+      items.push(it); sel = items.length - 1; ms = [];
+      drag = { mode: "draw", ox: x, oy: y };
+      render(); return;
+    }
+    var h = multi() ? -1 : handleAt(p);
+    if (h >= 0) {
+      var cur = items[sel];
+      if (cur.type === "line") drag = { mode: "end", end: h };
+      else { var cs = corners(bbox(cur)); drag = { mode: "resize", fx: cs[3 - h][0], fy: cs[3 - h][1] }; }
+      return;
+    }
+    var i = hit(p);
+    if (i >= 0) {
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        toggle(i);
+        if (chosen().indexOf(i) < 0) { renderAll(false); return; }
+      } else if (chosen().indexOf(i) < 0) { sel = i; ms = []; }
+      var anchor = items[i].type === "line" ? [items[i].x1, items[i].y1] : [items[i].x, items[i].y];
+      drag = { mode: "move", sx: p.x, sy: p.y, ax: anchor[0], ay: anchor[1], o: chosen().map(function (j) { return { j: j, it: JSON.parse(JSON.stringify(items[j])) }; }) };
+      renderAll(false);
+    } else {
+      var add = e.shiftKey || e.ctrlKey || e.metaKey;
+      drag = { mode: "marquee", sx: p.x, sy: p.y, x: p.x, y: p.y, base: add ? chosen() : [] };
+      if (!add) { sel = -1; ms = []; }
+      renderAll(false);
+    }
+  });
+  over.addEventListener("pointermove", function (e) {
+    var p = pos(e), cur = items[sel];
+    $("status").textContent = "x " + Math.round(p.x) + "  y " + Math.round(p.y) + (multi() ? "     selected: " + ms.length + " items" : cur ? "     selected: " + (cur.name || PREFIX[cur.type]) + "  " + describe(cur) : "");
+    if (!drag) return;
+    if (drag.mode === "marquee") {
+      drag.x = p.x; drag.y = p.y;
+      var mq = marq(), set = drag.base.slice();
+      items.forEach(function (o, i) {
+        var b = bbox(o);
+        if (b.x < mq.x + mq.w && b.x + b.w > mq.x && b.y < mq.y + mq.h && b.y + b.h > mq.y && set.indexOf(i) < 0) set.push(i);
+      });
+      sel = set.length ? set[set.length - 1] : -1; ms = set.length > 1 ? set : [];
+      render(); props(); return;
+    }
+    if (drag.mode === "move") {
+      var dx = snapv(drag.ax + p.x - drag.sx) - drag.ax, dy = snapv(drag.ay + p.y - drag.sy) - drag.ay;
+      drag.o.forEach(function (o) { var c = JSON.parse(JSON.stringify(o.it)); shift(c, dx, dy); items[o.j] = c; });
+      render(); props(); return;
+    }
+    if (!cur) return;
+    var x = snapv(p.x), y = snapv(p.y);
+    if (drag.mode === "end") {
+      if (drag.end === 0) { cur.x1 = x; cur.y1 = y; } else { cur.x2 = x; cur.y2 = y; }
+    } else if (drag.mode === "draw" && cur.type === "line") { cur.x2 = x; cur.y2 = y; }
+    else if (drag.mode === "draw" && cur.type === "circle") { cur.rad = Math.max(1, Math.round(Math.hypot(x - drag.ox, y - drag.oy))); }
+    else {
+      var fx = drag.mode === "draw" ? drag.ox : drag.fx, fy = drag.mode === "draw" ? drag.oy : drag.fy;
+      var bx = Math.min(x, fx), by = Math.min(y, fy), bw = Math.max(1, Math.abs(x - fx)), bh = Math.max(1, Math.abs(y - fy));
+      if (cur.type === "circle") { cur.rad = Math.max(1, Math.round(Math.min(bw, bh) / 2)); cur.x = Math.round(bx + bw / 2); cur.y = Math.round(by + bh / 2); }
+      else { cur.x = bx; cur.y = by; cur.w = bw; cur.h = bh; }
+    }
+    render(); props();
+  });
+  function end() {
+    if (!drag) return;
+    var made = drag.mode === "draw";
+    drag = null;
+    if (made && items[sel]) {
+      var it = items[sel];
+      if (it.type === "line" && it.x1 === it.x2 && it.y1 === it.y2) { it.x2 = it.x1 + 120; }
+      else if (it.type === "circle" && it.rad < 3) it.rad = 12;
+      else if (isBox(it) && it.w < 3 && it.h < 3) { it.w = it.type === "meter" ? 60 : 160; it.h = it.type === "meter" ? 8 : 40; }
+    }
+    renderAll();
+    if (made) setTool("select");
+  }
+  over.addEventListener("pointerup", end);
+  over.addEventListener("pointercancel", end);
+
+  var KEYS = { v: "select", r: "rect", f: "frame", t: "text", l: "line", c: "circle", w: "wave", m: "meter" };
+  document.addEventListener("keydown", function (e) {
+    var tg = e.target && e.target.tagName;
+    if (tg === "INPUT" || tg === "TEXTAREA" || tg === "SELECT") return;
+    var k = e.key, mod = e.ctrlKey || e.metaKey;
+    if (mod && (k === "z" || k === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+    else if (mod && (k === "y" || k === "Y")) { e.preventDefault(); redo(); }
+    else if (mod && (k === "a" || k === "A")) { e.preventDefault(); ms = items.map(function (_, i) { return i; }); sel = items.length - 1; if (ms.length < 2) ms = []; renderAll(false); }
+    else if (mod && (k === "d" || k === "D") && chosen().length) { e.preventDefault(); dup(); }
+    else if (!mod && KEYS[k.toLowerCase()]) setTool(KEYS[k.toLowerCase()]);
+    else if ((k === "Delete" || k === "Backspace") && chosen().length) { e.preventDefault(); del(); }
+    else if (k === "Escape") { sel = -1; ms = []; renderAll(false); }
+    else if (chosen().length && /^Arrow/.test(k)) {
+      e.preventDefault();
+      var n = e.shiftKey ? 10 : 1;
+      chosen().forEach(function (i) { shift(items[i], k === "ArrowLeft" ? -n : k === "ArrowRight" ? n : 0, k === "ArrowUp" ? -n : k === "ArrowDown" ? n : 0); });
+      renderAll();
+    }
+  });
+  window.addEventListener("resize", render);
+
+  // ---------- example: a Track8 main screen ----------
+  function exampleCode() {
+    var C = ["#4F8CFF", "#3CCB7F", "#F2C230", "#FF5A4E", "#B07CFF", "#2EC8D8", "#FF8A3D", "#E86FB0"];
+    var LV = [72, 55, 81, 64, 0, 47, 30, 0];
+    var L = [
+      'ui.fill("bg", 0, 0, 1280, 400, "#0C0D10", 0);',
+      'ui.fill("header", 0, 0, 1280, 40, "#14161A", 0);',
+      'ui.text("title", 20, 10, 18, "#F2F3F5", "mono", 600, "left", "TRACK8");',
+      'ui.text("song", 112, 12, 15, "#7D838C", "sans", 500, "left", "Untitled song");',
+      'ui.text("clock", 640, 8, 22, "#F2F3F5", "mono", 500, "center", "012.3.1");',
+      'ui.text("bpm", 1260, 12, 15, "#F2F3F5", "mono", 500, "right", "120.0 BPM  4/4");'
+    ];
+    for (var i = 0; i < 8; i++) {
+      var y = 50 + i * 39, n = "track" + (i + 1);
+      L.push('ui.fill("' + n + '_tab", 20, ' + y + ', 32, 33, "' + C[i] + '", 6);');
+      L.push('ui.text("' + n + '_num", 36, ' + (y + 8) + ', 16, "#0C0D10", "mono", 600, "center", "' + (i + 1) + '");');
+      L.push('ui.fill("' + n + '_lane", 60, ' + y + ', 1140, 33, "#17191E", 4);');
+      if (LV[i] || i !== 7) L.push('ui.wave("' + n + '_wave", 66, ' + (y + 3) + ', ' + (i === 4 ? 520 : 1128) + ', 27, "' + C[i] + '");');
+      L.push('ui.meter("' + n + '_meter", 1212, ' + (y + 12) + ', 48, 9, "' + C[i] + '", ' + LV[i] + ');');
+    }
+    L.push('ui.frame("rec_outline", 58, 165, 1144, 37, 2, "#FF5A4E", 5);');
+    L.push('ui.line("playhead", 520, 46, 520, 364, 2, "#F2F3F5");');
+    L.push('ui.fill("footer", 0, 368, 1280, 32, "#14161A", 0);');
+    L.push('ui.circle("rec_dot", 30, 384, 7, 0, "#FF5A4E");');
+    L.push('ui.text("status", 46, 375, 15, "#F2F3F5", "sans", 600, "left", "REC ARMED  TRACK 4");');
+    L.push('ui.text("loop", 640, 375, 15, "#7D838C", "mono", 500, "center", "LOOP  BAR 9 - 17");');
+    L.push('ui.text("hint", 1260, 375, 15, "#7D838C", "sans", 500, "right", "Hold SHIFT for more");');
+    return L.join("\n");
+  }
+
+  // ---------- start ----------
+  var saved = null;
+  try { saved = localStorage.getItem(STORE); } catch (e) {}
+  items = parseCode(saved && parseCode(saved).items.length ? saved : exampleCode()).items;
+  renderAll();
+  var faces = ['500 16px "Inter Tight"', '600 16px "Inter Tight"', '400 16px "Inter Tight"', '700 16px "Inter Tight"', '500 16px "IBM Plex Mono"', '600 16px "IBM Plex Mono"', '400 16px "IBM Plex Mono"'];
+  if (document.fonts && document.fonts.load) Promise.all(faces.map(function (f) { return document.fonts.load(f).catch(function () {}); })).then(function () { render(); });
+})();
+</script>

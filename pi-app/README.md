@@ -53,6 +53,16 @@ text console, and if the app ever crashes it restarts by itself. Over SSH:
 - `sudo systemctl start track8` starts it again
 - `journalctl -u track8 -f` shows its messages
 
+## Hiding the boot messages
+
+```
+~/track8/pi-app/quiet-boot.sh
+sudo reboot
+```
+
+The screen stays black until Track8 appears. `loud-boot.sh` brings the
+messages back, which helps if the Pi ever has trouble starting.
+
 ## If the picture is upside down
 
 Without the desktop, the app turns the picture itself, by 270° by default.
@@ -69,3 +79,4 @@ If it's upside down, change the line `ExecStart=...track8.py` in
 - `layouts/main.ui` is the main screen layout. Paste new designer code here.
 - `fonts/` holds Inter Tight and IBM Plex Mono (SIL Open Font License).
 - `track8.service` is the boot-to-app service used by `boot-to-app.sh`.
+- `quiet-boot.sh` and `loud-boot.sh` hide or show the boot messages.

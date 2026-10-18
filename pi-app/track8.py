@@ -9,7 +9,7 @@ Keys (a keyboard plugged into the Pi, or typed into an SSH terminal running the 
     Space        play / stop
     R            record on / off (also starts playing)
     Left/Right   move back / forward one bar
-    Q            quit
+    Q            quit (ignored when Track8 runs as the boot app)
 
 Options:
     --window     open a 1280x400 window instead of full screen (for testing on a laptop)
@@ -166,7 +166,10 @@ def main():
             while not keys.empty():
                 name = keys.get()
                 if name == "QUIT":
-                    running = False
+                    if os.environ.get("TRACK8_SERVICE"):
+                        print("Q ignored: Track8 is running as the boot app. Stop it with: sudo systemctl stop track8")
+                    else:
+                        running = False
                 else:
                     transport.key(name)
             transport.tick(seconds)

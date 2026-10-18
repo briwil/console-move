@@ -29,7 +29,7 @@ keyboard plugged into the Pi:
 | Space | Play / stop |
 | R | Record on / off (also starts playing) |
 | ← / → | Move back / forward one bar |
-| Q | Quit |
+| Q | Quit (ignored when it starts at boot) |
 
 ## Starting straight into the app at boot
 
@@ -46,8 +46,12 @@ the desktop:
 sudo reboot
 ```
 
-While the app runs at boot, `journalctl -u track8 -f` shows its messages, and
-`sudo systemctl stop track8` stops it so you can run it by hand with `run.sh`.
+When it starts at boot, Q does nothing, so the screen never drops to a bare
+text console, and if the app ever crashes it restarts by itself. Over SSH:
+
+- `sudo systemctl stop track8` stops it (then you can run it by hand with `run.sh`)
+- `sudo systemctl start track8` starts it again
+- `journalctl -u track8 -f` shows its messages
 
 ## If the picture is upside down
 

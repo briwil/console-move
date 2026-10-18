@@ -720,26 +720,27 @@
     var LV = [72, 55, 81, 64, 0, 47, 30, 0];
     var L = [
       'ui.fill("bg", 0, 0, 1280, 400, "#0C0D10", 0);',
-      'ui.fill("header", 0, 0, 1280, 40, "#14161A", 0);',
-      'ui.text("title", 20, 10, 18, "#F2F3F5", "mono", 600, "left", "TRACK8");',
-      'ui.text("song", 112, 12, 15, "#7D838C", "sans", 500, "left", "Untitled song");',
-      'ui.text("clock", 640, 8, 22, "#F2F3F5", "mono", 500, "center", "012.3.1");',
-      'ui.text("bpm", 1260, 12, 15, "#F2F3F5", "mono", 500, "right", "120.0 BPM  4/4");'
+      'ui.fill("header", 0, 0, 1280, 36, "#14161A", 0);',
+      'ui.text("title", 20, 8, 18, "#F2F3F5", "mono", 600, "left", "TRACK8");',
+      'ui.text("song", 112, 10, 15, "#7D838C", "sans", 500, "left", "Untitled song");',
+      'ui.text("clock", 630, 6, 22, "#F2F3F5", "mono", 500, "center", "012.3.1");',
+      'ui.text("bpm", 1260, 10, 15, "#F2F3F5", "mono", 500, "right", "120.0 BPM  4/4");',
+      'ui.fill("ruler", 60, 36, 1140, 14, "#0C0D10", 0);'
     ];
     for (var i = 0; i < 8; i++) {
       var y = 50 + i * 39, n = "track" + (i + 1);
       L.push('ui.fill("' + n + '_tab", 20, ' + y + ', 32, 33, "' + C[i] + '", 6);');
       L.push('ui.text("' + n + '_num", 36, ' + (y + 8) + ', 16, "#0C0D10", "mono", 600, "center", "' + (i + 1) + '");');
       L.push('ui.fill("' + n + '_lane", 60, ' + y + ', 1140, 33, "#17191E", 4);');
-      if (LV[i] || i !== 7) L.push('ui.wave("' + n + '_wave", 66, ' + (y + 3) + ', ' + (i === 4 ? 520 : 1128) + ', 27, "' + C[i] + '");');
+      L.push('ui.wave("' + n + '_wave", 66, ' + (y + 3) + ', 1128, 27, "' + C[i] + '");');
       L.push('ui.meter("' + n + '_meter", 1212, ' + (y + 12) + ', 48, 9, "' + C[i] + '", ' + LV[i] + ');');
     }
     L.push('ui.frame("rec_outline", 58, 165, 1144, 37, 2, "#FF5A4E", 5);');
-    L.push('ui.line("playhead", 520, 46, 520, 364, 2, "#F2F3F5");');
+    L.push('ui.line("playhead", 630, 36, 630, 364, 2, "#F2F3F5");');
     L.push('ui.fill("footer", 0, 368, 1280, 32, "#14161A", 0);');
     L.push('ui.circle("rec_dot", 30, 384, 7, 0, "#FF5A4E");');
     L.push('ui.text("status", 46, 375, 15, "#F2F3F5", "sans", 600, "left", "REC ARMED  TRACK 4");');
-    L.push('ui.text("loop", 640, 375, 15, "#7D838C", "mono", 500, "center", "LOOP  BAR 9 - 17");');
+    L.push('ui.text("grid", 630, 375, 15, "#7D838C", "mono", 500, "center", "GRID 1/16   4 BARS");');
     L.push('ui.text("hint", 1260, 375, 15, "#7D838C", "sans", 500, "right", "Hold SHIFT for more");');
     return L.join("\n");
   }

@@ -190,6 +190,8 @@ class Screen:
         self.by_name = {it["name"]: it for it in items if it.get("name")}
         self._fonts = {}
         self._waves = {}
+        # name -> function(surface, item) that draws that item instead of the normal drawing
+        self.custom = {}
 
     @classmethod
     def load(cls, path):
@@ -237,6 +239,13 @@ class Screen:
             self.draw_item(surf, it)
 
     def draw_item(self, surf, it):
+        fn = self.custom.get(it.get("name"))
+        if fn:
+            fn(surf, it)
+        else:
+            self.draw_default(surf, it)
+
+    def draw_default(self, surf, it):
         kind, col = it["type"], rgb(it["c"])
         if kind == "rect":
             pygame.draw.rect(surf, col, (it["x"], it["y"], it["w"], it["h"]), 0, it["r"])

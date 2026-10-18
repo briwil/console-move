@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Track8: first version of the Pi app.
+"""Track8: the Pi app (version 0.2).
 
-Shows the screen layout from layouts/main.ui full screen and reacts to keys.
-There's no audio yet: play, record and the track keys only change the screen.
+Shows the screen layout from layouts/main.ui full screen, with an OP-1 style
+tape: the playhead stays in the middle and the tape moves past it, with bar,
+beat and grid lines. There's no audio yet: play, record and the track keys only
+change the screen.
 
 Keys (a keyboard plugged into the Pi, or typed into an SSH terminal running the app):
     1-8          arm a track for recording
     Space        play / stop
     R            record on / off (also starts playing)
-    Left/Right   move back / forward one bar
+    Left/Right   move back / forward one grid step
+    [ / ]        move back / forward one bar (also Shift+Left/Right)
+    G            change the grid: 1/4, 1/8, 1/16, 1/32
+    + / -        zoom in / out (16, 8, 4, 2 or 1 bars across the screen)
     Q            quit (ignored when Track8 runs as the boot app)
 
 Options:
@@ -24,13 +29,12 @@ import threading
 
 import pygame
 
+import tape
 import ui
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FPS = 30
 BPM = 120.0
-LOOP_BARS = 16                      # the playhead runs across the lanes in this many bars
-LANE_X0, LANE_X1 = 66, 1194         # left and right edge of the waveform area
 
 
 # ---------------------------------------------------------------- keys from an SSH terminal
@@ -47,7 +51,9 @@ def start_terminal_keys(q):
 
     def reader():
         names = {" ": "PLAY", "r": "RECORD", "R": "RECORD", "q": "QUIT", "Q": "QUIT",
-                 "\x1b[C": "RIGHT", "\x1b[D": "LEFT"}
+                 "g": "GRID", "G": "GRID", "+": "ZOOM_IN", "=": "ZOOM_IN", "-": "ZOOM_OUT", "_": "ZOOM_OUT",
+                 "[": "BAR_LEFT", "]": "BAR_RIGHT",
+                 "\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT"}
         while True:
             try:
                 data = os.read(fd, 16).decode(errors="ignore")
@@ -70,7 +76,10 @@ def start_terminal_keys(q):
 
 PYGAME_KEYS = {
     pygame.K_SPACE: "PLAY", pygame.K_r: "RECORD", pygame.K_LEFT: "LEFT", pygame.K_RIGHT: "RIGHT",
-    pygame.K_q: "QUIT", pygame.K_ESCAPE: "QUIT",
+    pygame.K_q: "QUIT", pygame.K_ESCAPE: "QUIT", pygame.K_g: "GRID",
+    pygame.K_EQUALS: "ZOOM_IN", pygame.K_PLUS: "ZOOM_IN", pygame.K_KP_PLUS: "ZOOM_IN",
+    pygame.K_MINUS: "ZOOM_OUT", pygame.K_KP_MINUS: "ZOOM_OUT",
+    pygame.K_LEFTBRACKET: "BAR_LEFT", pygame.K_RIGHTBRACKET: "BAR_RIGHT",
 }
 for _n in range(1, 9):
     PYGAME_KEYS[getattr(pygame, "K_%d" % _n)] = "TRACK%d" % _n
@@ -81,13 +90,14 @@ for _n in range(1, 9):
 class Transport:
     def __init__(self, screen):
         self.s = screen
+        self.tape = tape.Tape(screen)
         self.playing = False
         self.recording = False
         self.armed = 4
-        self.beats = 0.0
         self.update_screen()
 
     def key(self, name):
+        t = self.tape
         if name == "PLAY":
             self.playing = not self.playing
             if not self.playing:
@@ -97,25 +107,41 @@ class Transport:
             if self.recording:
                 self.playing = True
         elif name == "LEFT":
-            self.beats = max(0, (int(self.beats // 4) - 1) * 4)
+            t.move(-1, t.step)
         elif name == "RIGHT":
-            self.beats = (int(self.beats // 4) + 1) * 4
+            t.move(1, t.step)
+        elif name == "BAR_LEFT":
+            t.move(-1, tape.BEATS_PER_BAR)
+        elif name == "BAR_RIGHT":
+            t.move(1, tape.BEATS_PER_BAR)
+        elif name == "GRID":
+            t.cycle_grid()
+        elif name == "ZOOM_IN":
+            t.zoom_in()
+        elif name == "ZOOM_OUT":
+            t.zoom_out()
         elif name.startswith("TRACK"):
             self.armed = int(name[5:])
         self.update_screen()
 
     def tick(self, seconds):
-        if self.playing:
-            self.beats += seconds * BPM / 60
-            self.update_screen()
+        if not self.playing:
+            return
+        t = self.tape
+        start = t.pos
+        t.pos += seconds * BPM / 60
+        if t.pos >= tape.TAPE_BEATS:
+            t.pos = float(tape.TAPE_BEATS)
+            self.playing = self.recording = False
+        if self.recording:
+            t.record(self.armed, start, t.pos)
+        self.update_screen()
 
     def update_screen(self):
-        s = self.s
-        loop = LOOP_BARS * 4
-        x = round(LANE_X0 + (self.beats % loop) / loop * (LANE_X1 - LANE_X0))
-        s.set("playhead", x1=x, x2=x)
-        b = int(self.beats)
-        s.set("clock", t="%03d.%d.%d" % (b // 4 + 1, b % 4 + 1, int(self.beats * 4) % 4 + 1))
+        s, t = self.s, self.tape
+        b = int(t.pos)
+        s.set("clock", t="%03d.%d.%d" % (b // 4 + 1, b % 4 + 1, int(t.pos * 4) % 4 + 1))
+        s.set("grid", t=t.label())
         lane = s.get("track%d_lane" % self.armed)
         if lane:
             s.set("rec_outline", y=lane["y"] - 2)
@@ -123,6 +149,9 @@ class Transport:
         s.set("status", t="%s  TRACK %d" % (state, self.armed))
         s.set("rec_dot", c="#FF5A4E" if self.recording else "#7D838C")
         s.set("rec_outline", c="#FF5A4E" if self.recording else "#7D838C")
+        for n in range(1, 9):
+            level = t.level_at(n, t.pos - 1 / tape.RES) if self.playing else 0
+            s.set("track%d_meter" % n, v=round(level * 100))
 
 
 # ---------------------------------------------------------------- main loop
@@ -145,7 +174,7 @@ def main():
     rotate = args.rotate if dh > dw else 0      # an upright screen means nobody rotated it for us
     print("Track8: display %dx%d driver %s%s" % (dw, dh, pygame.display.get_driver(),
                                                  ", turning the picture %d degrees" % rotate if rotate else ""))
-    print("Keys: 1-8 arm track, Space play/stop, R record, Left/Right move a bar, Q quit")
+    print("Keys: 1-8 arm track, Space play/stop, R record, Left/Right grid step, [ ] bar, G grid, + - zoom, Q quit")
 
     screen = ui.Screen.load(args.layout)
     frame = pygame.Surface((ui.WIDTH, ui.HEIGHT))
@@ -161,8 +190,14 @@ def main():
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
                     running = False
-                elif ev.type == pygame.KEYDOWN and ev.key in PYGAME_KEYS:
-                    keys.put(PYGAME_KEYS[ev.key])
+                elif ev.type == pygame.KEYDOWN:
+                    shift = ev.mod & pygame.KMOD_SHIFT
+                    if shift and ev.key == pygame.K_LEFT:
+                        keys.put("BAR_LEFT")
+                    elif shift and ev.key == pygame.K_RIGHT:
+                        keys.put("BAR_RIGHT")
+                    elif ev.key in PYGAME_KEYS:
+                        keys.put(PYGAME_KEYS[ev.key])
             while not keys.empty():
                 name = keys.get()
                 if name == "QUIT":

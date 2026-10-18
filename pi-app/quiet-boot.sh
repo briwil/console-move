@@ -14,7 +14,9 @@ import sys
 path = sys.argv[1]
 words = open(path).read().split()
 words = ["console=tty3" if w == "console=tty1" else w for w in words]
-for w in ["quiet", "loglevel=3", "logo.nologo", "vt.global_cursor_default=0",
+# plymouth.ignore-serial-consoles: without it, the serial console makes the
+# start-up logo fall back to plain text mode
+for w in ["quiet", "plymouth.ignore-serial-consoles", "loglevel=3", "logo.nologo", "vt.global_cursor_default=0",
           "systemd.show_status=false", "rd.udev.log_level=3"]:
     if w not in words:
         words.append(w)

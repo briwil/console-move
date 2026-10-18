@@ -1,0 +1,91 @@
+{
+ "sans": {
+  "name": "Inter Tight",
+  "files": {
+   "400": "InterTight-Regular.ttf",
+   "500": "InterTight-Medium.ttf",
+   "600": "InterTight-SemiBold.ttf",
+   "700": "InterTight-Bold.ttf"
+  }
+ },
+ "mono": {
+  "name": "IBM Plex Mono",
+  "files": {
+   "400": "IBMPlexMono-Regular.ttf",
+   "500": "IBMPlexMono-Medium.ttf",
+   "600": "IBMPlexMono-SemiBold.ttf",
+   "700": "IBMPlexMono-Bold.ttf"
+  }
+ },
+ "plexsans": {
+  "name": "IBM Plex Sans",
+  "files": {
+   "400": "IBMPlexSans-Regular.ttf",
+   "500": "IBMPlexSans-Medium.ttf",
+   "600": "IBMPlexSans-SemiBold.ttf",
+   "700": "IBMPlexSans-Bold.ttf"
+  }
+ },
+ "grotesk": {
+  "name": "Space Grotesk",
+  "files": {
+   "400": "SpaceGrotesk-Regular.ttf",
+   "500": "SpaceGrotesk-Medium.ttf",
+   "600": "SpaceGrotesk-SemiBold.ttf",
+   "700": "SpaceGrotesk-Bold.ttf"
+  }
+ },
+ "archivo": {
+  "name": "Archivo Narrow",
+  "files": {
+   "400": "ArchivoNarrow-Regular.ttf",
+   "500": "ArchivoNarrow-Medium.ttf",
+   "600": "ArchivoNarrow-SemiBold.ttf",
+   "700": "ArchivoNarrow-Bold.ttf"
+  }
+ },
+ "jetbrains": {
+  "name": "JetBrains Mono",
+  "files": {
+   "400": "JetBrainsMono-Regular.ttf",
+   "500": "JetBrainsMono-Medium.ttf",
+   "600": "JetBrainsMono-SemiBold.ttf",
+   "700": "JetBrainsMono-Bold.ttf"
+  }
+ },
+ "barlow": {
+  "name": "Barlow Condensed",
+  "files": {
+   "400": "BarlowCondensed-Regular.ttf",
+   "500": "BarlowCondensed-Medium.ttf",
+   "600": "BarlowCondensed-SemiBold.ttf",
+   "700": "BarlowCondensed-Bold.ttf"
+  }
+ },
+ "spacemono": {
+  "name": "Space Mono",
+  "files": {
+   "400": "SpaceMono-Regular.ttf",
+   "700": "SpaceMono-Bold.ttf"
+  }
+ },
+ "silkscreen": {
+  "name": "Silkscreen",
+  "files": {
+   "400": "Silkscreen-Regular.ttf",
+   "700": "Silkscreen-Bold.ttf"
+  }
+ },
+ "vt323": {
+  "name": "VT323",
+  "files": {
+   "400": "VT323-Regular.ttf"
+  }
+ },
+ "dotgothic": {
+  "name": "DotGothic16",
+  "files": {
+   "400": "DotGothic16-Regular.ttf"
+  }
+ }
+}

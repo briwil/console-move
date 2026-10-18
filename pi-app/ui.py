@@ -1,10 +1,10 @@
-"""Screen layout: reads the code from the Track8 Screen Designer and draws it with pygame.
+"""Screen layout: reads the code from the Console Screen Designer and draws it with pygame.
 
 The layout file holds one command per line, exactly as the designer writes them:
 
     ui.fill(name, x, y, w, h, colour, radius)
     ui.frame(name, x, y, w, h, line, colour, radius)
-    ui.text(name, x, y, size, colour, font, weight, align, "TEXT")
+    ui.text(name, x, y, size, colour, font, weight, align, "TEXT")   # font is an id from fonts/fonts.json
     ui.line(name, x1, y1, x2, y2, width, colour)
     ui.circle(name, x, y, radius, line, colour)      # line 0 = filled
     ui.wave(name, x, y, w, h, colour)
@@ -13,6 +13,7 @@ The layout file holds one command per line, exactly as the designer writes them:
 Every item has a name, so the app can change it while running, for example
 screen.set("clock", t="012.3.1") or screen.set("playhead", x1=600, x2=600).
 """
+import json
 import math
 import os
 import re
@@ -22,10 +23,16 @@ import pygame
 WIDTH, HEIGHT = 1280, 400
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_DIR = os.path.join(HERE, "fonts")
-FONT_FILES = {
-    "sans": {400: "InterTight-Regular.ttf", 500: "InterTight-Medium.ttf", 600: "InterTight-SemiBold.ttf", 700: "InterTight-Bold.ttf"},
-    "mono": {400: "IBMPlexMono-Regular.ttf", 500: "IBMPlexMono-Medium.ttf", 600: "IBMPlexMono-SemiBold.ttf", 700: "IBMPlexMono-Bold.ttf"},
-}
+
+
+def _load_fonts():
+    """fonts/fonts.json lists every font: id -> {"name": ..., "files": {"400": "file.ttf", ...}}."""
+    with open(os.path.join(FONT_DIR, "fonts.json"), encoding="utf-8") as f:
+        data = json.load(f)
+    return {fid: {int(w): fn for w, fn in info["files"].items()} for fid, info in data.items()}
+
+
+FONT_FILES = _load_fonts()
 
 # ---------------------------------------------------------------- reading the layout
 

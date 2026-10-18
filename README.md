@@ -1,14 +1,13 @@
-# Track8
+# Console
 
-A DIY 8-track recorder and arranger, inspired by the Thingstone Track8, with
-OP-1-style tape features. It runs on a Raspberry Pi 5 with a 7.9" 1280×400
+A DIY 8-track recorder and arranger with tape-style recording. It runs on a Raspberry Pi 5 with a 7.9" 1280×400
 screen and a custom key-and-knob control board.
 
 ## What's in this repo
 
 | Folder | What it holds | Status |
 |---|---|---|
-| `pi-app/` | The recorder app that runs on the Pi (audio engine and screen UI) | Not started |
+| `pi-app/` | The recorder app that runs on the Pi (audio engine and screen UI) | Screen and controls working, no audio yet |
 | `firmware/` | Code for the PGA2350 on the control board (reads keys and knobs, sends them to the Pi over USB) | Not started |
 | `hardware/` | KiCad project for the control board, plus the files sent to JLCPCB | Ordered, rev 0.1 |
 
@@ -28,13 +27,13 @@ The repo is private, so the Pi signs in to GitHub once with GitHub's own tool:
 ```
 sudo apt install gh
 gh auth login
-gh repo clone briwil/track8 ~/track8
+gh repo clone briwil/console ~/console
 ```
 
 After that, to get the latest changes:
 
 ```
-cd ~/track8 && git pull
+cd ~/console && git pull
 ```
 
 ## Pi setup notes
@@ -46,3 +45,14 @@ cd ~/track8 && git pull
 
 - `tools/screen-designer.html` is a visual designer for the 1280×400 screen.
   Open it in a browser, lay out the screen and copy the generated `ui.*` code.
+
+## Fonts
+
+The screen can use any font listed in `pi-app/fonts/fonts.json`: Inter Tight,
+IBM Plex Mono, IBM Plex Sans, Space Grotesk, Archivo Narrow, Barlow Condensed,
+JetBrains Mono, Space Mono, and the pixel fonts Silkscreen, VT323 and
+DotGothic16. All are under the SIL Open Font License (see `pi-app/fonts/OFL-*.txt`).
+
+To add a font, put its `.ttf` files in `pi-app/fonts/`, add an entry to
+`fonts.json` (an id, its name and one file per weight), and add the same entry
+to the `FONTS` list near the top of the designer's script.

@@ -1,8 +1,0 @@
-[Plymouth Theme]
-Name=Track8
-Description=Track8 start-up screen
-ModuleName=script
-
-[script]
-ImageDir=/usr/share/plymouth/themes/track8
-ScriptFile=/usr/share/plymouth/themes/track8/track8.script

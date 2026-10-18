@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Console
+Description=Console start-up screen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/console
+ScriptFile=/usr/share/plymouth/themes/console/console.script

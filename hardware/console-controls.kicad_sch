@@ -5,7 +5,7 @@
   (uuid "3315b546-f875-4bef-ab2d-777f1017149a")
   (paper "A2")
     (title_block
-    (title "Track8-style control board")
+    (title "Console control board")
     (rev "0.1")
     (company "briwil")
   )
@@ -1988,7 +1988,7 @@
       )
     )
   )
-    (text "Track8-style control board  -  PGA2350 (RP2350B), 24 Choc keys + 11 EC11 encoders, 6x6 matrix COL2ROW"
+    (text "Console control board  -  PGA2350 (RP2350B), 24 Choc keys + 11 EC11 encoders, 6x6 matrix COL2ROW"
     (exclude_from_sim no)
     (at 20.32 15.24 0)
       (effects
@@ -2035,7 +2035,7 @@
         )
       )
     )
-      (property "Footprint" "track8:PGA2350"
+      (property "Footprint" "console:PGA2350"
       (at 50.8 101.6 0)
         (effects
           (font
@@ -2169,7 +2169,7 @@
       (pin "B5" (uuid "086f4279-1bb9-4101-83bd-6e3fb4126d56")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "U1")
           (unit 1)
@@ -3181,7 +3181,7 @@
       (uuid "731190d6-3f35-4bf2-91ab-ebbd498ee0a3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW25")
           (unit 1)
@@ -3281,7 +3281,7 @@
       (uuid "8ac24b7e-3da3-40df-99f1-f75a9f503e31")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW26")
           (unit 1)
@@ -3425,7 +3425,7 @@
       (pin "SH" (uuid "695e509f-d86d-4722-b0da-fa5130ed77ba")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "J1")
           (unit 1)
@@ -3819,7 +3819,7 @@
       (uuid "93429e1b-808a-496e-bf77-c77900423743")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "R1")
           (unit 1)
@@ -3919,7 +3919,7 @@
       (uuid "1c7ae5e1-05c9-4f3f-ad55-b664093ae638")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "R2")
           (unit 1)
@@ -4018,7 +4018,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 50.8 0)
         (effects
           (font
@@ -4041,7 +4041,7 @@
       (uuid "3c215364-1002-4e94-b9fd-65ec44db1caa")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW1")
           (unit 1)
@@ -4119,7 +4119,7 @@
       (uuid "dbfb1ff4-d02e-4085-8195-5d48a34175d6")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D1")
           (unit 1)
@@ -4185,7 +4185,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 50.8 0)
         (effects
           (font
@@ -4208,7 +4208,7 @@
       (uuid "921de2e2-a78d-4b1c-b837-667919e230f5")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW2")
           (unit 1)
@@ -4286,7 +4286,7 @@
       (uuid "da0e19b8-2909-431b-b2e5-20602ca8abac")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D2")
           (unit 1)
@@ -4352,7 +4352,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 233.68 50.8 0)
         (effects
           (font
@@ -4375,7 +4375,7 @@
       (uuid "fd7070ed-ba45-45ed-8e4e-7e1812049a8d")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW3")
           (unit 1)
@@ -4453,7 +4453,7 @@
       (uuid "78f54d2b-094d-44d3-b626-78847513db5c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D3")
           (unit 1)
@@ -4519,7 +4519,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 274.32 50.8 0)
         (effects
           (font
@@ -4542,7 +4542,7 @@
       (uuid "0cd3c573-e58f-4013-93f2-fc51d5d2f29e")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW4")
           (unit 1)
@@ -4620,7 +4620,7 @@
       (uuid "a24615b5-ff53-4879-98fc-6f317ca96578")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D4")
           (unit 1)
@@ -4686,7 +4686,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 63.5 0)
         (effects
           (font
@@ -4709,7 +4709,7 @@
       (uuid "3f0fba7b-4b56-4266-8e01-146c96eaeeca")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW5")
           (unit 1)
@@ -4787,7 +4787,7 @@
       (uuid "11ec6a9e-96f1-4ad7-9df3-3834384359c7")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D5")
           (unit 1)
@@ -4853,7 +4853,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 63.5 0)
         (effects
           (font
@@ -4876,7 +4876,7 @@
       (uuid "24507d87-0bf7-4e0f-bd4e-06fbf9283b5e")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW6")
           (unit 1)
@@ -4954,7 +4954,7 @@
       (uuid "54bf8a3b-44d3-4cc3-93e2-857bde257b1c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D6")
           (unit 1)
@@ -5020,7 +5020,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 233.68 63.5 0)
         (effects
           (font
@@ -5043,7 +5043,7 @@
       (uuid "bca81d2c-30f8-4500-b8b2-b586c5b4a84e")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW7")
           (unit 1)
@@ -5121,7 +5121,7 @@
       (uuid "ae799b14-7ee2-4454-adfb-234420e88c05")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D7")
           (unit 1)
@@ -5187,7 +5187,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 274.32 63.5 0)
         (effects
           (font
@@ -5210,7 +5210,7 @@
       (uuid "fbdfdb2a-ffdc-4cdd-b5df-447225577d29")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW8")
           (unit 1)
@@ -5288,7 +5288,7 @@
       (uuid "6d49a5ae-a681-4c80-8edd-7802a50a708b")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D8")
           (unit 1)
@@ -5354,7 +5354,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 76.2 0)
         (effects
           (font
@@ -5377,7 +5377,7 @@
       (uuid "c603ccc2-cdb9-403d-9bec-516295bd1a4e")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW9")
           (unit 1)
@@ -5455,7 +5455,7 @@
       (uuid "5cc5dfe4-bf35-4c4a-8528-b5cf87e136b4")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D9")
           (unit 1)
@@ -5521,7 +5521,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 76.2 0)
         (effects
           (font
@@ -5544,7 +5544,7 @@
       (uuid "b6e98494-85ef-45d5-a5fa-e75aa7f46a04")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW10")
           (unit 1)
@@ -5622,7 +5622,7 @@
       (uuid "67039557-bb42-48b8-bbe2-7486c9b30e62")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D10")
           (unit 1)
@@ -5688,7 +5688,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 233.68 76.2 0)
         (effects
           (font
@@ -5711,7 +5711,7 @@
       (uuid "5762429b-7e1c-44dc-9cf6-3089d7140761")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW11")
           (unit 1)
@@ -5789,7 +5789,7 @@
       (uuid "6b091f66-9055-43d2-a609-f97bd504902c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D11")
           (unit 1)
@@ -5855,7 +5855,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 274.32 76.2 0)
         (effects
           (font
@@ -5878,7 +5878,7 @@
       (uuid "156848ef-5aa2-4dd7-8138-dd6c5bf860c6")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW12")
           (unit 1)
@@ -5956,7 +5956,7 @@
       (uuid "f43645e3-b266-465c-8c5b-8150a0bccc59")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D12")
           (unit 1)
@@ -6022,7 +6022,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 88.9 0)
         (effects
           (font
@@ -6045,7 +6045,7 @@
       (uuid "7eb6ed68-b42f-4072-9a80-0cfdf17dcabd")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW13")
           (unit 1)
@@ -6123,7 +6123,7 @@
       (uuid "b9dc4f0c-0f75-486f-a024-92979e9a23da")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D13")
           (unit 1)
@@ -6189,7 +6189,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 88.9 0)
         (effects
           (font
@@ -6212,7 +6212,7 @@
       (uuid "fdc0527a-4f9a-4992-9ae2-f7f703820e47")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW14")
           (unit 1)
@@ -6290,7 +6290,7 @@
       (uuid "f8ac34f1-7f5b-49a4-a63d-d40fb2a3b765")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D14")
           (unit 1)
@@ -6356,7 +6356,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 233.68 88.9 0)
         (effects
           (font
@@ -6379,7 +6379,7 @@
       (uuid "1525e74a-e815-42f2-ba97-00de11cfc0d3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW15")
           (unit 1)
@@ -6457,7 +6457,7 @@
       (uuid "298f94f3-9d2f-4ef4-bfa3-41f94604adbd")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D15")
           (unit 1)
@@ -6523,7 +6523,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 274.32 88.9 0)
         (effects
           (font
@@ -6546,7 +6546,7 @@
       (uuid "b015e68e-c8ef-4c6a-88b8-7cb6720c693a")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW16")
           (unit 1)
@@ -6624,7 +6624,7 @@
       (uuid "afea920f-b4a1-4288-9c23-74852365da2f")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D16")
           (unit 1)
@@ -6690,7 +6690,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 101.6 0)
         (effects
           (font
@@ -6713,7 +6713,7 @@
       (uuid "c2db3c6a-90c7-45f3-b327-a35cce4efb74")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW17")
           (unit 1)
@@ -6791,7 +6791,7 @@
       (uuid "df34d6a7-8e1c-4f1e-b123-b187834f7919")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D17")
           (unit 1)
@@ -6857,7 +6857,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 101.6 0)
         (effects
           (font
@@ -6880,7 +6880,7 @@
       (uuid "8f5af383-1bd6-436b-b99b-4dc5f9f597f3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW18")
           (unit 1)
@@ -6958,7 +6958,7 @@
       (uuid "f5b70c96-23b8-4061-be46-0f083cfb1318")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D18")
           (unit 1)
@@ -7024,7 +7024,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 233.68 101.6 0)
         (effects
           (font
@@ -7047,7 +7047,7 @@
       (uuid "194c3c60-b66d-4306-aa1e-e96373c78f0c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW19")
           (unit 1)
@@ -7125,7 +7125,7 @@
       (uuid "5413e4d0-4bae-4492-9a08-4e477e4990f5")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D19")
           (unit 1)
@@ -7191,7 +7191,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 274.32 101.6 0)
         (effects
           (font
@@ -7214,7 +7214,7 @@
       (uuid "204e496e-fd8d-4289-ac7e-d9b2a9fe37eb")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW20")
           (unit 1)
@@ -7292,7 +7292,7 @@
       (uuid "69717d47-cc63-4c80-bd84-46d35819fd90")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D20")
           (unit 1)
@@ -7358,7 +7358,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 314.96 101.6 0)
         (effects
           (font
@@ -7381,7 +7381,7 @@
       (uuid "e825b4f4-11f7-419a-a43b-f271b33661fc")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW21")
           (unit 1)
@@ -7459,7 +7459,7 @@
       (uuid "1611787c-d608-4bc6-a584-83800cdee629")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D21")
           (unit 1)
@@ -7525,7 +7525,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 355.6 101.6 0)
         (effects
           (font
@@ -7548,7 +7548,7 @@
       (uuid "bbc444fa-938d-4f33-b814-4dca47bbb8d9")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW22")
           (unit 1)
@@ -7626,7 +7626,7 @@
       (uuid "76f0e95a-2757-45d9-bf06-097302fbe3c3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D22")
           (unit 1)
@@ -7692,7 +7692,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 152.4 114.3 0)
         (effects
           (font
@@ -7715,7 +7715,7 @@
       (uuid "47d23a4b-72a3-4251-ba33-67876ed9c26f")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW23")
           (unit 1)
@@ -7793,7 +7793,7 @@
       (uuid "c6bde24a-01a8-4492-a990-e84cbbad9cd9")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D23")
           (unit 1)
@@ -7859,7 +7859,7 @@
         )
       )
     )
-      (property "Footprint" "track8:SW_Kailh_Choc_V1_Hotswap"
+      (property "Footprint" "console:SW_Kailh_Choc_V1_Hotswap"
       (at 193.04 114.3 0)
         (effects
           (font
@@ -7882,7 +7882,7 @@
       (uuid "01624dfe-b80b-4a97-836a-201514a6d76e")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "SW24")
           (unit 1)
@@ -7960,7 +7960,7 @@
       (uuid "9d59f302-00ff-45e0-ba25-fbd9ba90537a")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D24")
           (unit 1)
@@ -8069,7 +8069,7 @@
       (uuid "26477cfe-0427-44f8-9e82-6abf7d4ca452")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC1")
           (unit 1)
@@ -8213,7 +8213,7 @@
       (uuid "c94cf179-f14a-4589-b3cb-76a366fc2532")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D25")
           (unit 1)
@@ -8311,7 +8311,7 @@
       (uuid "29165392-9101-4283-a300-ae7f35d76a2d")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC2")
           (unit 1)
@@ -8455,7 +8455,7 @@
       (uuid "6bb00719-6da8-4f33-b80c-bcaaea26285f")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D26")
           (unit 1)
@@ -8553,7 +8553,7 @@
       (uuid "ba83da10-be76-4fb0-98bf-080b8757b09f")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC3")
           (unit 1)
@@ -8697,7 +8697,7 @@
       (uuid "df63f95f-f4f4-45ac-b9a0-c897a88a9377")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D27")
           (unit 1)
@@ -8795,7 +8795,7 @@
       (uuid "f2f14576-624f-4a1e-8d1d-22ccc0d49837")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC4")
           (unit 1)
@@ -8939,7 +8939,7 @@
       (uuid "9a82dabb-c023-4394-922b-dada4c01c8d3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D28")
           (unit 1)
@@ -9037,7 +9037,7 @@
       (uuid "1b89e205-d5af-400d-a15c-7c139d8b2c93")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC5")
           (unit 1)
@@ -9181,7 +9181,7 @@
       (uuid "4f21d605-da89-4895-85b3-bc3c124228af")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D29")
           (unit 1)
@@ -9279,7 +9279,7 @@
       (uuid "f90c7fd7-353f-4229-a1c4-dede52874350")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC6")
           (unit 1)
@@ -9423,7 +9423,7 @@
       (uuid "975fc5e0-cda2-45b7-aa2e-862bc84b31d2")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D30")
           (unit 1)
@@ -9521,7 +9521,7 @@
       (uuid "e19498bb-8ff6-4367-9125-23f4b08fbd03")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC7")
           (unit 1)
@@ -9665,7 +9665,7 @@
       (uuid "a8ecca9b-39d1-44c9-83ab-55aefbc63245")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D31")
           (unit 1)
@@ -9763,7 +9763,7 @@
       (uuid "8eac6e26-0881-49d0-834f-4ba54789e0ca")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC8")
           (unit 1)
@@ -9907,7 +9907,7 @@
       (uuid "e925bf8a-74a7-41b0-be60-9688cab6fcd4")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D32")
           (unit 1)
@@ -10005,7 +10005,7 @@
       (uuid "60aa8dcb-4900-46df-8dac-2abc93d1097c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC9")
           (unit 1)
@@ -10149,7 +10149,7 @@
       (uuid "ff5c862b-6084-4f1c-989e-4e9c7f8d34c3")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D33")
           (unit 1)
@@ -10247,7 +10247,7 @@
       (uuid "d4b65c2a-a71c-41f5-994f-ca6a1b1348cb")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC10")
           (unit 1)
@@ -10391,7 +10391,7 @@
       (uuid "77377c99-0403-43bb-9f83-aa48b426d911")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D34")
           (unit 1)
@@ -10489,7 +10489,7 @@
       (uuid "56b997a4-5487-48fd-8911-58aae45d838b")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "ENC11")
           (unit 1)
@@ -10633,7 +10633,7 @@
       (uuid "ad183195-86a6-47f3-859e-ee4e0fd48b9c")
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "D35")
           (unit 1)
@@ -10716,7 +10716,7 @@
       hide)
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "H1")
           (unit 1)
@@ -10766,7 +10766,7 @@
       hide)
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "H2")
           (unit 1)
@@ -10816,7 +10816,7 @@
       hide)
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "H3")
           (unit 1)
@@ -10866,7 +10866,7 @@
       hide)
     )
       (instances
-        (project "track8-controls"
+        (project "console-controls"
           (path "/3315b546-f875-4bef-ab2d-777f1017149a"
           (reference "H4")
           (unit 1)

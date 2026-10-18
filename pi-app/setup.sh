@@ -1,6 +1,6 @@
 #!/bin/bash
-# Install what the Track8 app needs. Run once: ./setup.sh
+# Install what the Console app needs. Run once: ./setup.sh
 set -e
 sudo apt update
 sudo apt install -y python3-pygame
-echo "Done. Start the app with: ~/track8/pi-app/run.sh"
+echo "Done. Start the app with: ~/console/pi-app/run.sh"

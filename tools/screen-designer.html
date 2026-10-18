@@ -1,8 +1,8 @@
-<title>Track8 Screen Designer</title>
+<title>Console Screen Designer</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Archivo+Narrow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Silkscreen:wght@400;700&family=VT323&family=DotGothic16&display=swap">
 <style>
   /* Layout: the 1280x400 screen across the top, tools above it, properties and item list below, code at the bottom. */
   :root {
@@ -89,8 +89,8 @@
 
 <main>
   <div>
-    <h1>Track8 Screen Designer</h1>
-    <p class="sub">A 1280 × 400 copy of the Track8 screen. Draw boxes, text, lines, circles, waveforms and level meters, drag them into place, and the code for the Pi app appears underneath. You can also paste code in and watch it draw. Your layout is kept in this browser between visits.</p>
+    <h1>Console Screen Designer</h1>
+    <p class="sub">A 1280 × 400 copy of the console screen. Draw boxes, text, lines, circles, waveforms and level meters, drag them into place, and the code for the Pi app appears underneath. You can also paste code in and watch it draw. Your layout is kept in this browser between visits.</p>
   </div>
 
   <div class="panel">
@@ -148,7 +148,7 @@
       <h2>Items (top of the list is drawn last)</h2>
       <div class="layers" id="layers" role="listbox" aria-label="Items"></div>
       <div class="tools">
-        <button id="b-example">Load Track8 example</button>
+        <button id="b-example">Load example</button>
         <button id="b-clear">Clear all</button>
       </div>
     </div>
@@ -177,13 +177,25 @@
 (function () {
   "use strict";
   var W = 1280, H = 400;
-  var FONTS = { sans: '"Inter Tight", "Helvetica Neue", Arial, sans-serif', mono: '"IBM Plex Mono", Menlo, Consolas, monospace' };
+  var FONTS = {
+    sans: { name: "Inter Tight", css: '"Inter Tight", "Helvetica Neue", Arial, sans-serif', w: [400, 500, 600, 700] },
+    mono: { name: "IBM Plex Mono", css: '"IBM Plex Mono", Menlo, Consolas, monospace', w: [400, 500, 600, 700] },
+    plexsans: { name: "IBM Plex Sans", css: '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif', w: [400, 500, 600, 700] },
+    grotesk: { name: "Space Grotesk", css: '"Space Grotesk", "Helvetica Neue", Arial, sans-serif', w: [400, 500, 600, 700] },
+    archivo: { name: "Archivo Narrow", css: '"Archivo Narrow", "Helvetica Neue", Arial, sans-serif', w: [400, 500, 600, 700] },
+    jetbrains: { name: "JetBrains Mono", css: '"JetBrains Mono", Menlo, Consolas, monospace', w: [400, 500, 600, 700] },
+    barlow: { name: "Barlow Condensed", css: '"Barlow Condensed", "Helvetica Neue", Arial, sans-serif', w: [400, 500, 600, 700] },
+    spacemono: { name: "Space Mono", css: '"Space Mono", Menlo, Consolas, monospace', w: [400, 700] },
+    silkscreen: { name: "Silkscreen", css: '"Silkscreen", Menlo, Consolas, monospace', w: [400, 700] },
+    vt323: { name: "VT323", css: '"VT323", Menlo, Consolas, monospace', w: [400] },
+    dotgothic: { name: "DotGothic16", css: '"DotGothic16", Menlo, Consolas, monospace', w: [400] }
+  };
   var PAL = [
     ["track 1 blue", "#4F8CFF"], ["track 2 green", "#3CCB7F"], ["track 3 yellow", "#F2C230"], ["track 4 red", "#FF5A4E"],
     ["track 5 violet", "#B07CFF"], ["track 6 cyan", "#2EC8D8"], ["track 7 orange", "#FF8A3D"], ["track 8 pink", "#E86FB0"],
     ["white", "#F2F3F5"], ["grey", "#7D838C"], ["lane", "#17191E"], ["panel", "#14161A"], ["background", "#0C0D10"], ["black", "#000000"]
   ];
-  var STORE = "track8-screen-designer-code";
+  var STORE = "console-screen-designer-code";
   var view = document.getElementById("view"), vctx = view.getContext("2d");
   var over = document.getElementById("over"), octx = over.getContext("2d");
   var codeEl = document.getElementById("code");
@@ -220,7 +232,7 @@
       ctx.fillRect(x, Math.round(cy - a / 2), 2, Math.max(1, Math.round(a)));
     }
   }
-  function textFont(it) { return it.wt + " " + it.s + "px " + FONTS[it.f]; }
+  function textFont(it) { return it.wt + " " + it.s + "px " + FONTS[it.f].css; }
   function drawItem(ctx, it) {
     ctx.save();
     ctx.fillStyle = it.c; ctx.strokeStyle = it.c;
@@ -278,7 +290,7 @@
       octx.stroke(); octx.restore();
     }
     if ($("names").checked) {
-      octx.save(); octx.font = (11 / k) + "px " + FONTS.mono; octx.textBaseline = "bottom";
+      octx.save(); octx.font = (11 / k) + "px " + FONTS.mono.css; octx.textBaseline = "bottom";
       items.forEach(function (it) {
         if (!it.name) return; var b = bbox(it);
         octx.fillStyle = "rgba(0,0,0,.7)"; var tw = octx.measureText(it.name).width;
@@ -332,7 +344,7 @@
     return "";
   }
   function makeCode() {
-    return "// Track8 screen layout, 1280 x 400\n" + items.map(lineFor).join("\n");
+    return "// Console screen layout, 1280 x 400\n" + items.map(lineFor).join("\n");
   }
   function splitArgs(s) {
     var out = [], cur = "", inq = false, quoted = false;
@@ -374,6 +386,7 @@
     }
     if (it.type === "text") {
       if (!FONTS[it.f]) it.f = "sans";
+      it.wt = nearestWeight(it.f, it.wt);
       if (["left", "center", "right"].indexOf(it.a) < 0) it.a = "left";
       it.s = Math.max(4, it.s); it.wt = Math.min(900, Math.max(100, it.wt));
     }
@@ -449,8 +462,8 @@
   var FIELDS = {
     rect: [STYLE].concat(POS, SIZE, [["r", "Corner radius"]]),
     frame: [STYLE].concat(POS, SIZE, [["t", "Line width"], ["r", "Corner radius"]]),
-    text: POS.concat([["s", "Size (px)"], ["wt", "Weight", "sel", [[400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"]]],
-      ["f", "Font", "sel", [["sans", "Sans (Inter Tight)"], ["mono", "Mono (Plex Mono)"]]], ["a", "Align to X", "sel", [["left", "Left"], ["center", "Centre"], ["right", "Right"]]],
+    text: POS.concat([["s", "Size (px)"], ["wt", "Weight", "sel", "weights"],
+      ["f", "Font", "sel", "fonts"], ["a", "Align to X", "sel", [["left", "Left"], ["center", "Centre"], ["right", "Right"]]],
       ["t", "Text", "text", null, true]]),
     line: [["x1", "Start X"], ["y1", "Start Y"], ["x2", "End X"], ["y2", "End Y"], ["t", "Width"]],
     circle: [["x", "Centre X"], ["y", "Centre Y"], ["rad", "Radius"], ["t", "Line (0 = filled)"]],
@@ -486,7 +499,9 @@
       lab.appendChild(document.createTextNode(f[1]));
       if (f[2] === "sel") {
         el = document.createElement("select");
-        f[3].forEach(function (o) { var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
+        var opts = f[3] === "fonts" ? Object.keys(FONTS).map(function (id) { return [id, FONTS[id].name]; })
+          : f[3] === "weights" ? FONTS[it.f].w.map(function (w) { return [w, WNAME[w]]; }) : f[3];
+        opts.forEach(function (o) { var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
       } else {
         el = document.createElement("input"); el.type = f[2] === "text" ? "text" : "number";
         if (el.type === "text") { el.autocomplete = "off"; el.spellcheck = false; } else el.step = 1;
@@ -496,6 +511,8 @@
       lab.appendChild(el); fb.appendChild(lab);
     });
   }
+  var WNAME = { 400: "Regular", 500: "Medium", 600: "Semibold", 700: "Bold" };
+  function nearestWeight(f, wt) { return FONTS[f].w.reduce(function (a, b) { return Math.abs(b - wt) < Math.abs(a - wt) ? b : a; }); }
   var MINS = { w: 1, h: 1, s: 4, rad: 1, r: 0, v: 0 };
   function setField(f, el) {
     var it = items[sel]; if (!it) return;
@@ -503,7 +520,8 @@
     if (k === "type") { it.type = v; if (v === "frame" && !it.t) it.t = 2; builtFor = null; }
     else if (k === "name") it.name = v.replace(/[^A-Za-z0-9_]/g, "_");
     else if (k === "t" && it.type === "text") it.t = v;
-    else if (k === "f" || k === "a") it[k] = v;
+    else if (k === "f") { it.f = v; it.wt = nearestWeight(v, it.wt); builtFor = null; }
+    else if (k === "a") it[k] = v;
     else {
       var n = Math.round(+v); if (isNaN(n)) return;
       if (k === "t") n = Math.max(it.type === "circle" ? 0 : 1, n);
@@ -511,7 +529,7 @@
       if (k === "v") n = Math.min(100, n);
       it[k] = n;
     }
-    render(); layers(); syncCode(); if (k === "type") props();
+    render(); layers(); syncCode(); if (k === "type" || k === "f") props();
   }
   function setColor(c) { chosen().forEach(function (i) { items[i].c = c; }); render(); layers(); syncCode(); props(); }
   $("p-c").addEventListener("input", function () { var v = $("p-c").value.trim(); if (v[0] !== "#") v = "#" + v; if (okHex(v)) setColor(v.toUpperCase()); });
@@ -714,14 +732,14 @@
   });
   window.addEventListener("resize", render);
 
-  // ---------- example: a Track8 main screen ----------
+  // ---------- example: the main recorder screen ----------
   function exampleCode() {
     var C = ["#4F8CFF", "#3CCB7F", "#F2C230", "#FF5A4E", "#B07CFF", "#2EC8D8", "#FF8A3D", "#E86FB0"];
     var LV = [72, 55, 81, 64, 0, 47, 30, 0];
     var L = [
       'ui.fill("bg", 0, 0, 1280, 400, "#0C0D10", 0);',
       'ui.fill("header", 0, 0, 1280, 36, "#14161A", 0);',
-      'ui.text("title", 20, 8, 18, "#F2F3F5", "mono", 600, "left", "TRACK8");',
+      'ui.text("title", 20, 8, 18, "#F2F3F5", "mono", 600, "left", "CONSOLE");',
       'ui.text("song", 112, 10, 15, "#7D838C", "sans", 500, "left", "Untitled song");',
       'ui.text("clock", 630, 6, 22, "#F2F3F5", "mono", 500, "center", "012.3.1");',
       'ui.text("bpm", 1260, 10, 15, "#F2F3F5", "mono", 500, "right", "120.0 BPM  4/4");',
@@ -750,7 +768,8 @@
   try { saved = localStorage.getItem(STORE); } catch (e) {}
   items = parseCode(saved && parseCode(saved).items.length ? saved : exampleCode()).items;
   renderAll();
-  var faces = ['500 16px "Inter Tight"', '600 16px "Inter Tight"', '400 16px "Inter Tight"', '700 16px "Inter Tight"', '500 16px "IBM Plex Mono"', '600 16px "IBM Plex Mono"', '400 16px "IBM Plex Mono"'];
+  var faces = [];
+  Object.keys(FONTS).forEach(function (id) { FONTS[id].w.forEach(function (w) { faces.push(w + ' 16px "' + FONTS[id].name + '"'); }); });
   if (document.fonts && document.fonts.load) Promise.all(faces.map(function (f) { return document.fonts.load(f).catch(function () {}); })).then(function () { render(); });
 })();
 </script>

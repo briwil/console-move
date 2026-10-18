@@ -1,5 +1,5 @@
 [Unit]
-Description=Track8 recorder
+Description=Console recorder
 After=systemd-user-sessions.service sound.target
 Before=plymouth-quit.service plymouth-quit-wait.service
 Conflicts=getty@tty1.service
@@ -8,13 +8,13 @@ Conflicts=getty@tty1.service
 User=pi
 Group=pi
 SupplementaryGroups=video render input audio
-WorkingDirectory=/home/pi/track8/pi-app
+WorkingDirectory=/home/pi/console/pi-app
 Environment=SDL_VIDEODRIVER=kmsdrm
-Environment=TRACK8_NO_TERMINAL_KEYS=1
-Environment=TRACK8_SERVICE=1
+Environment=CONSOLE_NO_TERMINAL_KEYS=1
+Environment=CONSOLE_SERVICE=1
 # hand the screen over from the start-up logo without a flash of text
 ExecStartPre=-+/usr/bin/plymouth quit --retain-splash
-ExecStart=/usr/bin/python3 /home/pi/track8/pi-app/track8.py
+ExecStart=/usr/bin/python3 /home/pi/console/pi-app/console.py
 TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal

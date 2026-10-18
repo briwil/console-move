@@ -1,12 +1,12 @@
 # Control board (rev 0.1)
 
-Open `track8-controls.kicad_pro` in KiCad 10. The project's footprint library,
-`track8.pretty`, has the PGA2350 and the Kailh Choc hotswap footprints, and
+Open `console-controls.kicad_pro` in KiCad 10. The project's footprint library,
+`console.pretty`, has the PGA2350 and the Kailh Choc hotswap footprints, and
 `fp-lib-table` loads it automatically.
 
-- `track8-controls.kicad_pcb` is the final routed board that was ordered from
+- `console-controls.kicad_pcb` is the final routed board that was ordered from
   JLCPCB (0 DRC errors).
-- `track8-controls.kicad_sch` is the schematic with LCSC part numbers. If you
+- `console-controls.kicad_sch` is the schematic with LCSC part numbers. If you
   edited the schematic yourself in KiCad, replace this copy with yours.
 - `jlcpcb-order/` holds the BOM and CPL used for assembly, which places 40
   parts on the bottom side. The hotswap sockets were out of stock, so they're

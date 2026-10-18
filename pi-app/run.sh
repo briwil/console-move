@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start Track8 on the Pi's screen.
+# Start Console on the Pi's screen.
 # - With the desktop running (for example when you run this over SSH), it opens full screen on the desktop.
 # - Without a desktop (boot-to-app), it draws straight to the screen.
 cd "$(dirname "$0")"
@@ -10,4 +10,4 @@ if [ -S "$RUNDIR/wayland-0" ]; then
 else
   export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 fi
-exec python3 track8.py "$@"
+exec python3 console.py "$@"

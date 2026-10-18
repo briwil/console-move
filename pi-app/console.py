@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Track8: the Pi app (version 0.2).
+"""Console: the Pi app (version 0.2).
 
 Shows the screen layout from layouts/main.ui full screen, with an OP-1 style
 tape: the playhead stays in the middle and the tape moves past it, with bar,
@@ -14,7 +14,7 @@ Keys (a keyboard plugged into the Pi, or typed into an SSH terminal running the 
     [ / ]        move back / forward one bar (also Shift+Left/Right)
     G            change the grid: 1/4, 1/8, 1/16, 1/32
     + / -        zoom in / out (16, 8, 4, 2 or 1 bars across the screen)
-    Q            quit (ignored when Track8 runs as the boot app)
+    Q            quit (ignored when Console runs as the boot app)
 
 Options:
     --window     open a 1280x400 window instead of full screen (for testing on a laptop)
@@ -41,7 +41,7 @@ BPM = 120.0
 
 def start_terminal_keys(q):
     """Read single key presses from the terminal (when run over SSH) and put names on the queue."""
-    if not sys.stdin.isatty() or os.environ.get("TRACK8_NO_TERMINAL_KEYS"):
+    if not sys.stdin.isatty() or os.environ.get("CONSOLE_NO_TERMINAL_KEYS"):
         return None
     import termios
     import tty
@@ -157,9 +157,9 @@ class Transport:
 # ---------------------------------------------------------------- main loop
 
 def main():
-    ap = argparse.ArgumentParser(description="Track8 recorder")
+    ap = argparse.ArgumentParser(description="Console recorder")
     ap.add_argument("--window", action="store_true", help="open a window instead of full screen")
-    ap.add_argument("--rotate", type=int, default=int(os.environ.get("TRACK8_ROTATE", "270")))
+    ap.add_argument("--rotate", type=int, default=int(os.environ.get("CONSOLE_ROTATE", "270")))
     ap.add_argument("--layout", default=os.path.join(HERE, "layouts", "main.ui"))
     args = ap.parse_args()
 
@@ -169,10 +169,10 @@ def main():
     else:
         display = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         pygame.mouse.set_visible(False)
-    pygame.display.set_caption("Track8")
+    pygame.display.set_caption("Console")
     dw, dh = display.get_size()
     rotate = args.rotate if dh > dw else 0      # an upright screen means nobody rotated it for us
-    print("Track8: display %dx%d driver %s%s" % (dw, dh, pygame.display.get_driver(),
+    print("Console: display %dx%d driver %s%s" % (dw, dh, pygame.display.get_driver(),
                                                  ", turning the picture %d degrees" % rotate if rotate else ""))
     print("Keys: 1-8 arm track, Space play/stop, R record, Left/Right grid step, [ ] bar, G grid, + - zoom, Q quit")
 
@@ -201,8 +201,8 @@ def main():
             while not keys.empty():
                 name = keys.get()
                 if name == "QUIT":
-                    if os.environ.get("TRACK8_SERVICE"):
-                        print("Q ignored: Track8 is running as the boot app. Stop it with: sudo systemctl stop track8")
+                    if os.environ.get("CONSOLE_SERVICE"):
+                        print("Q ignored: Console is running as the boot app. Stop it with: sudo systemctl stop console")
                     else:
                         running = False
                 else:

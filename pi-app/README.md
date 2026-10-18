@@ -1,10 +1,33 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.2** shows the screen
-layout full screen with an OP-1 style tape: the playhead stays in the middle
-and the tape moves past it, with bar, beat and grid lines and bar numbers.
-There's no audio yet: the waveforms are made up, and recording writes new
-made-up audio onto the armed track.
+The recorder that runs on the Raspberry Pi. **Version 0.3** records real audio.
+
+- An OP-1 style tape: the playhead stays in the middle and the tape moves past
+  it, with bar, beat and grid lines and bar numbers.
+- Records from a USB audio device. An OP-XY in its 8-channel USB mode records
+  all 8 tracks at once (input 1 to track 1, and so on). A stereo device, like a
+  UCA202, records its inputs mixed together onto the armed track. Press I to
+  switch between the two.
+- Plays the tape back out of the same device (on the OP-XY, through its
+  headphone jack).
+- Saves the song when you stop, to `~/console-data/projects/Song 1/`
+  (`track1.wav`…`track8.wav`, 24-bit), and loads it again at start-up.
+- E exports stems (every track with audio, all the same length so they line
+  up in a DAW) plus a stereo mix to `~/console-data/exports/`. Grab them from the
+  file page at console.local.
+
+Tracks are mono, the tape is 64 bars at 120 BPM (about 2 minutes), and the
+OP-XY runs at 44.1 kHz. Without an audio device the app still runs and says
+NO AUDIO DEVICE; plug one in and it connects within a couple of seconds.
+`run.sh --demo` shows made-up waveforms instead.
+
+## Recording timing
+
+Recordings are shifted earlier by the audio delay (about 100 ms by default) so
+overdubs line up with what you heard. If they land early or late, put a
+different value in `~/console-data/settings.json`, for example
+`{"latency_frames": 4000}` (44100 frames is one second), and restart the app.
+The same file can pick a device by name: `{"device": "UCA202"}`.
 
 ## First-time setup
 
@@ -34,6 +57,8 @@ keyboard plugged into the Pi:
 | [ / ] or Shift+← / → | Move back / forward one bar |
 | G | Change the grid: 1/4, 1/8, 1/16, 1/32 |
 | + / − | Zoom in / out (16, 8, 4, 2 or 1 bars across the screen) |
+| I | Input: all inputs to tracks 1–8, or inputs mixed onto the armed track |
+| E | Export stems and a stereo mix |
 | Q | Quit (ignored when it starts at boot) |
 
 ## Starting straight into the app at boot
@@ -106,6 +131,7 @@ If it's upside down, change the line `ExecStart=...console.py` in
 
 - `console.py` is the app: the screen, the keys and the transport (play,
   record, position).
+- `audio.py` is the audio engine: finding the device, recording, playback, saving and export.
 - `tape.py` is the tape: the tracks over time, the grid and zoom, and drawing the lanes, waveforms and ruler.
 - `ui.py` reads and draws layouts made with the Screen Designer
   (`tools/screen-designer.html`).

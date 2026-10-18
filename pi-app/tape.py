@@ -11,6 +11,7 @@ behaves the way it will once the audio engine exists.
 import math
 import random
 
+import numpy as np
 import pygame
 
 import ui
@@ -51,9 +52,13 @@ def sample_track(name, bars):
 
 
 class Tape:
-    def __init__(self, screen):
+    def __init__(self, screen, engine=None):
         self.s = screen
-        self.levels = [sample_track("track%d" % (n + 1), SAMPLE_FILL[n]) for n in range(8)]
+        self.engine = engine
+        if engine:
+            self.levels = engine.levels          # real recordings: peak level per 1/64 note
+        else:
+            self.levels = [np.array(sample_track("track%d" % (n + 1), SAMPLE_FILL[n]), np.float32) for n in range(8)]
         self.pos = 0.0                  # playhead position in beats from the start of the tape
         self.grid = 2                   # index into GRIDS (1/16)
         self.zoom = 2                   # index into ZOOMS (4 bars)
@@ -119,7 +124,11 @@ class Tape:
     def level_at(self, track, beat):
         if beat < 0 or beat >= TAPE_BEATS:
             return 0.0
-        return self.levels[track - 1][int(beat * RES)]
+        return self.shape(float(self.levels[track - 1][int(beat * RES)]))
+
+    def shape(self, a):
+        """Real audio peaks look tiny drawn as-is; a square root makes quiet parts visible."""
+        return min(1.0, math.sqrt(a)) if self.engine else a
 
     # ------------------------------------------------------------ drawing
 
@@ -170,9 +179,10 @@ class Tape:
             if beat < 0 or beat >= TAPE_BEATS:
                 continue
             i = int(beat * RES)
-            a = max(lv[i:i + span]) if span > 1 else lv[i]
-            if a <= 0:
+            a = float(lv[i:i + span].max()) if span > 1 else float(lv[i])
+            if a <= 0.0003:
                 continue
+            a = self.shape(a)
             bh = max(1, round(a * (it["h"] - 2)))
             surf.fill(col, (px, round(cy - bh / 2), 2, bh))
 

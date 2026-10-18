@@ -74,6 +74,27 @@ trouble starting.
 To hide the messages without the logo (a black screen instead), use
 `quiet-boot.sh`, and `loud-boot.sh` to undo it.
 
+## File page (console.local)
+
+```
+~/console/pi-app/set-hostname.sh
+~/console/pi-app/web-setup.sh
+sudo reboot
+```
+
+Then open **http://console.local** in a browser on the same Wi-Fi. It shows the
+console's storage (`~/console-data`, with Projects, Samples and Exports): you can
+download files or whole folders as a zip, play audio, upload by dragging files
+onto the page, make folders and delete things. Anyone on your Wi-Fi can open
+it, so it has no password.
+
+`sudo systemctl stop console-web` turns the page off and
+`sudo systemctl disable console-web` keeps it off after a reboot.
+
+If `console.local` doesn't open (some Windows PCs and Android phones don't
+support `.local` names), use the Pi's address instead, such as
+`http://192.168.86.54`.
+
 ## If the picture is upside down
 
 Without the desktop, the app turns the picture itself, by 270° by default.
@@ -89,8 +110,10 @@ If it's upside down, change the line `ExecStart=...console.py` in
 - `ui.py` reads and draws layouts made with the Screen Designer
   (`tools/screen-designer.html`).
 - `layouts/main.ui` is the main screen layout. Paste new designer code here.
-- `fonts/` holds Inter Tight and IBM Plex Mono (SIL Open Font License).
+- `fonts/` holds the screen fonts, listed in `fonts/fonts.json` (SIL Open Font License).
 - `console.service` is the boot-to-app service used by `boot-to-app.sh`.
+- `web/` is the file page (`server.py` and `index.html`), installed by `web-setup.sh` as `console-web.service`.
+- `set-hostname.sh` names the Pi `console`.
 - `splash/` and `splash-setup.sh` are the start-up logo; `quiet-boot.sh` and `loud-boot.sh` hide or show the boot messages.
 
 The layout names the app relies on: `track1_lane`…`track8_lane`, `track1_wave`…`track8_wave` (the app draws the grid and the audio into these), `trackN_meter`, `ruler`, `playhead`, `clock`, `grid`, `status`, `rec_dot` and `rec_outline`.

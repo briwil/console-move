@@ -20,5 +20,8 @@ echo "Installing the new start-up logo (this can take a minute)..."
 pi-app/splash-setup.sh
 sudo rm -rf /usr/share/plymouth/themes/track8
 pi-app/boot-to-app.sh
+pi-app/set-hostname.sh
+pi-app/web-setup.sh
 echo
 echo "All done. The project now lives in ~/console. Reboot with: sudo reboot"
+echo "After the reboot: ssh pi@console.local, and the file page is http://console.local"

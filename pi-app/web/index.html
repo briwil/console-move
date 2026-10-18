@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console</title>
+<style>
+  /* Dark like the console's own screen; fonts come from the console itself. */
+  @font-face { font-family: "Inter Tight"; font-weight: 400; src: url(/fonts/InterTight-Regular.ttf); }
+  @font-face { font-family: "Inter Tight"; font-weight: 500; src: url(/fonts/InterTight-Medium.ttf); }
+  @font-face { font-family: "Inter Tight"; font-weight: 600; src: url(/fonts/InterTight-SemiBold.ttf); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url(/fonts/IBMPlexMono-Medium.ttf); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url(/fonts/IBMPlexMono-SemiBold.ttf); }
+  :root {
+    --bg: #0C0D10; --panel: #14161A; --lane: #17191E; --line: #262A31; --fg: #F2F3F5; --dim: #7D838C;
+    --blue: #4F8CFF; --green: #3CCB7F; --yellow: #F2C230; --red: #FF5A4E;
+    --ui: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--ui); }
+  body { padding: 0 max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); }
+  main { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 0 6px; }
+  .logo { font: 600 20px var(--mono); letter-spacing: .04em; }
+  .logo .bars { display: inline-flex; gap: 3px; margin-left: 10px; vertical-align: middle; }
+  .logo .bars i { width: 12px; height: 4px; border-radius: 2px; display: block; }
+  .space { font: 500 12px var(--mono); color: var(--dim); display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+  .meter { width: 120px; height: 6px; background: var(--lane); border-radius: 3px; overflow: hidden; }
+  .meter b { display: block; height: 100%; background: var(--green); }
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  nav.tabs button { display: flex; align-items: center; gap: 8px; }
+  nav.tabs button .dot { width: 8px; height: 8px; border-radius: 50%; }
+  button { font: 500 14px var(--ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+  button.danger { color: var(--red); }
+  button.confirm { background: var(--red); border-color: var(--red); color: #fff; }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .crumbs { font: 500 13px var(--mono); color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+  .crumbs a { color: var(--fg); text-decoration: none; cursor: pointer; }
+  .crumbs a:hover { text-decoration: underline; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .newfolder { display: flex; gap: 6px; }
+  .newfolder input { font: 14px var(--ui); color: var(--fg); background: var(--lane); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; width: 180px; }
+  .list { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; position: relative; min-height: 160px; }
+  .row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 90px 110px auto; gap: 12px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .name a { color: var(--fg); text-decoration: none; cursor: pointer; font-weight: 600; }
+  .row .name a:hover { text-decoration: underline; }
+  .row .num { font: 500 12px var(--mono); color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+  .row .acts { display: flex; gap: 6px; justify-content: flex-end; }
+  .row audio { grid-column: 2 / -1; width: 100%; height: 34px; }
+  .icon { width: 22px; height: 22px; display: grid; place-items: center; }
+  .empty { padding: 40px 16px; text-align: center; color: var(--dim); }
+  .empty strong { color: var(--fg); display: block; margin-bottom: 4px; font-weight: 600; }
+  .drop { position: absolute; inset: 0; border: 2px dashed var(--blue); border-radius: 8px; background: rgba(79, 140, 255, .12); display: grid; place-items: center; font-weight: 600; pointer-events: none; }
+  .uploads { display: flex; flex-direction: column; gap: 6px; }
+  .up { display: grid; grid-template-columns: minmax(0, 1fr) 160px 60px; gap: 10px; align-items: center; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+  .up .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .up .meter { width: 100%; }
+  .up .meter b { background: var(--blue); }
+  .up.done .meter b { background: var(--green); }
+  .up.bad { border-color: var(--red); }
+  .up .pc { font: 500 12px var(--mono); color: var(--dim); text-align: right; }
+  .msg { color: var(--red); min-height: 1.2em; font-size: 13px; }
+  .hint { color: var(--dim); font-size: 13px; margin: 0; }
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 24px minmax(0, 1fr) auto; }
+    .row .num { display: none; }
+    .up { grid-template-columns: minmax(0, 1fr) 80px 44px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo">CONSOLE<span class="bars" aria-hidden="true">
+      <i style="background:#4F8CFF"></i><i style="background:#3CCB7F"></i><i style="background:#F2C230"></i><i style="background:#FF5A4E"></i><i style="background:#B07CFF"></i><i style="background:#2EC8D8"></i><i style="background:#FF8A3D"></i><i style="background:#E86FB0"></i></span></div>
+    <div class="space" id="space"></div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Storage folders"></nav>
+
+  <div class="bar">
+    <div class="crumbs" id="crumbs"></div>
+    <div class="tools">
+      <button class="primary" id="b-upload">Upload files</button>
+      <input type="file" id="file" multiple hidden>
+      <button id="b-newfolder">New folder</button>
+      <span class="newfolder" id="nf" hidden>
+        <input id="nf-name" placeholder="Folder name" autocomplete="off">
+        <button id="nf-ok">Make</button>
+        <button id="nf-cancel">Cancel</button>
+      </span>
+      <button id="b-zip">Download folder (.zip)</button>
+    </div>
+  </div>
+  <div class="msg" id="msg" role="status"></div>
+
+  <div class="list" id="list" aria-live="polite"></div>
+  <div class="uploads" id="uploads"></div>
+  <p class="hint">Drag files from your computer onto the list to upload them to the folder you're in. Uploads never replace a file with the same name; they get a number added instead.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var TABS = { projects: ["Projects", "#4F8CFF"], samples: ["Samples", "#3CCB7F"], exports: ["Exports", "#F2C230"] };
+  var EMPTY = {
+    projects: ["No projects yet", "Songs you record on the console will show up here."],
+    samples: ["No samples yet", "Upload WAV files here to use them on the console."],
+    exports: ["No exports yet", "Stems and mixdowns you export from the console will show up here."]
+  };
+  var cur = "projects", entries = [], playing = null;
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function size(n) {
+    if (n < 1024) return n + " B";
+    var u = ["KB", "MB", "GB", "TB"], i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+    return (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + " " + u[i];
+  }
+  function when(t) {
+    var d = new Date(t * 1000), now = new Date(), s = (now - d) / 1000;
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + " min ago";
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  }
+  function q(path) { return encodeURIComponent(path); }
+  function join(a, b) { return a ? a + "/" + b : b; }
+  function say(t) { $("msg").textContent = t || ""; }
+  function isAudio(n) { return /\.(wav|aif|aiff|mp3|flac|ogg|m4a)$/i.test(n); }
+
+  var ICON = {
+    folder: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h4l2 2h7A1.5 1.5 0 0 1 18 7.5v7a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 14.5v-9Z" fill="#F2C230"/></svg>',
+    audio: '<svg width="20" height="20" viewBox="0 0 20 20"><rect x="2" y="8" width="2" height="4" rx="1" fill="#4F8CFF"/><rect x="6" y="5" width="2" height="10" rx="1" fill="#4F8CFF"/><rect x="10" y="2" width="2" height="16" rx="1" fill="#4F8CFF"/><rect x="14" y="6" width="2" height="8" rx="1" fill="#4F8CFF"/></svg>',
+    file: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 2h6l4 4v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="#7D838C" stroke-width="1.5"/></svg>'
+  };
+
+  function load(path) {
+    say();
+    return fetch("/api/list?path=" + q(path)).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) { say(d.error); if (path !== cur.split("/")[0]) return load(cur.split("/")[0]); return; }
+      cur = d.path; entries = d.entries;
+      draw(d);
+    }).catch(function () { say("Can't reach the console. Check it's on and on the same Wi-Fi, then reload."); });
+  }
+
+  function draw(d) {
+    var top = cur.split("/")[0];
+    var tabs = $("tabs"); tabs.innerHTML = "";
+    d.top.forEach(function (t) {
+      var b = el("button"); b.setAttribute("aria-pressed", String(t === top));
+      var dot = el("span", "dot"); dot.style.background = TABS[t][1];
+      b.appendChild(dot); b.appendChild(document.createTextNode(TABS[t][0]));
+      b.onclick = function () { load(t); };
+      tabs.appendChild(b);
+    });
+    var used = d.total - d.free;
+    $("space").innerHTML = "";
+    var m = el("span", "meter"), fill = el("b"); fill.style.width = Math.round(used / d.total * 100) + "%"; m.appendChild(fill);
+    $("space").appendChild(el("span", null, size(d.free) + " free of " + size(d.total)));
+    $("space").appendChild(m);
+
+    var cr = $("crumbs"); cr.innerHTML = "";
+    var parts = cur.split("/"), acc = "";
+    parts.forEach(function (p, i) {
+      acc = join(acc, p);
+      if (i) cr.appendChild(el("span", null, "/"));
+      var label = i === 0 ? TABS[p][0] : p;
+      if (i < parts.length - 1) { var a = el("a", null, label); var to = acc; a.onclick = function () { load(to); }; cr.appendChild(a); }
+      else cr.appendChild(el("span", null, label)).style.color = "var(--fg)";
+    });
+
+    var list = $("list"); list.innerHTML = "";
+    if (!entries.length) {
+      var e = el("div", "empty"), msg = parts.length > 1 ? ["This folder is empty", "Upload files or drag them here."] : EMPTY[top];
+      e.appendChild(el("strong", null, msg[0])); e.appendChild(document.createTextNode(msg[1]));
+      list.appendChild(e); return;
+    }
+    entries.forEach(function (it) {
+      var path = join(cur, it.name);
+      var row = el("div", "row");
+      var ic = el("span", "icon"); ic.innerHTML = it.folder ? ICON.folder : isAudio(it.name) ? ICON.audio : ICON.file;
+      var nm = el("span", "name");
+      if (it.folder) { var a = el("a", null, it.name); a.onclick = function () { load(path); }; nm.appendChild(a); }
+      else nm.textContent = it.name;
+      nm.title = it.name;
+      var acts = el("span", "acts");
+      if (!it.folder && isAudio(it.name)) {
+        var play = el("button", "small", "Play");
+        play.onclick = function () { togglePlay(row, path, play); };
+        acts.appendChild(play);
+      }
+      var dl = el("button", "small", it.folder ? "Zip" : "Download");
+      dl.onclick = function () { location.href = (it.folder ? "/api/zip?path=" : "/api/download?path=") + q(path); };
+      acts.appendChild(dl);
+      var del = el("button", "small danger", "Delete");
+      del.onclick = function () {
+        if (!del.classList.contains("confirm")) {
+          del.classList.add("confirm"); del.textContent = "Delete " + (it.folder ? "folder" : "file") + "?";
+          setTimeout(function () { del.classList.remove("confirm"); del.textContent = "Delete"; }, 4000);
+          return;
+        }
+        fetch("/api/delete?path=" + q(path), { method: "POST" }).then(function (r) { return r.json(); })
+          .then(function (d) { if (d.error) say(d.error); load(cur); });
+      };
+      acts.appendChild(del);
+      row.appendChild(ic); row.appendChild(nm);
+      row.appendChild(el("span", "num", size(it.size)));
+      row.appendChild(el("span", "num", when(it.modified)));
+      row.appendChild(acts);
+      list.appendChild(row);
+    });
+  }
+
+  function togglePlay(row, path, btn) {
+    if (playing && playing.row === row) { playing.audio.remove(); playing.btn.textContent = "Play"; playing = null; return; }
+    if (playing) { playing.audio.remove(); playing.btn.textContent = "Play"; }
+    var au = el("audio"); au.controls = true; au.autoplay = true; au.src = "/api/download?inline=1&path=" + q(path);
+    row.appendChild(au); btn.textContent = "Stop";
+    playing = { row: row, audio: au, btn: btn };
+  }
+
+  // ---------- uploads ----------
+  function upload(files) {
+    var folder = cur, queue = [].slice.call(files);
+    function next() {
+      var f = queue.shift();
+      if (!f) { load(cur); return; }
+      var row = el("div", "up"), nm = el("span", "nm", f.name), m = el("span", "meter"), b = el("b"), pc = el("span", "pc", "0%");
+      b.style.width = "0%"; m.appendChild(b); row.appendChild(nm); row.appendChild(m); row.appendChild(pc);
+      $("uploads").prepend(row);
+      var x = new XMLHttpRequest();
+      x.open("POST", "/api/upload?path=" + q(folder) + "&name=" + q(f.name));
+      x.upload.onprogress = function (e) { if (e.lengthComputable) { var p = Math.round(e.loaded / e.total * 100); b.style.width = p + "%"; pc.textContent = p + "%"; } };
+      x.onload = function () {
+        var d = {}; try { d = JSON.parse(x.responseText); } catch (e) {}
+        if (x.status === 200) { row.classList.add("done"); b.style.width = "100%"; pc.textContent = "Done"; if (d.saved && d.saved !== f.name) nm.textContent = f.name + " → saved as " + d.saved; }
+        else { row.classList.add("bad"); pc.textContent = "Failed"; nm.textContent = d.error || ("Upload of " + f.name + " failed"); }
+        next();
+      };
+      x.onerror = function () { row.classList.add("bad"); pc.textContent = "Failed"; nm.textContent = f.name + ": lost the connection to the console"; next(); };
+      x.send(f);
+    }
+    next();
+  }
+  $("b-upload").onclick = function () { $("file").click(); };
+  $("file").onchange = function () { if (this.files.length) upload(this.files); this.value = ""; };
+  var list = $("list"), depth = 0;
+  list.addEventListener("dragenter", function (e) { e.preventDefault(); if (depth++ === 0) { var d = el("div", "drop", "Drop to upload to " + cur.split("/").map(function (p, i) { return i ? p : TABS[p][0]; }).join(" / ")); d.id = "dropmsg"; list.appendChild(d); } });
+  list.addEventListener("dragover", function (e) { e.preventDefault(); });
+  list.addEventListener("dragleave", function () { if (--depth === 0 && $("dropmsg")) $("dropmsg").remove(); });
+  list.addEventListener("drop", function (e) { e.preventDefault(); depth = 0; if ($("dropmsg")) $("dropmsg").remove(); if (e.dataTransfer.files.length) upload(e.dataTransfer.files); });
+
+  // ---------- folders ----------
+  $("b-newfolder").onclick = function () { $("nf").hidden = false; $("b-newfolder").hidden = true; $("nf-name").focus(); };
+  function closeNf() { $("nf").hidden = true; $("b-newfolder").hidden = false; $("nf-name").value = ""; }
+  $("nf-cancel").onclick = closeNf;
+  function makeFolder() {
+    var n = $("nf-name").value.trim(); if (!n) return;
+    fetch("/api/mkdir?path=" + q(cur) + "&name=" + q(n), { method: "POST" }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d.error) say(d.error); else { closeNf(); load(cur); } });
+  }
+  $("nf-ok").onclick = makeFolder;
+  $("nf-name").onkeydown = function (e) { if (e.key === "Enter") makeFolder(); if (e.key === "Escape") closeNf(); };
+  $("b-zip").onclick = function () { location.href = "/api/zip?path=" + q(cur); };
+
+  load("projects");
+})();
+</script>
+</body>
+</html>

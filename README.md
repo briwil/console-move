@@ -23,10 +23,12 @@ screen and a custom key-and-knob control board.
 
 ## Getting the code onto the Pi
 
-The first time, on the Pi:
+The repo is private, so the Pi signs in to GitHub once with GitHub's own tool:
 
 ```
-git clone https://github.com/briwil/track8.git ~/track8
+sudo apt install gh
+gh auth login
+gh repo clone briwil/track8 ~/track8
 ```
 
 After that, to get the latest changes:
@@ -34,9 +36,6 @@ After that, to get the latest changes:
 ```
 cd ~/track8 && git pull
 ```
-
-The repo is private, so `git clone` asks for your GitHub username and a
-personal access token in place of your password.
 
 ## Pi setup notes
 

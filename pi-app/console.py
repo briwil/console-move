@@ -182,7 +182,7 @@ class Transport:
         self._bpm_since = 0.0
         self.tab_colours = {n: (screen.get("track%d_tab" % n) or {}).get("c") for n in range(1, 9)}
         if engine:
-            screen.set("song", t=engine.song)
+            screen.set("song", t=engine.song_label)
         self.update_screen()
 
     # the engine owns these when it exists, so the audio thread and the screen agree
@@ -425,12 +425,12 @@ class Transport:
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
 
-    def new_song(self, name):
+    def new_song(self):
         self.focus.track = None
-        self.engine.new_song(name)
+        self.engine.new_song()
         self.tape.pos = 0.0
-        self.s.set("song", t=name)
-        self.say("NEW PROJECT: %s" % name.upper(), 5)
+        self.s.set("song", t="Untitled")
+        self.say("NEW SONG. SAVE IT FROM THE MENU (FILE) TO NAME IT", 5)
 
     def export(self):
         if not self.engine:

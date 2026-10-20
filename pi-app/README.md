@@ -17,7 +17,7 @@ The recorder that runs on the Raspberry Pi. **Version 0.7.**
   pieces, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
-- Starts on a project menu (NEW works so far; SAVE, LOAD and SETTINGS are next).
+- Starts on a project menu (NEW and SAVE work so far; LOAD and SETTINGS are next).
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/<song name>/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,

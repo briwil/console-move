@@ -22,6 +22,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import wave
@@ -166,9 +167,11 @@ class Engine:
     def __init__(self, song=None, bpm=120.0, prefer_device=None):
         self.settings = self._load_settings()
         self.rate = 44100
-        self.song = song or self.settings.get("last_song") or "Song 1"     # opens the last project used
+        # opens the last project used; None is a new song that hasn't been saved with a name yet
+        self.song = song if song is not None else self.settings.get("last_song", "Song 1")
         self.prefer = prefer_device
         self.lock = threading.Lock()
+        self.save_lock = threading.Lock()       # one save (or rename) on disk at a time
         self.frames = int(float(self.settings.get("tape_seconds", 300)) * self.rate)
         self.tracks = [np.zeros(self.frames, np.float32) for _ in range(TRACKS)]
         self.levels = [None] * TRACKS
@@ -233,13 +236,21 @@ class Engine:
 
     def next_song_name(self):
         n = 1
-        while self.song_exists("Song %d" % n) or "Song %d" % n == self.song:
+        while self.song_exists("Song %d" % n):
             n += 1
         return "Song %d" % n
 
-    def new_song(self, name):
-        """Save the current project, then start an empty one called name (same tempo). The clipboard stays,
-        so a piece can be carried over to the new project."""
+    @property
+    def song_label(self):
+        return self.song or "Untitled"
+
+    def has_audio(self):
+        return any(self.track_end(t) for t in range(TRACKS))
+
+    def new_song(self):
+        """Save the current project, then start an empty, unnamed one (same tempo). It's kept in
+        ~/console-data/unsaved until it's saved with a name. The clipboard stays, so a piece can be
+        carried over to the new song."""
         self.save(wait=True)
         with self.lock:
             self.playing = self.recording = self.rec_ready = False
@@ -254,13 +265,29 @@ class Engine:
             self.arm_extra = set()
             self.sel_anchor = None
             self.pos = 0
-            self.song = name
+            self.song = None
             self.dirty = {-1}
-        self.save(wait=True)                            # makes the project's folder straight away
+        shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)
+        self.save(wait=True)
+        self.remember("last_song", None)
+
+    def save_as(self, name):
+        """Give the unnamed song a name: it moves from unsaved/ into projects/<name>/."""
+        with self.lock:
+            self.dirty.add(-1)
+        self.save(wait=True)
+        src = self.project_dir
+        dst = os.path.join(DATA, "projects", name)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with self.save_lock, self.lock:
+            shutil.move(src, dst)
+            self.song = name
         self.remember("last_song", name)
 
     @property
     def project_dir(self):
+        if self.song is None:
+            return os.path.join(DATA, "unsaved")
         return os.path.join(DATA, "projects", self.song)
 
     def frames_per_beat(self):
@@ -330,21 +357,24 @@ class Engine:
         if not changed:
             return False
 
+        folder = self.project_dir
+
         def work():
-            try:
-                os.makedirs(self.project_dir, exist_ok=True)
-                for t, x in todo.items():
-                    path = os.path.join(self.project_dir, "track%d.wav" % (t + 1))
-                    end = self._extent(x)
-                    if end == 0:
-                        if os.path.exists(path):
-                            os.remove(path)
-                    else:
-                        write_wav(path, x[:end], self.rate)
-                with open(os.path.join(self.project_dir, "project.json"), "w") as f:
-                    json.dump(meta, f)
-            except Exception as e:
-                print("Saving failed:", e)
+            with self.save_lock:
+                try:
+                    os.makedirs(folder, exist_ok=True)
+                    for t, x in todo.items():
+                        path = os.path.join(folder, "track%d.wav" % (t + 1))
+                        end = self._extent(x)
+                        if end == 0:
+                            if os.path.exists(path):
+                                os.remove(path)
+                        else:
+                            write_wav(path, x[:end], self.rate)
+                    with open(os.path.join(folder, "project.json"), "w") as f:
+                        json.dump(meta, f)
+                except Exception as e:
+                    print("Saving failed:", e)
 
         th = threading.Thread(target=work, daemon=True)
         th.start()
@@ -369,20 +399,20 @@ class Engine:
         if end == 0:
             return None
         stamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M")
-        name = "%s %s" % (self.song, stamp)
+        name = "%s %s" % (self.song_label, stamp)
         folder = os.path.join(DATA, "exports", name)
         os.makedirs(folder, exist_ok=True)
         mix = np.zeros(end, np.float32)
         for t, x in enumerate(tracks):
             if ends[t]:
-                write_wav(os.path.join(folder, "%s track%d.wav" % (self.song, t + 1)), x[:end], self.rate)
+                write_wav(os.path.join(folder, "%s track%d.wav" % (self.song_label, t + 1)), x[:end], self.rate)
                 if t not in mutes:
                     mix += x[:end] * vols[t]
         mix *= MIX_GAIN
         peak = float(np.abs(mix).max())
         if peak > 0.98:
             mix *= 0.98 / peak                   # turn the whole mix down rather than clip it
-        write_wav(os.path.join(folder, "%s mix.wav" % self.song), np.stack([mix, mix], axis=1), self.rate)
+        write_wav(os.path.join(folder, "%s mix.wav" % self.song_label), np.stack([mix, mix], axis=1), self.rate)
         return name
 
     # ------------------------------------------------------------ transport (called from the app)
@@ -559,6 +589,11 @@ class Engine:
         entries.append(("splices", t, list(self.splices[t])))
         self.dirty.add(-1)
 
+    def _audio_near(self, t, f, n=2048):
+        """True if there's audio just before AND just after frame f on track t."""
+        x = self.tracks[t]
+        return bool(np.any(np.abs(x[max(0, f - n):f]) > 1e-6) and np.any(np.abs(x[f:f + n]) > 1e-6))
+
     def splice(self, all_tracks=False):
         """Cut the armed tracks' tape at the playhead, or take away the splice that's there (decided by the
         selected track). all_tracks: every track. Returns "added", "removed" or None."""
@@ -604,13 +639,13 @@ class Engine:
             self.clip = self.tracks[t][a:b].copy()
             entries = [(t, a, self.tracks[t][a:b].copy())]
             self._splices_changed(t, entries)
-            self.splices[t] = [s for s in self.splices[t] if not a < s < b]
-            if b < self.track_end(t) and b not in self.splices[t]:
-                bisect.insort(self.splices[t], b)       # keep the gap as its own piece
-            if a > 0 and a not in self.splices[t]:
-                bisect.insort(self.splices[t], a)
             self.tracks[t][a:b] = 0
             self._changed(t, a, b)
+            # the splices go with the audio: inside the cut, at its ends (unless there's audio on both
+            # sides, so it still divides two pieces), and anything left after the end of the track's audio
+            end = self.track_end(t)
+            self.splices[t] = [s for s in self.splices[t]
+                               if not a < s < b and s < end and (s not in (a, b) or self._audio_near(t, s))]
             self._push_undo(entries)
             self.sel_anchor = None
             return (b - a) / self.frames_per_beat()

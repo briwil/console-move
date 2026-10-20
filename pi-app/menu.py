@@ -3,7 +3,8 @@
 Moving: the big knob, or the arrow keys. Choosing: PLAY, a push on the big
 knob, or Enter. FILE (Tab or Esc on a keyboard) goes back to the song.
 
-Naming a new project works like the OP-1: the big knob picks the letter under
+NEW starts a blank song straight away. It gets a name the first time it's
+saved: naming works like the OP-1: the big knob picks the letter under
 the cursor, ← / → move the cursor, CUT deletes a letter. On a keyboard you can
 just type.
 
@@ -38,6 +39,7 @@ class Menu:
         self.bar_offset = (bar["y"] - load["y"]) if bar and load else -4
         self.s.after["name_text"] = self.draw_cursor
         self.msg = ""
+        self.confirm_new = False              # NEW pressed once on an unsaved song with audio
         self.refresh()
 
     @property
@@ -78,6 +80,7 @@ class Menu:
         if self.mode == "list":
             self.choice = max(0, min(len(ITEMS) - 1, self.choice + delta))
             self.msg = ""
+            self.confirm_new = False
             return
         # naming: change the letter under the cursor
         if self.cursor >= len(self.name):
@@ -128,18 +131,31 @@ class Menu:
 
     def choose(self):
         what = ITEMS[self.choice][0]
+        e = self.engine
+        if what in ("NEW", "SAVE") and not e:
+            self.say("PROJECTS NEED THE AUDIO ENGINE")
+            return
         if what == "NEW":
-            if not self.engine:
-                self.say("NEW PROJECTS NEED THE AUDIO ENGINE")
+            if e.song is None and e.has_audio() and not self.confirm_new:
+                self.confirm_new = True
+                self.say("THIS SONG ISN'T SAVED. NEW AGAIN THROWS IT AWAY, OR SAVE IT FIRST")
                 return
-            self.mode = "name"
-            self.name = list(self.engine.next_song_name())
-            self.cursor = len(self.name)
-            self.msg = ""
+            self.transport.new_song()
+            self.close()
+        elif what == "SAVE":
+            if e.song is None:
+                self.mode = "name"
+                self.name = list(e.next_song_name())
+                self.cursor = len(self.name)
+                self.msg = ""
+            else:
+                e.save(wait=True)
+                self.say("SAVED %s" % e.song.upper())
         else:
             self.say("%s COMES NEXT" % what)
 
     def create(self):
+        """Save the unnamed song with the name typed in."""
         name = "".join(self.name).strip()
         e = self.engine
         if not name:
@@ -151,12 +167,17 @@ class Menu:
         if e.song_exists(name):
             self.say("THERE'S ALREADY A PROJECT CALLED %s" % name.upper())
             return
-        self.transport.new_song(name)
+        try:
+            e.save_as(name)
+        except OSError as err:
+            self.say("COULDN'T SAVE: %s" % str(err).upper())
+            return
+        self.transport.s.set("song", t=name)
         self.mode = "list"
-        self.close()
+        self.say("SAVED AS %s" % name.upper())
 
     def show(self):
-        self.open, self.mode, self.msg = True, "list", ""
+        self.open, self.mode, self.msg, self.confirm_new = True, "list", "", False
         self.refresh()
 
     def close(self):
@@ -168,7 +189,7 @@ class Menu:
 
     def refresh(self):
         s, e = self.s, self.engine
-        s.set("song", t=e.song if e else "Demo")
+        s.set("song", t=(e.song or "Untitled (not saved yet)") if e else "Demo")
         listing = self.mode == "list"
         for i, (label, item) in enumerate(ITEMS):
             on = i == self.choice
@@ -184,9 +205,9 @@ class Menu:
             s.set("name_text", t="")
             hint = "TURN OR ← → TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
         else:
-            s.set("prompt", t="NAME THE NEW PROJECT")
+            s.set("prompt", t="NAME THIS PROJECT")
             s.set("name_text", t="".join(self.name) or " ")
-            hint = "BIG KNOB: LETTER   ← →: MOVE   CUT: DELETE   PLAY: MAKE IT   FILE: CANCEL"
+            hint = "BIG KNOB: LETTER   ← →: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
         s.set("menu_hint", t=hint)
         s.set("menu_msg", t=self.msg)
 

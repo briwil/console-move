@@ -10,13 +10,18 @@ The app starts on the project menu. Turn the big knob (or use the arrow
 keys) to move, and press PLAY, push the big knob, or press Enter to choose.
 FILE (Tab or Esc on a keyboard) goes back to the song.
 
-- **NEW Project** saves the song you're on, then asks for a name. It
+- **NEW Project** saves the song you're on and opens a blank, untitled
+  song (same tempo). If the song you're on was never saved with a name and
+  has audio, it warns you first: press NEW again to throw it away. The
+  clipboard carries over, so you can lift a piece in one song and drop it in
+  another.
+- **SAVE Project** saves the song. The first time, it asks for a name: it
   suggests the next free "Song N", so you can just press PLAY. To change it:
   the big knob picks the letter under the green mark, ← / → move along, CUT
   deletes a letter. On a keyboard just type, with Backspace and Enter.
-  The new project starts empty at the same tempo. The clipboard carries
-  over, so you can lift a piece in one project and drop it in another.
-- **SAVE, LOAD, SETTINGS:** coming next.
+  (The app also saves by itself whenever you stop; an untitled song is kept
+  in `~/console-data/unsaved` until you name it.)
+- **LOAD, SETTINGS:** coming next.
 
 Console opens whichever project you used last.
 
@@ -67,7 +72,7 @@ With no splices, the whole track is one piece.
 - **DROP** puts the clipboard on the armed track at the playhead, with a
   splice at each end, so it's its own piece. Drop on another track to move
   things between tracks. SHIFT+DROP inserts it instead of replacing.
-- CUT leaves a gap where the piece was (it's still a piece, just silent).
+- CUT leaves a gap where the piece was, and its splice marks go with it.
 - SPLICE on a splice takes it away, joining the two pieces.
 - SHIFT+CUT undoes, including splices.
 

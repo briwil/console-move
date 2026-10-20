@@ -12,6 +12,8 @@ ui.text("set_label1", 620, 150, 24, "#5A606B", "sans", 500, "right", "");
 ui.text("set_value1", 660, 150, 24, "#F2F3F5", "sans", 500, "left", "");
 ui.text("set_label2", 620, 200, 24, "#5A606B", "sans", 500, "right", "");
 ui.text("set_value2", 660, 200, 24, "#F2F3F5", "sans", 500, "left", "");
+ui.text("set_label3", 620, 250, 24, "#5A606B", "sans", 500, "right", "");
+ui.text("set_value3", 660, 250, 24, "#F2F3F5", "sans", 500, "left", "");
 ui.text("prompt", 640, 120, 18, "#7D838C", "mono", 500, "center", "");
 ui.text("name_text", 640, 170, 40, "#F2F3F5", "sans", 500, "center", "");
 ui.text("menu_msg", 640, 316, 16, "#FFB547", "mono", 500, "center", "");

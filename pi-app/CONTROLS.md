@@ -30,6 +30,9 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     play and stop Console. The top right shows LEAD.
   - **TEMPO:** the song's tempo (SHIFT+← / → for 0.1 steps). In external
     sync it comes from the OP-XY.
+  - **EXPORT FORMAT:** what EXPORT writes: WAV, AIFF or FLAC (all 24-bit,
+    FLAC about half the size) or M4A (AAC 256 kbps, smallest, for sharing).
+    The song's own track files are always WAV.
 - **LOAD:** coming next.
 
 Console opens whichever project you used last. Every change is written to

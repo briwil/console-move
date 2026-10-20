@@ -25,7 +25,9 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO"]
+SETTINGS = ["SYNC", "TEMPO", "FORMAT"]
+FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
+                "m4a": "M4A  (AAC 256k, smallest)"}
 
 
 class Menu:
@@ -133,7 +135,7 @@ class Menu:
         elif name in ("BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT"):     # with shift: small steps
             self.change(-1 if name in ("BAR_LEFT", "LOOP_IN") else 1, fine=True)
         elif name in CONFIRM:
-            if SETTINGS[self.row] == "SYNC":
+            if SETTINGS[self.row] in ("SYNC", "FORMAT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
@@ -148,6 +150,11 @@ class Menu:
             e.set_sync_mode("internal" if e.sync_mode == "external" else "external")
             self.say("CONSOLE SENDS MIDI CLOCK, START AND STOP" if e.sync_mode == "internal"
                      else "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP")
+        elif what == "FORMAT":
+            import audio
+            fs = audio.EXPORT_FORMATS
+            e.remember("export_format", fs[(fs.index(e.export_format) + (1 if delta > 0 else -1)) % len(fs)])
+            self.msg = ""
         elif what == "TEMPO":
             if self.transport.synced:
                 self.say("THE TEMPO COMES FROM THE OP-XY (EXTERNAL SYNC)")
@@ -165,6 +172,8 @@ class Menu:
             return "EXTERNAL  (follow the OP-XY)" if e.sync_mode == "external" else "INTERNAL  (Console leads)"
         if what == "TEMPO":
             return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")
+        if what == "FORMAT":
+            return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
         return ""
 
     def char(self, ch):
@@ -271,7 +280,7 @@ class Menu:
         for i in range(1, 5):
             what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
             on = what is not None and i - 1 == self.row
-            s.set("set_label%d" % i, t={"SYNC": "MIDI SYNC", "TEMPO": "TEMPO"}.get(what, ""), c=ON if on else OFF)
+            s.set("set_label%d" % i, t={"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT"}.get(what, ""), c=ON if on else OFF)
             s.set("set_value%d" % i, t=self.setting_text(what) if what else "",
                   c=ON if on else "#F2F3F5")
         bar = s.get("menu_bar")

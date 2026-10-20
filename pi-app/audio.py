@@ -27,6 +27,7 @@ import os
 import random
 import re
 import shutil
+import subprocess
 import threading
 import time
 import traceback
@@ -165,7 +166,31 @@ def saturate(x):
     return x
 
 
-# ---------------------------------------------------------------- WAV files
+# ---------------------------------------------------------------- audio files
+
+EXPORT_FORMATS = ["wav", "aiff", "flac", "m4a"]
+FFMPEG_CODEC = {
+    "aiff": ["-c:a", "pcm_s24be"],
+    "flac": ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"],
+    "m4a": ["-c:a", "aac", "-b:a", "256k"],
+}
+
+
+def write_audio(path, x, rate, fmt="wav"):
+    """Write audio (mono, or (frames, 2) stereo) to path + "." + fmt. WAV directly; the others through ffmpeg."""
+    wav = path + ".wav"
+    write_wav(wav, x, rate)
+    if fmt == "wav":
+        return wav
+    target = path + "." + fmt
+    try:
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav] + FFMPEG_CODEC[fmt] + [target],
+                       check=True, capture_output=True, timeout=600)
+        os.remove(wav)
+        return target
+    except Exception as e:
+        log("Export: couldn't make %s (%s), kept the WAV" % (os.path.basename(target), e))
+        return wav
 
 def write_wav(path, x, rate):
     """Write a float array (frames,) or (frames, channels) as a 24-bit WAV."""
@@ -269,6 +294,11 @@ class Engine:
                 json.dump(data, f, indent=2)
         except OSError as e:
             print("Couldn't save settings:", e)
+
+    @property
+    def export_format(self):
+        f = self.settings.get("export_format", "wav")
+        return f if f in EXPORT_FORMATS else "wav"
 
     @property
     def sync_mode(self):
@@ -458,16 +488,23 @@ class Engine:
         name = "%s %s" % (self.song_label, stamp)
         folder = os.path.join(DATA, "exports", name)
         os.makedirs(folder, exist_ok=True)
+        fmt = self.export_format
+        if fmt != "wav" and not shutil.which("ffmpeg"):
+            log("Export: ffmpeg isn't installed (run pi-app/setup.sh), so writing WAV instead of %s" % fmt.upper())
+            fmt = "wav"
+
+        def out(path, x, rate):
+            write_audio(path, x, rate, fmt)
         done = set()
         for t in range(TRACKS):
             if t in done:
                 continue
             if t in pairs and (ends[t] or ends[t + 1]):           # a stereo pair: one stereo file
-                write_wav(os.path.join(folder, "%s track%d-%d stereo.wav" % (self.song_label, t + 1, t + 2)),
+                out(os.path.join(folder, "%s track%d-%d stereo" % (self.song_label, t + 1, t + 2)),
                           np.stack([tracks[t][:end], tracks[t + 1][:end]], axis=1), self.rate)
                 done |= {t, t + 1}
             elif ends[t]:
-                write_wav(os.path.join(folder, "%s track%d.wav" % (self.song_label, t + 1)), tracks[t][:end], self.rate)
+                out(os.path.join(folder, "%s track%d" % (self.song_label, t + 1)), tracks[t][:end], self.rate)
         mix = np.zeros((end, 2), np.float32)
         for t, x in enumerate(tracks):
             if ends[t] and t not in mutes:
@@ -478,7 +515,7 @@ class Engine:
         peak = float(np.abs(mix).max())
         if peak > 0.98:
             mix *= 0.98 / peak                   # turn the whole mix down rather than clip it
-        write_wav(os.path.join(folder, "%s mix.wav" % self.song_label), mix, self.rate)
+        out(os.path.join(folder, "%s mix" % self.song_label), mix, self.rate)
         return name
 
     # ------------------------------------------------------------ transport (called from the app)

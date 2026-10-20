@@ -25,6 +25,7 @@ import time
 
 import pygame
 
+import focus
 import tape
 import ui
 
@@ -38,9 +39,10 @@ CHAR_ACTIONS = {
     " ": "PLAY", "r": "RECORD", "R": "RECORD", "q": "QUIT", "Q": "QUIT",
     "g": "GRID", "G": "GRID", "+": "ZOOM_IN", "=": "ZOOM_IN", "-": "ZOOM_OUT", "_": "ZOOM_OUT",
     "[": "BAR_LEFT", "]": "BAR_RIGHT", "i": "INPUT", "I": "INPUT", "e": "EXPORT", "E": "EXPORT",
-    "l": "LOOP", "L": "LOOP", "{": "LOOP_IN", "}": "LOOP_OUT",
-    "c": "LIFT", "C": "LIFT_ALL", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT_ALL",
+    "l": "LOOP", "L": "LOOP", "{": "LOOP_IN", "}": "LOOP_OUT", "k": "CLEAR_REGION", "K": "CLEAR_REGION",
+    "c": "COPY", "C": "COPY_ALL", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT_ALL",
     "s": "SPLICE", "S": "SPLICE_ALL", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
+    "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME",
 }
 for _n in range(1, 9):
@@ -95,9 +97,10 @@ def pygame_key(ev):
 BOARD_KEYS = ["INPUT", "MIDI", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
               "LOOP", "IMPORT", "EXPORT", "RECORD", "SHIFT", "PLAY", "LEFT", "RIGHT"] + \
              ["TRACK%d" % n for n in range(1, 9)]
-WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "LIFT": "LIFT_ALL",
-              "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "INPUT": "INPUT",
-              "EXPORT": "EXPORT"}
+BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
+WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "COPY_ALL",
+              "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "RECORD": "REC_MODE",
+              "LOOP": "CLEAR_REGION", "INPUT": "INPUT", "EXPORT": "EXPORT"}
 # knob pushes: notes 32-42 = ENC1-ENC11
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
 
@@ -142,6 +145,7 @@ class Transport:
         self.engine = engine
         self.clock = clock
         self.tape = tape.Tape(screen, engine)
+        self.focus = focus.Focus(screen, self.tape)
         self._playing = False
         self._recording = False
         self._armed = 4
@@ -241,7 +245,12 @@ class Transport:
         elif name == "EXPORT":
             self.export()
         elif name.startswith("TRACK"):
-            self.armed = int(name[5:])
+            n = int(name[5:])
+            if n == self.armed or self.focus.track:
+                self.focus.toggle(n)              # the selected track's key again: zoom in / out
+            self.armed = n
+        elif name == "FOCUS":
+            self.focus.toggle(self.armed)
         elif name.startswith("MUTE"):
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name in ("VOL_UP", "VOL_DOWN"):
@@ -310,30 +319,40 @@ class Transport:
         if not e:
             self.say("EDITING NEEDS THE AUDIO ENGINE")
             return
+        pos = self.position_text(self.tape.pos)
         if name == "LOOP":
             e.toggle_loop()
             self.say("LOOP ON" if e.loop_on else "LOOP OFF", 2)
             return
         if name in ("LOOP_IN", "LOOP_OUT"):
             e.set_loop_point("in" if name == "LOOP_IN" else "out", self.tape.pos)
-            self.say("LOOP %s AT %s" % ("START" if name == "LOOP_IN" else "END", self.position_text(self.tape.pos)), 2)
+            self.say("%s POINT AT %s" % ("IN" if name == "LOOP_IN" else "OUT", pos), 2)
+            return
+        if name == "CLEAR_REGION":
+            e.clear_region()
+            self.say("IN/OUT POINTS CLEARED", 2)
+            return
+        if name == "REC_MODE":
+            self.say("RECORDING %s" % ("ADDS TO THE TAPE (OVERDUB)" if e.toggle_rec_mode() == "overdub"
+                                       else "REPLACES THE TAPE"), 3)
             return
         if self.recording:
             self.say("STOP RECORDING FIRST")
             return
-        where = "THE LOOP" if e.loop_region() else "THIS BAR"
+        where = "IN/OUT" if e.loop_region() else "THIS BAR"
         which = lambda all_: "ALL TRACKS" if all_ else "TRACK %d" % self.armed
-        if name in ("LIFT", "LIFT_ALL"):
-            e.lift(name == "LIFT_ALL")
-            self.say("LIFTED %s OF %s" % (where, which(name == "LIFT_ALL")))
+        if name in ("COPY", "COPY_ALL"):
+            e.copy(name == "COPY_ALL")
+            self.say("COPIED %s OF %s" % (where, which(name == "COPY_ALL")))
         elif name in ("CUT", "CUT_ALL"):
             e.cut(name == "CUT_ALL")
-            self.say("ERASED %s OF %s" % (where, which(name == "CUT_ALL")))
+            self.say("CUT %s OF %s" % (where, which(name == "CUT_ALL")))
         elif name in ("DROP", "DROP_INSERT"):
+            target = "ALL TRACKS" if (e.clip and None not in e.clip) else "TRACK %d" % self.armed
             if e.drop(insert=name == "DROP_INSERT"):
-                self.say("DROPPED AT %s%s" % (self.position_text(self.tape.pos), ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
+                self.say("PASTED ON %s AT %s%s" % (target, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
             else:
-                self.say("NOTHING TO DROP: LIFT SOMETHING FIRST")
+                self.say("NOTHING TO PASTE: CUT OR COPY SOMETHING FIRST")
         elif name in ("SPLICE", "SPLICE_ALL"):
             e.splice(name == "SPLICE_ALL")
             self.say("SPLICED OUT %s OF %s" % (where, which(name == "SPLICE_ALL")))
@@ -370,6 +389,7 @@ class Transport:
                 self.playing = self.recording = False
             if self.recording:
                 t.record(self.armed, start, t.pos)
+        self.focus.update(seconds, self.playing)
         self.update_screen()
 
     def follow_tempo(self):
@@ -386,6 +406,22 @@ class Transport:
             if self.engine.set_bpm(bpm):
                 self.say("TEMPO %.1f BPM FROM MIDI" % bpm, 3)
 
+    def panel_lines(self):
+        e, n = self.engine, self.focus.shown
+        if not e:
+            return ["DEMO MODE", "NO AUDIO ENGINE"]
+        vol = "VOLUME %d%%%s" % (round(e.volumes[n - 1] * 100), "  MUTED" if (n - 1) in e.mutes else "")
+        mode = "REC: OVERDUB" if e.rec_mode == "overdub" else "REC: REPLACE"
+        r = e.loop_region()
+        fpb = e.frames_per_beat()
+        inout = ("IN %s  OUT %s" % (self.position_text(r[0] / fpb), self.position_text(r[1] / fpb))) if r else "NO IN/OUT POINTS"
+        if e.clip:
+            beats = len(next(iter(e.clip.values()))) / fpb
+            clip = "CLIPBOARD %s BEATS%s" % (("%g" % round(beats, 2)), "  ALL TRACKS" if None not in e.clip else "")
+        else:
+            clip = "CLIPBOARD EMPTY"
+        return [vol, mode, inout, clip]
+
     def position_text(self, beats):
         b = int(beats)
         return "%03d.%d.%d" % (b // 4 + 1, b % 4 + 1, int(beats * 4) % 4 + 1)
@@ -393,18 +429,27 @@ class Transport:
     def update_screen(self):
         s, t, e = self.s, self.tape, self.engine
         s.set("clock", t=self.position_text(t.pos))
-        s.set("grid", t=t.label() + ("   LOOP" if e and e.loop_on and e.loop_region() else ""))
+        region = e.loop_region() if e else None
+        s.set("grid", t=t.label() + ("   LOOP" if (region and e.loop_on) else "   IN/OUT" if region else ""))
         bpm = e.bpm if e else BPM
         s.set("bpm", t="%.1f BPM  4/4%s" % (bpm, "  SYNC" if self.synced else ""))
         all_in = bool(e and e.device and e.input_mode == "all")
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)
-        if all_in and first and last:
+        if self.focus.active:
+            lane = s.get("track%d_lane" % self.focus.shown)
+            if lane:
+                s.set("rec_outline", y=lane["y"] - 2, h=lane["h"] + 4)
+        elif all_in and first and last:
             s.set("rec_outline", y=first["y"] - 2, h=last["y"] + last["h"] - first["y"] + 4)
         elif lane:
             s.set("rec_outline", y=lane["y"] - 2, h=lane["h"] + 4)
         ready = bool(e and e.rec_ready)
         state = "RECORDING" if self.recording else "REC READY" if ready else "PLAYING" if self.playing else "STOPPED"
-        s.set("status", t="%s  %s" % (state, "ALL TRACKS" if all_in else "TRACK %d" % self.armed))
+        overdub = bool(e and e.rec_mode == "overdub")
+        s.set("status", t="%s  %s%s" % (state, "ALL TRACKS" if all_in else "TRACK %d" % self.armed,
+                                        "  OVERDUB" if overdub else ""))
+        if self.focus.active:
+            self.focus.info["lines"] = self.panel_lines()
         red = "#FF5A4E" if (self.recording or ready) else "#7D838C"
         s.set("rec_dot", c=red)
         s.set("rec_outline", c=red)

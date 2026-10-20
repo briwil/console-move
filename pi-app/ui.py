@@ -199,6 +199,8 @@ class Screen:
         self._waves = {}
         # name -> function(surface, item) that draws that item instead of the normal drawing
         self.custom = {}
+        # name -> function(surface) drawn straight after that item
+        self.after = {}
 
     @classmethod
     def load(cls, path):
@@ -251,6 +253,9 @@ class Screen:
             fn(surf, it)
         else:
             self.draw_default(surf, it)
+        after = self.after.get(it.get("name"))
+        if after:
+            after(surf)
 
     def draw_default(self, surf, it):
         kind, col = it["type"], rgb(it["c"])

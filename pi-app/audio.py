@@ -120,6 +120,16 @@ def encode(x, fmt):
     return v.view(np.uint8).reshape(-1, 4)[:, :3].tobytes()
 
 
+def saturate(x):
+    """Gentle tape-style limit above 0.8, so overdubs that pile up never pass 1.0."""
+    y = np.abs(x)
+    over = y > 0.8
+    if over.any():
+        x = x.copy()
+        x[over] = np.sign(x[over]) * (0.8 + 0.2 * np.tanh((y[over] - 0.8) / 0.2))
+    return x
+
+
 # ---------------------------------------------------------------- WAV files
 
 def write_wav(path, x, rate):
@@ -170,6 +180,7 @@ class Engine:
         self.playing = False
         self.recording = False
         self.rec_ready = False                  # waiting for a MIDI start to begin recording
+        self.rec_mode = "replace"               # "replace" writes over the tape, "overdub" adds to it
         self.armed = 4
         self.input_mode = None                  # set when a device is found
         self.in_peaks = np.zeros(TRACKS, np.float32)
@@ -231,6 +242,8 @@ class Engine:
             self._set_beats_len()
         self.volumes = [float(v) for v in meta.get("volumes", self.volumes)][:TRACKS]
         self.mutes = set(meta.get("mutes", []))
+        if meta.get("rec_mode") in ("replace", "overdub"):
+            self.rec_mode = meta["rec_mode"]
         if meta.get("loop"):
             self.loop_on, self.loop_a, self.loop_b = bool(meta["loop"][0]), int(meta["loop"][1]), int(meta["loop"][2])
         for t in range(TRACKS):
@@ -255,7 +268,8 @@ class Engine:
             changed = bool(self.dirty)
             self.dirty.clear()
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
-                    "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b]}
+                    "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b],
+                    "rec_mode": self.rec_mode}
         if not changed:
             return False
 
@@ -400,6 +414,17 @@ class Engine:
             self.loop_on = self.loop_b > self.loop_a
             self.dirty.add(-1)
 
+    def clear_region(self):
+        with self.lock:
+            self.loop_on, self.loop_a, self.loop_b = False, 0, 0
+            self.dirty.add(-1)
+
+    def toggle_rec_mode(self):
+        with self.lock:
+            self.rec_mode = "overdub" if self.rec_mode == "replace" else "replace"
+            self.dirty.add(-1)
+            return self.rec_mode
+
     # ---- mixing
 
     def change_volume(self, track, delta):
@@ -433,28 +458,25 @@ class Engine:
         self._update_levels(t, a, b, reset=True)
         self.dirty.add(t)
 
-    def lift(self, all_tracks=False, keep=False):
-        """Take the region off the track(s) into the clipboard, leaving silence (keep=True: just copy)."""
+    def copy(self, all_tracks=False):
+        """Copy the region of the track(s) into the clipboard. Returns its length in beats."""
         with self.lock:
             a, b = self.edit_region()
             ts = self._edit_tracks(all_tracks)
             self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
-            if not keep:
-                self._push_undo([(t, a, self.tracks[t][a:b].copy()) for t in ts])
-                for t in ts:
-                    self.tracks[t][a:b] = 0
-                    self._changed(t, a, b)
             return (b - a) / self.frames_per_beat()
 
     def cut(self, all_tracks=False):
-        """Erase the region (nothing goes to the clipboard)."""
+        """Move the region of the track(s) into the clipboard, leaving silence. Returns its length in beats."""
         with self.lock:
             a, b = self.edit_region()
             ts = self._edit_tracks(all_tracks)
+            self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
             self._push_undo([(t, a, self.tracks[t][a:b].copy()) for t in ts])
             for t in ts:
                 self.tracks[t][a:b] = 0
                 self._changed(t, a, b)
+            return (b - a) / self.frames_per_beat()
 
     def drop(self, insert=False):
         """Put the clipboard down at the playhead, replacing what's there (insert=True: push the rest later)."""
@@ -482,10 +504,11 @@ class Engine:
             return True
 
     def splice(self, all_tracks=False):
-        """Remove the region and close the gap: everything after it moves earlier."""
+        """Remove the region and close the gap: everything after it moves earlier. The region goes to the clipboard."""
         with self.lock:
             a, b = self.edit_region()
             ts = self._edit_tracks(all_tracks)
+            self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
             self._push_undo([(t, a, self.tracks[t][a:].copy()) for t in ts])
             for t in ts:
                 tail = self.tracks[t][b:].copy()
@@ -618,9 +641,10 @@ class Engine:
                 over = idx >= loop[1]
                 idx[over] = loop[0] + (idx[over] - loop[1]) % length
         idx = np.minimum(idx, self.frames - 1)
+        overdub = self.rec_mode == "overdub"
         mix = np.zeros(m, np.float32)
         for t in range(TRACKS):
-            if t not in targets and t not in self.mutes:
+            if (overdub or t not in targets) and t not in self.mutes:
                 mix += self.tracks[t][idx] * self.volumes[t]
         out = np.empty((m, 2), np.float32)
         out[:, 0] = out[:, 1] = np.tanh(mix * MIX_GAIN)      # tanh: gentle limiting instead of harsh clipping
@@ -628,11 +652,17 @@ class Engine:
             # what you played now was in time with what you heard (latency - read_ahead) ago
             w0 = pos - (self.latency - self.read_ahead)
             a, b = max(0, w0), min(self.frames, w0 + m)
+            region = self.loop_region()
+            if region:                               # in/out points set: only record between them (punch in)
+                a, b = max(a, region[0]), min(b, region[1])
             if b > a:
                 for t, ch in targets.items():
-                    src = x.mean(axis=1) if ch is None else x[:, ch]
+                    src = (x.mean(axis=1) if ch is None else x[:, ch])[a - w0:b - w0]
                     self._save_for_undo(t, a, b)
-                    self.tracks[t][a:b] = src[a - w0:b - w0]
+                    if overdub:
+                        self.tracks[t][a:b] = saturate(self.tracks[t][a:b] + src)
+                    else:
+                        self.tracks[t][a:b] = src
                     self._update_levels(t, a, b, reset=True)
                     self.dirty.add(t)
         return out

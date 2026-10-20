@@ -163,10 +163,10 @@ def read_wav(path):
 class Engine:
     """Everything that touches the audio. The app calls its methods; the audio thread runs process()."""
 
-    def __init__(self, song="Song 1", bpm=120.0, prefer_device=None):
+    def __init__(self, song=None, bpm=120.0, prefer_device=None):
         self.settings = self._load_settings()
         self.rate = 44100
-        self.song = song
+        self.song = song or self.settings.get("last_song") or "Song 1"     # opens the last project used
         self.prefer = prefer_device
         self.lock = threading.Lock()
         self.frames = int(float(self.settings.get("tape_seconds", 300)) * self.rate)
@@ -210,6 +210,54 @@ class Engine:
                 return json.load(f)
         except (OSError, ValueError):
             return {}
+
+    def remember(self, key, value):
+        """Store a setting in settings.json, keeping whatever else is in there."""
+        path = os.path.join(DATA, "settings.json")
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        data[key] = value
+        self.settings[key] = value
+        try:
+            os.makedirs(DATA, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except OSError as e:
+            print("Couldn't save settings:", e)
+
+    def song_exists(self, name):
+        return os.path.exists(os.path.join(DATA, "projects", name))
+
+    def next_song_name(self):
+        n = 1
+        while self.song_exists("Song %d" % n) or "Song %d" % n == self.song:
+            n += 1
+        return "Song %d" % n
+
+    def new_song(self, name):
+        """Save the current project, then start an empty one called name (same tempo). The clipboard stays,
+        so a piece can be carried over to the new project."""
+        self.save(wait=True)
+        with self.lock:
+            self.playing = self.recording = self.rec_ready = False
+            for x in self.tracks:
+                x[:] = 0
+            self._set_beats_len()                       # fresh, empty waveforms
+            self.splices = [[] for _ in range(TRACKS)]
+            self.undo_stack = []
+            self.volumes = [0.8] * TRACKS
+            self.mutes = set()
+            self.loop_on, self.loop_a, self.loop_b = False, 0, 0
+            self.arm_extra = set()
+            self.sel_anchor = None
+            self.pos = 0
+            self.song = name
+            self.dirty = {-1}
+        self.save(wait=True)                            # makes the project's folder straight away
+        self.remember("last_song", name)
 
     @property
     def project_dir(self):

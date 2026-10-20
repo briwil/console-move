@@ -4,12 +4,29 @@ Everything works from the control board, and nearly everything from a
 keyboard too: a keyboard plugged into the Pi, or keys typed into the SSH
 window that's running the app.
 
+## Project menu
+
+The app starts on the project menu. Turn the big knob (or use the arrow
+keys) to move, and press PLAY, push the big knob, or press Enter to choose.
+FILE (Tab or Esc on a keyboard) goes back to the song.
+
+- **NEW Project** saves the song you're on, then asks for a name. It
+  suggests the next free "Song N", so you can just press PLAY. To change it:
+  the big knob picks the letter under the green mark, ← / → move along, CUT
+  deletes a letter. On a keyboard just type, with Backspace and Enter.
+  The new project starts empty at the same tempo. The clipboard carries
+  over, so you can lift a piece in one project and drop it in another.
+- **SAVE, LOAD, SETTINGS:** coming next.
+
+Console opens whichever project you used last.
+
 ## Keys on the board
 
 | Key | Press | With SHIFT held |
 |---|---|---|
 | AUDIO | Input: each input to its own track (OP-XY 8-channel), or all inputs mixed together | Arm all 8 tracks / back to just the selected one |
-| MIDI, FX, FILE, IMPORT | Not yet (coming in a later version) | |
+| FILE | Open / close the project menu | |
+| MIDI, FX, IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Cut the tape at the playhead on the armed track(s). On an existing splice: take it away | Same, on all tracks |
 | CUT | Take the piece under the playhead off the tape onto the clipboard, leaving a gap. Hold to take several pieces (see below) | Undo |
 | LIFT | Copy the piece under the playhead onto the clipboard. Hold to copy several pieces | Start / stop selecting several pieces (no holding needed) |
@@ -115,6 +132,7 @@ key to zoom to that one instead.
 | U | Undo |
 | M | Mute the armed track |
 | 9 / 0 | Armed track volume down / up |
+| Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |
 
 ## Syncing with the OP-XY

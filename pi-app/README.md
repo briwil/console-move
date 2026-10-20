@@ -1,6 +1,6 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.6.**
+The recorder that runs on the Raspberry Pi. **Version 0.7.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
@@ -17,8 +17,9 @@ The recorder that runs on the Raspberry Pi. **Version 0.6.**
   pieces, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
+- Starts on a project menu (NEW works so far; SAVE, LOAD and SETTINGS are next).
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
-- Saves the song when you stop, to `~/console-data/projects/Song 1/`
+- Saves the song when you stop, to `~/console-data/projects/<song name>/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,
   volumes, mutes, in/out points, record mode and splices), and loads it again at start-up.
 - Exports stems (every track with audio, all the same length so they line up
@@ -130,6 +131,7 @@ If it's upside down, change the line `ExecStart=...console.py` in
   record, position).
 - `audio.py` is the audio engine: finding the device, recording, playback, loop, editing, undo, saving and export.
 - `focus.py` is the one-track zoom view with the tape reels.
+- `menu.py` is the project menu; its look is `layouts/menu.ui`.
 - `midi.py` reads the control board and the OP-XY's MIDI clock.
 - `tape.py` is the tape: the tracks over time, the grid and zoom, and drawing the lanes, waveforms and ruler.
 - `ui.py` reads and draws layouts made with the Screen Designer

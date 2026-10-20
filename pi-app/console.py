@@ -26,6 +26,7 @@ import time
 import pygame
 
 import focus
+import menu
 import tape
 import ui
 
@@ -49,7 +50,10 @@ for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keybo
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
 for _n in range(1, 9):
     CHAR_ACTIONS[str(_n)] = "TRACK%d" % _n
-ESCAPES = {"\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT"}
+CHAR_ACTIONS.update({"\r": "ENTER", "\n": "ENTER", "\t": "FILE"})
+ESCAPES = {"\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT",
+           "\x1b[A": "UP", "\x1b[B": "DOWN", "\x1b": "FILE"}
+TEXT_INPUT = {"on": False}      # while typing a name, keys arrive as ("CHAR", letter) instead of commands
 
 
 def start_terminal_keys(q):
@@ -70,11 +74,13 @@ def start_terminal_keys(q):
                 return
             if not data:
                 return
-            if data in ESCAPES:
+            if data in ESCAPES and not (TEXT_INPUT["on"] and data == "\x1b"):
                 q.put(ESCAPES[data])
                 continue
             for ch in data:
-                if ch in CHAR_ACTIONS:
+                if TEXT_INPUT["on"]:
+                    q.put(("CHAR", ch))
+                elif ch in CHAR_ACTIONS:
                     q.put(CHAR_ACTIONS[ch])
 
     threading.Thread(target=reader, daemon=True).start()
@@ -82,14 +88,22 @@ def start_terminal_keys(q):
 
 
 def pygame_key(ev):
-    """A pygame key press -> action name, or None."""
+    """A pygame key press -> action name, ("CHAR", letter) while typing, or None."""
     shift = ev.mod & pygame.KMOD_SHIFT
     if ev.key == pygame.K_LEFT:
         return "BAR_LEFT" if shift else "LEFT"
     if ev.key == pygame.K_RIGHT:
         return "BAR_RIGHT" if shift else "RIGHT"
+    if ev.key == pygame.K_UP:
+        return "UP"
+    if ev.key == pygame.K_DOWN:
+        return "DOWN"
+    if TEXT_INPUT["on"]:
+        if ev.key == pygame.K_ESCAPE:
+            return ("CHAR", "\x1b")
+        return ("CHAR", ev.unicode) if ev.unicode else None
     if ev.key == pygame.K_ESCAPE:
-        return "QUIT"
+        return "FILE"
     return CHAR_ACTIONS.get(ev.unicode) if ev.unicode else None
 
 
@@ -286,7 +300,7 @@ class Transport:
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
-        elif name in ("MIDI", "FX", "FILE", "IMPORT"):
+        elif name in ("MIDI", "FX", "IMPORT"):
             self.say("%s COMES IN A LATER VERSION" % name)
         else:
             self.edit(name)
@@ -410,6 +424,13 @@ class Transport:
                      else "SPLICE TAKEN AWAY FROM %s" % where if done == "removed" else "CAN'T SPLICE HERE", 2)
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
+
+    def new_song(self, name):
+        self.focus.track = None
+        self.engine.new_song(name)
+        self.tape.pos = 0.0
+        self.s.set("song", t=name)
+        self.say("NEW PROJECT: %s" % name.upper(), 5)
 
     def export(self):
         if not self.engine:
@@ -598,6 +619,7 @@ def main():
     except Exception as e:
         print("No MIDI input:", e)
     transport = Transport(screen, engine, clock)
+    project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)
     fps = pygame.time.Clock()
 
@@ -619,11 +641,19 @@ def main():
                         print("Q ignored: Console is running as the boot app. Stop it with: sudo systemctl stop console")
                     else:
                         running = False
-                else:
+                elif project_menu.open:
+                    project_menu.key(name)
+                elif name == "FILE":
+                    project_menu.show()
+                elif not (isinstance(name, tuple) and name[0] == "CHAR"):
                     transport.key(name)
+                TEXT_INPUT["on"] = project_menu.text_input
             transport.tick(seconds)
 
-            screen.draw(frame)
+            if project_menu.open:
+                project_menu.draw(frame)
+            else:
+                screen.draw(frame)
             out = pygame.transform.rotate(frame, rotate) if rotate else frame
             if out.get_size() != (dw, dh):
                 scale = min(dw / out.get_width(), dh / out.get_height())

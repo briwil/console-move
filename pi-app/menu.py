@@ -3,8 +3,8 @@
 Moving: the big knob, or the arrow keys. Choosing: PLAY, a push on the big
 knob, or Enter. FILE (Tab or Esc on a keyboard) goes back to the song.
 
-NEW starts a blank song straight away. It gets a name the first time it's
-saved: naming works like the OP-1: the big knob picks the letter under
+NEW asks for a name and makes the project's folder straight away. Naming works
+like the OP-1: the big knob picks the letter under
 the cursor, ← / → move the cursor, CUT deletes a letter. On a keyboard you can
 just type.
 
@@ -47,6 +47,7 @@ class Menu:
         self.s.after["name_text"] = self.draw_cursor
         self.msg = ""
         self.confirm_new = False              # NEW pressed once on an unsaved song with audio
+        self.naming = "new"                   # what the name is for: "new" project or "save" an unnamed one
         self.refresh()
 
     @property
@@ -199,11 +200,15 @@ class Menu:
                 self.confirm_new = True
                 self.say("THIS SONG ISN'T SAVED. NEW AGAIN THROWS IT AWAY, OR SAVE IT FIRST")
                 return
-            self.transport.new_song()
-            self.close()
+            self.mode = "name"
+            self.naming = "new"
+            self.name = list(e.next_song_name())
+            self.cursor = len(self.name)
+            self.msg = ""
         elif what == "SAVE":
             if e.song is None:
                 self.mode = "name"
+                self.naming = "save"
                 self.name = list(e.next_song_name())
                 self.cursor = len(self.name)
                 self.msg = ""
@@ -227,6 +232,11 @@ class Menu:
             return
         if e.song_exists(name):
             self.say("THERE'S ALREADY A PROJECT CALLED %s" % name.upper())
+            return
+        if self.naming == "new":
+            self.transport.new_song(name)
+            self.mode = "list"
+            self.close()
             return
         try:
             e.save_as(name)
@@ -282,9 +292,9 @@ class Menu:
             s.set("name_text", t="")
             hint = "BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
         else:
-            s.set("prompt", t="NAME THIS PROJECT", y=self.prompt_y)
+            s.set("prompt", t="NAME THE NEW PROJECT" if self.naming == "new" else "NAME THIS PROJECT", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
-            hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
+            hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
         s.set("menu_hint", t=hint)
         s.set("menu_msg", t=self.msg)
 

@@ -10,17 +10,17 @@ The app starts on the project menu. Turn the big knob (or use the arrow
 keys) to move, and press PLAY, push the big knob, or press Enter to choose.
 FILE (Tab or Esc on a keyboard) goes back to the song.
 
-- **NEW Project** saves the song you're on and opens a blank, untitled
-  song (same tempo). If the song you're on was never saved with a name and
-  has audio, it warns you first: press NEW again to throw it away. The
+- **NEW Project** saves the song you're on, then asks for the new project's
+  name: it suggests the next free "Song N", so you can just press PLAY. To
+  change it: the big knob picks the letter under the green mark, ← / → move
+  along, CUT deletes a letter. On a keyboard just type, with Backspace and
+  Enter. The project's folder is made straight away (it's on console.local
+  under Projects), and the new song starts empty at the same tempo. The
   clipboard carries over, so you can lift a piece in one song and drop it in
   another.
-- **SAVE Project** saves the song. The first time, it asks for a name: it
-  suggests the next free "Song N", so you can just press PLAY. To change it:
-  the big knob picks the letter under the green mark, ← / → move along, CUT
-  deletes a letter. On a keyboard just type, with Backspace and Enter.
-  (The app also saves by itself whenever you stop; an untitled song is kept
-  in `~/console-data/unsaved` until you name it.)
+- **SAVE Project** saves the song now. (It also saves by itself whenever you
+  stop, and a moment after every edit.) A song from an older version that
+  was never named asks for a name here, and then shows up in Projects.
 - **SETTINGS:** the big knob (or ↑ ↓) picks a row, ← / → (or the right-hand
   small knob) change it.
   - **MIDI SYNC — EXTERNAL:** Console follows the OP-XY's clock, start and

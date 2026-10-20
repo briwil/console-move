@@ -500,12 +500,12 @@ class Transport:
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
 
-    def new_song(self):
+    def new_song(self, name):
         self.focus.track = None
-        self.engine.new_song()
+        self.engine.new_song(name)
         self.tape.pos = 0.0
-        self.s.set("song", t="Untitled")
-        self.say("NEW SONG. SAVE IT FROM THE MENU (FILE) TO NAME IT", 5)
+        self.s.set("song", t=name)
+        self.say("NEW PROJECT: %s" % name.upper(), 5)
 
     def export(self):
         if not self.engine:

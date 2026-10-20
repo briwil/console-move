@@ -294,10 +294,11 @@ class Engine:
     def has_audio(self):
         return any(self.track_end(t) for t in range(TRACKS))
 
-    def new_song(self):
-        """Save the current project, then start an empty, unnamed one (same tempo). It's kept in
-        ~/console-data/unsaved until it's saved with a name. The clipboard stays, so a piece can be
-        carried over to the new song."""
+    def new_song(self, name=None):
+        """Save the current project, then start an empty one called name (same tempo), with its folder
+        in projects/ made straight away. (name=None: an unnamed song kept in ~/console-data/unsaved until
+        it's saved with a name.) The clipboard stays, so a piece can be carried over to the new song."""
+        was_untitled = self.song is None
         self.save(wait=True)
         with self.lock:
             self.playing = self.recording = self.rec_ready = False
@@ -315,11 +316,12 @@ class Engine:
             self.arm_extra = set()
             self.sel_anchor = None
             self.pos = 0
-            self.song = None
+            self.song = name
             self.dirty = {-1}
-        shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)
+        if name is None or was_untitled:              # an unnamed song is thrown away (the menu warned first)
+            shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)
         self.save(wait=True)
-        self.remember("last_song", None)
+        self.remember("last_song", name)
 
     def save_as(self, name):
         """Give the unnamed song a name: it moves from unsaved/ into projects/<name>/."""

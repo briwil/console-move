@@ -341,7 +341,7 @@ class Engine:
 
     def set_beats(self, beats):
         with self.lock:
-            self.pos = int(min(max(0.0, beats), self.tape_beats) * self.frames_per_beat())
+            self.pos = round(min(max(0.0, beats), self.tape_beats) * self.frames_per_beat())
 
     def targets(self):
         """Which tracks the input records onto, as {track index: input channel, or None for the mix}."""
@@ -408,7 +408,7 @@ class Engine:
 
     def set_loop_point(self, which, beats):
         with self.lock:
-            f = int(min(max(0.0, beats), self.tape_beats) * self.frames_per_beat())
+            f = round(min(max(0.0, beats), self.tape_beats) * self.frames_per_beat())
             if which == "in":
                 self.loop_a = f
                 if self.loop_b <= f:

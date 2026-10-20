@@ -113,8 +113,8 @@ class Tape:
 
     def move(self, steps, size):
         """Move by whole steps of `size` beats, landing on the nearest line."""
-        n = math.floor(self.pos / size + 1e-6) + steps
-        if steps < 0 and abs(self.pos / size - round(self.pos / size)) > 1e-6:
+        n = math.floor(self.pos / size + 1e-3) + steps
+        if steps < 0 and abs(self.pos / size - round(self.pos / size)) > 1e-3:
             n += 1          # first step back only goes to the line just behind
         self.pos = min(max(0.0, n * size), self.total_beats)
 

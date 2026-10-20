@@ -15,6 +15,7 @@ import numpy as np
 import pygame
 
 import ui
+from palette import REGION_COLOURS
 
 RES = 16                    # level values per beat (one per 1/64 note)
 TAPE_BARS = 64
@@ -34,9 +35,8 @@ LOOP_FILL = (30, 36, 52)
 LOOP_FILL_OFF = (24, 26, 31)
 LOOP_MARK = (79, 140, 255)
 LOOP_MARK_OFF = (70, 76, 88)
-PIECE_FILL = (40, 44, 54)          # the piece under the playhead on the armed track: what LIFT / CUT would take
-SELECT_FILL = (52, 66, 98)         # while selecting several pieces
-SPLICE = (226, 229, 235)
+SELECT_LINE = (205, 210, 218)      # outline round the box LIFT / CUT would take
+SELECTING_LINE = (255, 255, 255)   # while selecting several boxes
 
 # how much of each sample track has something on it, in bars
 SAMPLE_FILL = [64, 48, 40, 64, 12, 56, 32, 0]
@@ -180,53 +180,81 @@ class Tape:
             lx0, lx1 = max(x0, loop[0]), min(x0 + w, loop[1])
             if lx1 > lx0:
                 pygame.draw.rect(surf, LOOP_FILL if loop[2] else LOOP_FILL_OFF, (lx0, y0, lx1 - lx0, h))
-        sel = self.selection_x(it)
-        if sel:
-            sx0, sx1, selecting = sel
-            sx0, sx1 = max(x0, sx0), min(x0 + w, sx1)
-            if sx1 > sx0:
-                pygame.draw.rect(surf, SELECT_FILL if selecting else PIECE_FILL, (sx0, y0, sx1 - sx0, h))
         colours = {"bar": BAR_LINE, "beat": BEAT_LINE, "grid": GRID_LINE}
         for x, kind in self.lines(x0, x0 + w):
             pygame.draw.line(surf, colours[kind], (x, y0 + 2), (x, y0 + h - 3), 1)
+        self.draw_boxes(surf, it)
         surf.set_clip(clip)
         if int(it["name"][5:it["name"].index("_")]) in self.extra_armed:
             pygame.draw.rect(surf, self.arm_colour, (x0 - 1, y0 - 1, w + 2, h + 2), 1, it.get("r", 0) + 1)
 
+    def visible_regions(self, track, x0, x1):
+        """[(x start, x end, colour)] for the boxes on a track that are on screen."""
+        e = self.engine
+        if not e:
+            return []
+        fpb = e.frames_per_beat()
+        out = []
+        for a, b, c in e.regions[track - 1]:
+            xa, xb = self.x_of(a / fpb), self.x_of(b / fpb)
+            if xb >= x0 and xa <= x1:
+                out.append((round(xa), round(xb), ui.rgb(REGION_COLOURS[c % len(REGION_COLOURS)])))
+        return out
+
+    def draw_boxes(self, surf, it):
+        """Each recording / piece is a rounded box in its own colour, like regions in a DAW."""
+        track = int(it["name"][5:it["name"].index("_")])
+        y0, h = it["y"] + 1, it["h"] - 2
+        for xa, xb, col in self.visible_regions(track, it["x"], it["x"] + it["w"]):
+            xa, xb = max(it["x"] - 6, xa + 1), min(it["x"] + it["w"] + 6, xb - 1)    # small gap between touching boxes
+            if xb - xa < 1:
+                continue
+            fill = tuple(int(c * 0.22 + 14) for c in col)
+            edge = tuple(int(c * 0.55) for c in col)
+            r = min(5, (xb - xa) // 2)
+            pygame.draw.rect(surf, fill, (xa, y0, xb - xa, h), 0, r)
+            pygame.draw.rect(surf, edge, (xa, y0, xb - xa, h), 1, r)
+
     def draw_wave(self, surf, it):
         track = int(it["name"][5:it["name"].index("_")])
         lv = self.levels[track - 1]
-        col = ui.rgb(it["c"])
         cy = it["y"] + it["h"] / 2
         ppb = self.ppb
         span = max(1, int(3 / ppb * RES))          # level values covered by one 3-pixel column
-        for px in range(it["x"], it["x"] + it["w"] - 1, 3):
-            beat = self.beat_of(px + 1)
-            if beat < 0 or beat >= self.total_beats:
-                continue
-            i = int(beat * RES)
-            a = float(lv[i:i + span].max()) if span > 1 else float(lv[i])
-            if a <= 0.0003:
-                continue
-            a = self.shape(a)
-            bh = max(1, round(a * (it["h"] - 2)))
-            surf.fill(col, (px, round(cy - bh / 2), 2, bh))
-        self.draw_splices(surf, it, track)
+        x0, x1 = it["x"], it["x"] + it["w"] - 1
+        if self.engine:
+            parts = [(max(x0, xa + 2), min(x1, xb - 2), col) for xa, xb, col in self.visible_regions(track, x0, x1)]
+        else:
+            parts = [(x0, x1, ui.rgb(it["c"]))]
+        for pa, pb, col in parts:
+            start = x0 + ((pa - x0 + 2) // 3) * 3          # keep the 3-pixel columns lined up while scrolling
+            for px in range(start, pb, 3):
+                beat = self.beat_of(px + 1)
+                if beat < 0 or beat >= self.total_beats:
+                    continue
+                i = int(beat * RES)
+                a = float(lv[i:i + span].max()) if span > 1 else float(lv[i])
+                if a <= 0.0003:
+                    continue
+                a = self.shape(a)
+                bh = max(1, round(a * (it["h"] - 4)))
+                surf.fill(col, (px, round(cy - bh / 2), 2, bh))
+        self.draw_selection(surf, track)
 
-    def draw_splices(self, surf, it, track):
-        """A splice: a white line across the lane with a small notch at the top and bottom, like cut tape."""
-        e = self.engine
-        if not e:
+    def draw_selection(self, surf, track):
+        """An outline round the box(es) that LIFT and CUT would take, on the selected track."""
+        lane = self.s.get("track%d_lane" % track)
+        if not lane:
             return
-        fpb = e.frames_per_beat()
-        lane = self.s.get("track%d_lane" % track) or it
-        y0, y1 = lane["y"], lane["y"] + lane["h"] - 1
-        for f in e.splices[track - 1]:
-            x = round(self.x_of(f / fpb))
-            if it["x"] - 4 <= x <= it["x"] + it["w"] + 4:
-                pygame.draw.line(surf, SPLICE, (x, y0 + 1), (x, y1 - 1), 1)
-                pygame.draw.polygon(surf, SPLICE, [(x - 3, y0), (x + 3, y0), (x, y0 + 4)])
-                pygame.draw.polygon(surf, SPLICE, [(x - 3, y1), (x + 3, y1), (x, y1 - 4)])
+        sel = self.selection_x(lane)
+        if not sel:
+            return
+        xa, xb, selecting = sel
+        xa, xb = max(lane["x"], xa + 1), min(lane["x"] + lane["w"], xb - 1)
+        if xb - xa < 2:
+            return
+        pygame.draw.rect(surf, SELECTING_LINE if selecting else SELECT_LINE,
+                         (xa, lane["y"] + 1, xb - xa, lane["h"] - 2), 2 if selecting else 1, min(5, (xb - xa) // 2))
 
     def draw_ruler(self, surf, it):
         self.s.draw_default(surf, it)

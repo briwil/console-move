@@ -21,6 +21,7 @@ import bisect
 import datetime
 import json
 import os
+import random
 import re
 import shutil
 import threading
@@ -29,12 +30,15 @@ import wave
 
 import numpy as np
 
+from palette import REGION_COLOURS
+
 TRACKS = 8
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block
 PERIODS = 8              # blocks queued in the output buffer (about 90 ms: room for the screen drawing)
 MIX_GAIN = 0.6
 UNDO_STEPS = 8
+
 
 DATA = os.path.realpath(os.path.expanduser(os.environ.get("CONSOLE_DATA", "~/console-data")))
 
@@ -196,11 +200,14 @@ class Engine:
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
         self.latency = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1)))
         self.clip = None                        # audio on the clipboard (one piece), for DROP
-        self.splices = [[] for _ in range(TRACKS)]  # splice points on each track, in frames, sorted
+        # the boxes on each track: [start, end, colour] in frames, sorted, never overlapping.
+        # Recording makes a box; SPLICE splits one; CUT takes boxes away and leaves an empty space.
+        self.regions = [[] for _ in range(TRACKS)]
         self.sel_anchor = None                  # while selecting several pieces: where the selection started
         self.undo_stack = []                    # each entry: list of (track, start, old samples)
         self._rec_undo = None                   # the undo entry the current recording pass adds to
         self._rec_saved = {}                    # track -> [start, end) already saved for undo this pass
+        self._rec_boxes = {}                    # track -> the box this recording pass is making
         self._stop = False
         self._set_beats_len()
         self.load()
@@ -257,7 +264,7 @@ class Engine:
             for x in self.tracks:
                 x[:] = 0
             self._set_beats_len()                       # fresh, empty waveforms
-            self.splices = [[] for _ in range(TRACKS)]
+            self.regions = [[] for _ in range(TRACKS)]
             self.undo_stack = []
             self.volumes = [0.8] * TRACKS
             self.mutes = set()
@@ -325,9 +332,8 @@ class Engine:
         self.mutes = set(meta.get("mutes", []))
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
-        if meta.get("splices"):
-            self.splices = [sorted(int(f) for f in sp) for sp in meta["splices"]][:TRACKS]
-            self.splices += [[] for _ in range(TRACKS - len(self.splices))]
+        self._meta_regions = meta.get("regions")
+        self._meta_splices = meta.get("splices")       # from version 0.6-0.7, turned into boxes below
         if meta.get("loop"):
             self.loop_on, self.loop_a, self.loop_b = bool(meta["loop"][0]), int(meta["loop"][1]), int(meta["loop"][2])
         for t in range(TRACKS):
@@ -344,6 +350,7 @@ class Engine:
             n = min(len(x), self.frames)
             self.tracks[t][:n] = x[:n]
             self._update_levels(t, 0, n, reset=True)
+        self._regions_from_meta()
 
     def save(self, wait=False):
         """Save changed tracks in the background. Returns False if there was nothing to save."""
@@ -353,7 +360,7 @@ class Engine:
             self.dirty.clear()
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
                     "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b],
-                    "rec_mode": self.rec_mode, "splices": [list(sp) for sp in self.splices]}
+                    "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions]}
         if not changed:
             return False
 
@@ -448,6 +455,7 @@ class Engine:
         self.playing = True
         self._rec_undo = []
         self._rec_saved = {}
+        self._rec_boxes = {}
         self.undo_stack.append(self._rec_undo)
         del self.undo_stack[:-UNDO_STEPS]
 
@@ -532,7 +540,96 @@ class Engine:
             self.dirty.add(-1)
             return (track - 1) in self.mutes
 
-    # ---- editing, OP-1 style: SPLICE cuts the tape into pieces; LIFT, CUT and DROP work on pieces
+    # ---- the boxes (regions) on each track
+
+    def _regions_from_meta(self):
+        """Boxes from project.json; older projects (splice points, or nothing) get boxes made from their audio."""
+        self.regions = [[] for _ in range(TRACKS)]
+        saved = self._meta_regions
+        for t in range(TRACKS):
+            if saved and t < len(saved):
+                self.regions[t] = sorted([int(r[0]), int(r[1]), int(r[2]) % len(REGION_COLOURS)] for r in saved[t]
+                                         if int(r[1]) > int(r[0]))
+                continue
+            end = self.track_end(t)
+            if not end:
+                continue
+            first = int(np.flatnonzero(self.levels[t] > 1e-6)[0] / RES * self.frames_per_beat())
+            cuts = sorted(int(f) for f in (self._meta_splices[t] if self._meta_splices and t < len(self._meta_splices) else []))
+            edges = [0] + [c for c in cuts if 0 < c < end] + [end]
+            for x0, x1 in zip(edges, edges[1:]):
+                x0, x1 = max(x0, first), x1
+                if x1 > x0 and np.any(np.abs(self.tracks[t][x0:x1]) > 1e-6):
+                    self.regions[t].append([x0, x1, self._new_colour(t, x0)])
+
+    def _new_colour(self, t, f, avoid=()):
+        """A random colour for a new box, different from its neighbours."""
+        near = set(avoid)
+        for r in self.regions[t]:
+            if abs(r[1] - f) < 2 or abs(r[0] - f) < 2 or r[0] <= f < r[1]:
+                near.add(r[2])
+        choices = [i for i in range(len(REGION_COLOURS)) if i not in near] or list(range(len(REGION_COLOURS)))
+        return random.choice(choices)
+
+    def region_at(self, t, f):
+        for r in self.regions[t]:
+            if r[0] <= f < r[1]:
+                return r
+        return None
+
+    def _carve(self, t, a, b):
+        """Clear [a, b) of boxes: boxes inside go, boxes across the edges are trimmed (or split in two)."""
+        out = []
+        for r in self.regions[t]:
+            if r[1] <= a or r[0] >= b:
+                out.append(r)
+                continue
+            if r[0] < a:
+                out.append([r[0], a, r[2]])
+            if r[1] > b:
+                out.append([b, r[1], r[2]])
+        self.regions[t] = sorted(out)
+
+    def _add_region(self, t, a, b, colour=None):
+        a, b = max(0, a), min(self.frames, b)
+        if b <= a:
+            return None
+        self._carve(t, a, b)
+        r = [a, b, self._new_colour(t, a) if colour is None else colour]
+        self.regions[t] = sorted(self.regions[t] + [r])
+        return r
+
+    def _regions_changed(self, t, entries):
+        entries.append(("regions", t, [list(r) for r in self.regions[t]]))
+        self.dirty.add(-1)
+
+    def _rec_region(self, t, a, b):
+        """Recording wrote [a, b) on track t: grow this pass's box, or make one.
+        Replace: the new recording is its own box and covers what was there.
+        Overdub: it joins the boxes it lands on."""
+        own = self._rec_boxes.get(t)
+        if own is not None and not any(r is own for r in self.regions[t]):
+            own = None
+        if self.rec_mode == "overdub":
+            touching = [r for r in self.regions[t] if r[0] <= b and r[1] >= a]
+            if touching:
+                lo, hi = min([a] + [r[0] for r in touching]), max([b] + [r[1] for r in touching])
+                keep = own if any(r is own for r in touching) else touching[0]
+                self.regions[t] = [r for r in self.regions[t] if r is keep or not any(r is x for x in touching)]
+                keep[0], keep[1] = lo, hi
+                self.regions[t].sort()
+                self._rec_boxes[t] = keep
+                return
+        if own is not None and own[0] <= a <= own[1]:
+            others = [r for r in self.regions[t] if r is not own]
+            self.regions[t] = others
+            self._carve(t, a, b)
+            own[1] = max(own[1], b)
+            self.regions[t] = sorted(self.regions[t] + [own])
+            return
+        self._rec_boxes[t] = self._add_region(t, a, b)
+
+    # ---- editing: SPLICE splits a box; LIFT, CUT and DROP work on whole boxes
 
     def track_end(self, t):
         """Where the audio on track t ends, in frames (from the drawn levels, so it's quick)."""
@@ -542,35 +639,18 @@ class Engine:
             return 0
         return int(min(self.frames, np.ceil((nz[-1] + 1) / RES * self.frames_per_beat())))
 
-    def _near(self, t, f):
-        """The splice on track t at frame f (within a 1/64 note), or None."""
-        tol = self.frames_per_beat() / 16
-        for s in self.splices[t]:
-            if abs(s - f) <= tol:
-                return s
-        return None
-
-    def piece(self, t, f):
-        """(start, end) of the piece of track t at frame f, or None if there's nothing there.
-
-        A piece runs from one splice to the next. The last piece ends where the audio ends."""
-        sp = self.splices[t]
-        i = bisect.bisect_right(sp, f)
-        a = sp[i - 1] if i else 0
-        b = sp[i] if i < len(sp) else self.track_end(t)
-        return (a, b) if b > a and f < b else None
-
     def selection(self):
-        """(track index, start, end) of what LIFT and CUT would take: the piece under the playhead,
-        or, while selecting, every piece from where the selection started to the playhead."""
+        """(track index, start, end) of what LIFT and CUT would take: the box under the playhead,
+        or, while selecting, every box from where the selection started to the playhead."""
         t = self.armed - 1
-        lo, hi = sorted((self.sel_anchor, self.pos)) if self.sel_anchor is not None else (self.pos, self.pos)
-        sp = self.splices[t]
-        i = bisect.bisect_right(sp, lo)
-        start = sp[i - 1] if i else 0
-        j = bisect.bisect_right(sp, hi)
-        end = sp[j] if j < len(sp) else self.track_end(t)
-        return (t, start, end) if end > start and lo < end else None
+        if self.sel_anchor is None:
+            r = self.region_at(t, self.pos)
+            return (t, r[0], r[1]) if r else None
+        lo, hi = sorted((self.sel_anchor, self.pos))
+        rs = [r for r in self.regions[t] if r[0] <= hi and r[1] > lo]
+        if not rs:
+            return None
+        return t, min(r[0] for r in rs), max(r[1] for r in rs)
 
     def begin_selection(self):
         with self.lock:
@@ -585,38 +665,47 @@ class Engine:
         self._update_levels(t, a, b, reset=True)
         self.dirty.add(t)
 
-    def _splices_changed(self, t, entries):
-        entries.append(("splices", t, list(self.splices[t])))
-        self.dirty.add(-1)
-
-    def _audio_near(self, t, f, n=2048):
-        """True if there's audio just before AND just after frame f on track t."""
-        x = self.tracks[t]
-        return bool(np.any(np.abs(x[max(0, f - n):f]) > 1e-6) and np.any(np.abs(x[f:f + n]) > 1e-6))
-
     def splice(self, all_tracks=False):
-        """Cut the armed tracks' tape at the playhead, or take away the splice that's there (decided by the
-        selected track). all_tracks: every track. Returns "added", "removed" or None."""
+        """Split the box under the playhead in two (the right half gets a new colour), on every armed
+        track (all_tracks: every track). At a join between two boxes it joins them back into one.
+        Returns "added", "removed" or None."""
         with self.lock:
             f = int(self.pos)
             t0 = self.armed - 1
             ts = list(range(TRACKS)) if all_tracks else self.armed_tracks()
-            remove = self._near(t0, f) is not None
-            if not remove and (f <= 0 or f >= self.frames):
-                return None
+            tol = self.frames_per_beat() / 16
+
+            def join_at(t):
+                left = [r for r in self.regions[t] if abs(r[1] - f) <= tol]
+                right = [r for r in self.regions[t] if abs(r[0] - f) <= tol]
+                return (left[0], right[0]) if left and right and left[0][1] == right[0][0] else None
+
+            joining = join_at(t0) is not None
             entries = []
+            done = False
             for t in ts:
-                self._splices_changed(t, entries)
-                s = self._near(t, f)
-                if remove and s is not None:
-                    self.splices[t].remove(s)
-                elif not remove and s is None:
-                    bisect.insort(self.splices[t], f)
+                if joining:
+                    pair = join_at(t)
+                    if pair:
+                        self._regions_changed(t, entries)
+                        pair[0][1] = pair[1][1]
+                        self.regions[t].remove(pair[1])
+                        done = True
+                else:
+                    r = self.region_at(t, f)
+                    if r and r[0] + tol < f < r[1] - tol:
+                        self._regions_changed(t, entries)
+                        right = [f, r[1], self._new_colour(t, f, avoid=(r[2],))]
+                        r[1] = f
+                        self.regions[t] = sorted(self.regions[t] + [right])
+                        done = True
             self._push_undo(entries)
-            return "removed" if remove else "added"
+            if not done:
+                return None
+            return "removed" if joining else "added"
 
     def copy(self):
-        """Copy the selected piece(s) to the clipboard as one piece. Returns its length in beats, or None."""
+        """Copy the selected box(es) to the clipboard as one piece. Returns its length in beats, or None."""
         with self.lock:
             sel = self.selection()
             self.sel_anchor = None
@@ -624,12 +713,11 @@ class Engine:
                 return None
             t, a, b = sel
             self.clip = self.tracks[t][a:b].copy()
-            self.sel_anchor = None
             return (b - a) / self.frames_per_beat()
 
     def cut(self):
-        """Take the selected piece(s) off the tape onto the clipboard, leaving a gap (silence).
-        Several pieces become one: the splices between them go. Returns the length in beats, or None."""
+        """Take the selected box(es) off the tape onto the clipboard, leaving an empty space.
+        Returns the length in beats, or None."""
         with self.lock:
             sel = self.selection()
             self.sel_anchor = None
@@ -638,21 +726,16 @@ class Engine:
             t, a, b = sel
             self.clip = self.tracks[t][a:b].copy()
             entries = [(t, a, self.tracks[t][a:b].copy())]
-            self._splices_changed(t, entries)
+            self._regions_changed(t, entries)
+            self._carve(t, a, b)
             self.tracks[t][a:b] = 0
             self._changed(t, a, b)
-            # the splices go with the audio: inside the cut, at its ends (unless there's audio on both
-            # sides, so it still divides two pieces), and anything left after the end of the track's audio
-            end = self.track_end(t)
-            self.splices[t] = [s for s in self.splices[t]
-                               if not a < s < b and s < end and (s not in (a, b) or self._audio_near(t, s))]
             self._push_undo(entries)
-            self.sel_anchor = None
             return (b - a) / self.frames_per_beat()
 
     def drop(self, insert=False):
-        """Put the clipboard down on the armed track at the playhead, as one piece with splices at both ends.
-        insert=False replaces what's there; insert=True pushes the rest of the track later."""
+        """Put the clipboard down on the armed track at the playhead as a new box.
+        insert=False covers what's there; insert=True pushes the rest of the track later."""
         with self.lock:
             if self.clip is None:
                 return False
@@ -662,24 +745,28 @@ class Engine:
             if n <= 0:
                 return False
             entries = []
-            self._splices_changed(t, entries)
-            sp = self.splices[t]
+            self._regions_changed(t, entries)
             if insert:
                 entries.append((t, a, self.tracks[t][a:].copy()))
                 tail = self.tracks[t][a:self.frames - n].copy()
                 self.tracks[t][a + n:] = tail
                 self.tracks[t][a:a + n] = x[:n]
-                sp = [s if s <= a else s + n for s in sp]
+                moved = []
+                for r in self.regions[t]:
+                    if r[1] <= a:
+                        moved.append(r)
+                    elif r[0] >= a:
+                        moved.append([r[0] + n, r[1] + n, r[2]])
+                    else:                                   # a box across the playhead splits around the new one
+                        moved.append([r[0], a, r[2]])
+                        moved.append([a + n, r[1] + n, r[2]])
+                self.regions[t] = sorted([r[0], min(r[1], self.frames), r[2]] for r in moved if r[0] < self.frames)
                 self._changed(t, a, self.frames)
             else:
                 entries.append((t, a, self.tracks[t][a:a + n].copy()))
                 self.tracks[t][a:a + n] = x[:n]
-                sp = [s for s in sp if not a < s < a + n]
                 self._changed(t, a, a + n)
-            for s in (a, a + n):
-                if 0 < s < self.frames and s not in sp:
-                    sp.append(s)
-            self.splices[t] = sorted(s for s in sp if 0 < s < self.frames)
+            self._add_region(t, a, a + n)
             self._push_undo(entries)
             return True
 
@@ -695,8 +782,8 @@ class Engine:
             if not self.undo_stack or self.recording:
                 return False
             for item in reversed(self.undo_stack.pop()):
-                if item[0] == "splices":
-                    self.splices[item[1]] = item[2]
+                if item[0] == "regions":
+                    self.regions[item[1]] = item[2]
                     self.dirty.add(-1)
                     continue
                 t, a, old = item
@@ -831,6 +918,7 @@ class Engine:
                 for t, ch in targets.items():
                     src = (x.mean(axis=1) if ch is None else x[:, ch])[a - w0:b - w0]
                     self._save_for_undo(t, a, b)
+                    self._rec_region(t, a, b)
                     if overdub:
                         self.tracks[t][a:b] = saturate(self.tracks[t][a:b] + src)
                     else:
@@ -850,6 +938,7 @@ class Engine:
             self._rec_undo.append((t, a, self.tracks[t][a:b].copy()))
             s[1] = b
         elif not s:
+            self._rec_undo.append(("regions", t, [list(r) for r in self.regions[t]]))
             self._rec_undo.append((t, a, self.tracks[t][a:b].copy()))
             self._rec_saved[t] = [a, b]
         else:

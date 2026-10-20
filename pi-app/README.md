@@ -1,6 +1,6 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.7.**
+The recorder that runs on the Raspberry Pi. **Version 0.8.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
@@ -13,15 +13,15 @@ The recorder that runs on the Raspberry Pi. **Version 0.7.**
   OP-XY's play to start recording.
 - In/out points with punch-in recording, and REPLACE or OVERDUB record modes
   (overdub with the loop on keeps layering every time round).
-- OP-1 style editing: splice the tape into pieces, lift (copy), cut and drop
-  pieces, several at once and between tracks, and undo (the last 8 changes).
+- Every recording is a coloured box on its track. Split boxes, lift (copy),
+  cut and drop them, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
 - Starts on a project menu (NEW and SAVE work so far; LOAD and SETTINGS are next).
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/<song name>/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,
-  volumes, mutes, in/out points, record mode and splices), and loads it again at start-up.
+  volumes, mutes, in/out points, record mode and boxes), and loads it again at start-up.
 - Exports stems (every track with audio, all the same length so they line up
   in a DAW) plus a stereo mix to `~/console-data/exports/`.
 
@@ -131,6 +131,7 @@ If it's upside down, change the line `ExecStart=...console.py` in
   record, position).
 - `audio.py` is the audio engine: finding the device, recording, playback, loop, editing, undo, saving and export.
 - `focus.py` is the one-track zoom view with the tape reels.
+- `palette.py` holds the box colours.
 - `menu.py` is the project menu; its look is `layouts/menu.ui`.
 - `midi.py` reads the control board and the OP-XY's MIDI clock.
 - `tape.py` is the tape: the tracks over time, the grid and zoom, and drawing the lanes, waveforms and ruler.

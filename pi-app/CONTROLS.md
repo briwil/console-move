@@ -32,9 +32,9 @@ Console opens whichever project you used last.
 | AUDIO | Input: each input to its own track (OP-XY 8-channel), or all inputs mixed together | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | MIDI, FX, IMPORT | Not yet (coming in a later version) | |
-| SPLICE | Cut the tape at the playhead on the armed track(s). On an existing splice: take it away | Same, on all tracks |
-| CUT | Take the piece under the playhead off the tape onto the clipboard, leaving a gap. Hold to take several pieces (see below) | Undo |
-| LIFT | Copy the piece under the playhead onto the clipboard. Hold to copy several pieces | Start / stop selecting several pieces (no holding needed) |
+| SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
+| CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space. Hold to take several boxes (see below) | Undo |
+| LIFT | Copy the box under the playhead onto the clipboard. Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
 | DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest of the track later |
 | LOOP | Loop on / off (the first time, loops 4 bars from the current bar) | Clear the in/out points |
 | EXPORT | Export stems and a stereo mix to Exports | |
@@ -56,25 +56,31 @@ switches), every armed track records all the inputs mixed together.
 
 Editing (splice, lift, cut, drop) always works on the selected track.
 
-## Splices and pieces (like the OP-1)
+## Boxes: splitting, lifting, cutting and dropping
 
-SPLICE cuts a track's tape at the playhead, shown as a white line with
-notches. The splices divide the track into pieces; the piece under the
-playhead on the armed track is lit up, and that's what LIFT and CUT take.
-With no splices, the whole track is one piece.
+Every recording shows up on its track as a rounded box in its own colour,
+like a region in a DAW. Empty tape has no boxes.
 
-- **One piece:** tap LIFT (copy) or CUT.
-- **Several pieces:** hold LIFT or CUT, move with ← / → or the big knob
-  until everything you want is lit up, then let go. On a keyboard (or with
-  SHIFT+LIFT on the board), press `A`, move, then `C` or `X`.
-- Several pieces are lifted as **one piece**: the splices between them go,
-  and it drops back as one piece.
-- **DROP** puts the clipboard on the armed track at the playhead, with a
-  splice at each end, so it's its own piece. Drop on another track to move
-  things between tracks. SHIFT+DROP inserts it instead of replacing.
-- CUT leaves a gap where the piece was, and its splice marks go with it.
-- SPLICE on a splice takes it away, joining the two pieces.
-- SHIFT+CUT undoes, including splices.
+- **SPLICE** splits the box under the playhead in two; the right half gets a
+  new colour. It splits every armed track. SPLICE exactly on the join
+  between two boxes joins them back into one. SHIFT+SPLICE: all tracks.
+- The box under the playhead on the selected track has a white outline:
+  that's what LIFT and CUT take.
+- **One box:** tap LIFT (copy) or CUT.
+- **Several boxes:** hold LIFT or CUT, move with ← / → or the big knob until
+  they're all inside the outline, then let go. On a keyboard (or SHIFT+LIFT
+  on the board), press `A`, move, then `C` or `X`. They're lifted as one
+  piece, including any empty space between them.
+- **CUT** leaves an empty space. The boxes either side stay as they are.
+- **DROP** puts the clipboard on the selected track at the playhead as a
+  new box, covering what's there. SHIFT+DROP inserts it instead, pushing the
+  rest of the track later (splitting a box it lands in the middle of).
+- **Recording** makes a new box. In REPLACE mode it covers what was there;
+  in OVERDUB mode it joins the box(es) it records over.
+- SHIFT+CUT undoes, including splits and joins.
+
+The boxes are only how the tape is divided up; what you hear is the audio on
+the track. EXPORT writes each track as a plain WAV.
 
 ## In / out points, replace and overdub
 
@@ -88,7 +94,7 @@ With no splices, the whole track is one piece.
     playing parts in. It's gently tape-saturated so stacking layers doesn't
     clip harshly.
 - SHIFT+CUT (undo) takes back a whole recording pass, or the last edit.
-- In/out points are only for recording and playback; editing uses splices.
+- In/out points are only for recording and playback; editing uses boxes.
   It remembers 8 steps.
 
 ## Zooming into one track
@@ -129,10 +135,10 @@ key to zoom to that one instead.
 | K | Clear the in/out points |
 | O | Replace / overdub |
 | F | Zoom the armed track in / out |
-| S / Shift+S | Splice (this track / all tracks) |
-| C | Lift (copy) the piece |
-| X | Cut the piece |
-| A | Start / stop selecting several pieces |
+| S / Shift+S | Split / join boxes (armed tracks / all tracks) |
+| C | Lift (copy) the box |
+| X | Cut the box |
+| A | Start / stop selecting several boxes |
 | V / Shift+V | Drop (replace / insert) |
 | U | Undo |
 | M | Mute the armed track |

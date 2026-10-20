@@ -8,7 +8,7 @@ window that's running the app.
 
 | Key | Press | With SHIFT held |
 |---|---|---|
-| AUDIO | Input: all inputs to tracks 1–8, or inputs mixed onto the armed track | |
+| AUDIO | Input: each input to its own track (OP-XY 8-channel), or all inputs mixed together | Arm all 8 tracks / back to just the selected one |
 | MIDI, FX, FILE, IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Cut the tape at the playhead on the armed track. On an existing splice: take it away | Same, on all tracks |
 | CUT | Take the piece under the playhead off the tape onto the clipboard, leaving a gap. Hold to take several pieces (see below) | Undo |
@@ -20,7 +20,19 @@ window that's running the app.
 | SHIFT | Hold for the second column | |
 | PLAY | Play / stop | Back to the start (or the IN point) |
 | ← / → | Move one grid step | Set the IN / OUT point at the playhead |
-| 1–8 | Arm that track. Press the armed track again to zoom it big (see below) | Mute / unmute that track |
+| 1–8 | Select and arm that track (just that one). Press the selected track again to zoom it big (see below) | Arm / disarm that track as well, to record several at once |
+
+## Recording several tracks at once
+
+The selected track (thick outline) always records. Hold SHIFT and press
+other track keys to arm them too (thin outline); SHIFT+AUDIO arms all 8.
+Pressing a track key without SHIFT goes back to just that track.
+
+With the OP-XY in 8-channel mode, each armed track records its own input:
+input 1 to track 1, input 2 to track 2, and so on. In mix mode (AUDIO
+switches), every armed track records all the inputs mixed together.
+
+Editing (splice, lift, cut, drop) always works on the selected track.
 
 ## Splices and pieces (like the OP-1)
 
@@ -70,7 +82,7 @@ key to zoom to that one instead.
 
 | Knob | Turn | Push |
 |---|---|---|
-| 1–8 (above the tracks) | Track volume (with SHIFT: fine steps) | Mute / unmute |
+| 1–8 (above the tracks) | Track volume (with SHIFT: fine steps) | Mute / unmute (the only way to mute on the board) |
 | Left of the right-hand three | Zoom | Zoom back to 4 bars |
 | Right of the right-hand three | Grid: 1/4, 1/8, 1/16, 1/32 | Loop on / off |
 | Big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
@@ -81,7 +93,9 @@ key to zoom to that one instead.
 |---|---|
 | Space | Play / stop |
 | R | Record |
-| 1–8 | Arm a track |
+| 1–8 | Select and arm a track |
+| Shift+1–8 (! @ # …) | Arm / disarm another track as well |
+| ` | Arm all tracks / just the selected one |
 | ← / → | One grid step (Shift: one bar), also `[` / `]` for a bar |
 | H | Back to the start |
 | G | Change the grid |

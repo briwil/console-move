@@ -43,8 +43,10 @@ CHAR_ACTIONS = {
     "c": "COPY", "C": "COPY", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT",
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
-    "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME",
+    "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
 }
+for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
+    CHAR_ACTIONS[_ch] = "ARM%d" % _n
 for _n in range(1, 9):
     CHAR_ACTIONS[str(_n)] = "TRACK%d" % _n
 ESCAPES = {"\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT"}
@@ -100,7 +102,7 @@ BOARD_KEYS = ["INPUT", "MIDI", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
 BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
 WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "SELECT",
               "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "RECORD": "REC_MODE",
-              "LOOP": "CLEAR_REGION", "INPUT": "INPUT", "EXPORT": "EXPORT"}
+              "LOOP": "CLEAR_REGION", "INPUT": "ARM_ALL", "EXPORT": "EXPORT"}
 # knob pushes: notes 32-42 = ENC1-ENC11
 HOLD_KEYS = ("COPY", "CUT")            # hold one and move to take several pieces; let go to copy / cut
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
@@ -133,7 +135,7 @@ class Board:
                     return
                 if self.shift:
                     if name.startswith("TRACK"):
-                        name = "MUTE" + name[5:]
+                        name = "ARM" + name[5:]           # SHIFT+track: arm / disarm it as well
                     else:
                         name = WITH_SHIFT.get(name, name)
                 self.q.put(name)
@@ -265,6 +267,19 @@ class Transport:
             if n == self.armed or self.focus.track:
                 self.focus.toggle(n)              # the selected track's key again: zoom in / out
             self.armed = n
+            if e and not self.recording:
+                e.arm_extra = set()               # a plain press arms just this track
+        elif name == "ARM_ALL" and e:
+            every = set(range(8)) - {self.armed - 1}
+            e.arm_extra = set() if e.arm_extra == every else every
+            self.say("ALL TRACKS ARMED" if e.arm_extra else "ONLY TRACK %d ARMED" % self.armed, 2)
+        elif name.startswith("ARM") and name[3:].isdigit() and e:
+            n = int(name[3:])
+            if n == self.armed:
+                self.say("TRACK %d IS THE SELECTED TRACK, SO IT'S ALWAYS ARMED" % n, 3)
+            else:
+                e.arm_extra ^= {n - 1}
+                self.say("TRACK %d %s" % (n, "ARMED" if (n - 1) in e.arm_extra else "DISARMED"), 2)
         elif name == "FOCUS":
             self.focus.toggle(self.armed)
         elif name.startswith("MUTE"):
@@ -458,6 +473,13 @@ class Transport:
             clip = "CLIPBOARD EMPTY"
         return [vol, mode, inout, clip]
 
+    def armed_text(self, armed):
+        if len(armed) == 8:
+            return "ALL TRACKS"
+        if len(armed) == 1:
+            return "TRACK %d" % armed[0]
+        return "TRACKS " + ",".join(str(n) for n in armed)
+
     def beats_text(self, beats):
         if beats >= 4 and abs(beats / 4 - round(beats / 4)) < 0.01:
             bars = round(beats / 4)
@@ -476,24 +498,25 @@ class Transport:
         bpm = e.bpm if e else BPM
         s.set("bpm", t="%.1f BPM  4/4%s" % (bpm, "  SYNC" if self.synced else ""))
         all_in = bool(e and e.device and e.input_mode == "all")
+        armed = [t + 1 for t in e.armed_tracks()] if e else [self.armed]
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)
         if self.focus.active:
             lane = s.get("track%d_lane" % self.focus.shown)
             if lane:
                 s.set("rec_outline", y=lane["y"] - 2, h=lane["h"] + 4)
-        elif all_in and first and last:
-            s.set("rec_outline", y=first["y"] - 2, h=last["y"] + last["h"] - first["y"] + 4)
         elif lane:
             s.set("rec_outline", y=lane["y"] - 2, h=lane["h"] + 4)
         ready = bool(e and e.rec_ready)
         state = "RECORDING" if self.recording else "REC READY" if ready else "PLAYING" if self.playing else "STOPPED"
         overdub = bool(e and e.rec_mode == "overdub")
         selecting = bool(e and e.sel_anchor is not None)
-        s.set("status", t="%s  %s%s%s" % (state, "ALL TRACKS" if all_in else "TRACK %d" % self.armed,
+        s.set("status", t="%s  %s%s%s" % (state, self.armed_text(armed),
                                           "  OVERDUB" if overdub else "", "  SELECTING" if selecting else ""))
         if self.focus.active:
             self.focus.info["lines"] = self.panel_lines()
         red = "#FF5A4E" if (self.recording or ready) else "#7D838C"
+        t.extra_armed = {n for n in armed if n != self.armed}
+        t.arm_colour = ui.rgb(red)
         s.set("rec_dot", c=red)
         s.set("rec_outline", c=red)
 
@@ -504,9 +527,9 @@ class Transport:
         elif not e.device:
             hint = e.status or "NO AUDIO DEVICE"
         elif all_in:
-            hint = "%s  IN 1-%d > TRACKS" % (e.device["name"].upper(), min(8, e.device["capture"]["channels"]))
+            hint = "%s  EACH INPUT > ITS OWN TRACK" % e.device["name"].upper()
         else:
-            hint = "%s  IN MIX > TRACK %d" % (e.device["name"].upper(), self.armed)
+            hint = "%s  IN MIX > %s" % (e.device["name"].upper(), self.armed_text(armed))
         s.set("hint", t=hint)
 
         targets = e.targets() if (e and e.device) else {}

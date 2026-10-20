@@ -3,10 +3,12 @@
 - Finds the first USB audio device (an OP-XY, a UCA202, ...) and keeps retrying
   if none is plugged in, so you can plug one in while the app runs.
 - Input modes:
-    "all"  input channel N goes to track N (an OP-XY in 8-channel mode records
-           all 8 tracks at once)
-    "mix"  every input channel mixed together goes to the armed track (for a
+    "all"  input channel N goes to track N, on every armed track (an OP-XY in
+           8-channel mode can record all 8 tracks at once)
+    "mix"  every input channel mixed together goes to the armed track(s) (for a
            stereo source like a synth into a UCA202)
+- One track is selected (self.armed: editing works on it, and it always
+  records); more can be armed with it (self.arm_extra).
 - Plays the tape out of the same device, if it has an output (the OP-XY does,
   so you hear the tape on its headphone jack).
 - Tracks are mono, 32-bit float in memory. Projects are saved as 24-bit WAVs
@@ -182,7 +184,8 @@ class Engine:
         self.recording = False
         self.rec_ready = False                  # waiting for a MIDI start to begin recording
         self.rec_mode = "replace"               # "replace" writes over the tape, "overdub" adds to it
-        self.armed = 4
+        self.armed = 4                          # the selected track, 1-8
+        self.arm_extra = set()                  # other armed tracks (0-7), recording along with it
         self.input_mode = None                  # set when a device is found
         self.in_peaks = np.zeros(TRACKS, np.float32)
         self.device = None                      # dict from find_device, while connected
@@ -345,10 +348,15 @@ class Engine:
 
     def targets(self):
         """Which tracks the input records onto, as {track index: input channel, or None for the mix}."""
+        tracks = self.armed_tracks()
         if self.input_mode == "all" and self.device:
             ch = self.device["capture"]["channels"]
-            return {t: t for t in range(min(TRACKS, ch))}
-        return {self.armed - 1: None}
+            return {t: t for t in tracks if t < ch}
+        return {t: None for t in tracks}
+
+    def armed_tracks(self):
+        """The armed tracks, 0-7: the selected one plus any others."""
+        return sorted({self.armed - 1} | self.arm_extra)
 
     def cycle_input(self):
         if not self.device:

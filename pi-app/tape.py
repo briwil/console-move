@@ -69,6 +69,8 @@ class Tape:
         self.pos = 0.0                  # playhead position in beats from the start of the tape
         self.grid = 2                   # index into GRIDS (1/16)
         self.zoom = 2                   # index into ZOOMS (4 bars)
+        self.extra_armed = set()        # other armed tracks (1-8), outlined thinly
+        self.arm_colour = (125, 131, 140)
         self._rec_env = 0.0
         self._rec_target = 0.0
         self._rec_run = 0
@@ -188,6 +190,8 @@ class Tape:
         for x, kind in self.lines(x0, x0 + w):
             pygame.draw.line(surf, colours[kind], (x, y0 + 2), (x, y0 + h - 3), 1)
         surf.set_clip(clip)
+        if int(it["name"][5:it["name"].index("_")]) in self.extra_armed:
+            pygame.draw.rect(surf, self.arm_colour, (x0 - 1, y0 - 1, w + 2, h + 2), 1, it.get("r", 0) + 1)
 
     def draw_wave(self, surf, it):
         track = int(it["name"][5:it["name"].index("_")])

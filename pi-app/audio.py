@@ -193,6 +193,7 @@ class Engine:
         self.pans = [0.0] * TRACKS              # -1 left ... 0 centre ... 1 right
         self.pairs = set()                      # t: tracks t and t+1 are a stereo pair (left, right)
         self.mutes = set()
+        self.solos = set()                      # if any track is soloed, only soloed tracks play
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
         self.dirty = set()
@@ -289,6 +290,7 @@ class Engine:
             self.pans = [0.0] * TRACKS
             self.pairs = set()
             self.mutes = set()
+            self.solos = set()
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -351,6 +353,7 @@ class Engine:
             self._set_beats_len()
         self.volumes = [float(v) for v in meta.get("volumes", self.volumes)][:TRACKS]
         self.mutes = set(meta.get("mutes", []))
+        self.solos = set(meta.get("solos", []))
         self.pans = ([float(v) for v in meta.get("pans", [])] + [0.0] * TRACKS)[:TRACKS]
         self.pairs = {int(t) for t in meta.get("pairs", []) if 0 <= int(t) < TRACKS - 1}
         if meta.get("rec_mode") in ("replace", "overdub"):
@@ -383,7 +386,7 @@ class Engine:
             self.dirty.clear()
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
                     "pans": self.pans, "pairs": sorted(self.pairs),
-                    "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b],
+                    "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions]}
         if not changed:
             return False
@@ -508,16 +511,27 @@ class Engine:
 
     def start_recording(self):
         """Start a recording pass (call with the lock held or from set_recording)."""
-        if self.input_mode == "stereo":
-            for t in self.stereo_pairs_armed():              # recording in stereo makes the pair
-                self.pairs.add(t)
-                self.pans[t], self.pans[t + 1] = -1.0, 1.0
-                self.pairs.discard(t - 1)
-                self.pairs.discard(t + 1)
-                self.dirty.add(-1)
+        self._rec_undo = []
+        before_pairs, before_pans = set(self.pairs), list(self.pans)
+        stereo = self.stereo_pairs_armed() if self.input_mode == "stereo" else []
+        in_stereo = set(stereo) | {t + 1 for t in stereo}
+        for t in self.targets():
+            if t in in_stereo:
+                continue
+            for p in (t - 1, t):                             # recorded on its own: it's not part of a pair any more
+                if p in self.pairs:
+                    self.pairs.discard(p)
+                    self.pans[p] = self.pans[p + 1] = 0.0
+        for t in stereo:                                     # recording in stereo makes the pair
+            self.pairs -= {t - 1, t + 1}
+            self.pairs.add(t)
+            self.pans[t], self.pans[t + 1] = -1.0, 1.0
+        if self.pairs != before_pairs:
+            self._rec_undo.append(("pairs", None, before_pairs))
+            self._rec_undo += [("pan", t, before_pans[t]) for t in range(TRACKS) if self.pans[t] != before_pans[t]]
+            self.dirty.add(-1)
         self.recording = True
         self.playing = True
-        self._rec_undo = []
         self._rec_saved = {}
         self._rec_boxes = {}
         self.undo_stack.append(self._rec_undo)
@@ -603,6 +617,16 @@ class Engine:
             self.mutes ^= {track - 1}
             self.dirty.add(-1)
             return (track - 1) in self.mutes
+
+    def toggle_solo(self, track):
+        with self.lock:
+            self.solos ^= {track - 1}
+            self.dirty.add(-1)
+            return (track - 1) in self.solos
+
+    def audible(self, t):
+        """Whether track t (0-7) is heard: not muted, and soloed if anything is soloed."""
+        return t not in self.mutes and (not self.solos or t in self.solos)
 
     # ---- the boxes (regions) on each track
 
@@ -1054,7 +1078,7 @@ class Engine:
         left = np.zeros(m, np.float32)
         right = np.zeros(m, np.float32)
         for t in range(TRACKS):
-            if (overdub or t not in targets) and t not in self.mutes:
+            if (overdub or t not in targets) and self.audible(t):
                 sig = self.tracks[t][idx] * self.volumes[t]
                 gl, gr = pan_gains(self.pans[t])
                 if gl:

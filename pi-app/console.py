@@ -42,7 +42,7 @@ CHAR_ACTIONS = {
     "[": "BAR_LEFT", "]": "BAR_RIGHT", "i": "INPUT", "I": "INPUT", "e": "EXPORT", "E": "EXPORT",
     "l": "LOOP", "L": "LOOP", "{": "LOOP_IN", "}": "LOOP_OUT", "k": "CLEAR_REGION", "K": "CLEAR_REGION",
     "c": "COPY", "C": "COPY", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT",
-    "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
+    "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "SOLO",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
     "b": "BOUNCE", "B": "BOUNCE", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
@@ -155,7 +155,10 @@ class Board:
                         name = WITH_SHIFT.get(name, name)
                 self.q.put(name)
             elif 32 <= number < 32 + len(PUSHES) and value:
-                self.q.put(PUSHES[number - 32])
+                name = PUSHES[number - 32]
+                if self.shift and name.startswith("MUTE"):
+                    name = "SOLO" + name[4:]          # SHIFT + push a track knob: solo
+                self.q.put(name)
         elif kind == "cc" and 1 <= number <= 11:
             delta = value - 64
             if delta:
@@ -315,6 +318,8 @@ class Transport:
             self.focus.toggle(self.armed)
         elif name.startswith("MUTE"):
             self.mute(int(name[4:]) if name[4:] else self.armed)
+        elif name.startswith("SOLO"):
+            self.solo(int(name[4:]) if name[4:] else self.armed)
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name in ("MIDI", "FX", "IMPORT"):
@@ -404,6 +409,14 @@ class Transport:
         if abs(p) < 0.01:
             return "CENTRE"
         return "%s %d" % ("L" if p < 0 else "R", round(abs(p) * 100))
+
+    def solo(self, track):
+        if not self.engine:
+            return
+        on = self.engine.toggle_solo(track)
+        others = sorted(t + 1 for t in self.engine.solos)
+        self.say("TRACK %d SOLO %s%s" % (track, "ON" if on else "OFF",
+                                          "  (SOLOED: %s)" % ",".join(map(str, others)) if others else ""), 2)
 
     def mute(self, track):
         if not self.engine:
@@ -612,7 +625,7 @@ class Transport:
         if not e:
             return ["DEMO MODE", "NO AUDIO ENGINE"]
         vol = "VOLUME %d%%  PAN %s%s" % (round(e.volumes[n - 1] * 100), self.pan_text(e.pans[n - 1]),
-                                         "  MUTED" if (n - 1) in e.mutes else "")
+                                         "  MUTED" if (n - 1) in e.mutes else "  SOLO" if (n - 1) in e.solos else "")
         mode = "REC: OVERDUB" if e.rec_mode == "overdub" else "REC: REPLACE"
         r = e.loop_region()
         fpb = e.frames_per_beat()
@@ -690,7 +703,7 @@ class Transport:
 
         targets = e.targets() if (e and e.device) else {}
         for n in range(1, 9):
-            muted = bool(e and (n - 1) in e.mutes)
+            muted = bool(e and not e.audible(n - 1))      # muted, or another track is soloed
             if self.tab_colours.get(n):
                 s.set("track%d_tab" % n, c="#2A2D33" if muted else self.tab_colours[n])
             if e and (n - 1) in targets and (self.recording or ready or not self.playing):

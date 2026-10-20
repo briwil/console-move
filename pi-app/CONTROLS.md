@@ -98,7 +98,8 @@ the track. EXPORT writes each track as a plain WAV.
 
 ## Stereo
 
-Tracks are mono, and two neighbouring tracks can be a stereo pair.
+Tracks are mono, and any two neighbouring tracks (1+2, 4+5, 7+8…) can be a
+stereo pair.
 
 1. Press AUDIO until the bottom right says STEREO (it starts in STEREO when
    the OP-XY is in its 2-channel USB mode).
@@ -113,9 +114,20 @@ A pair edits together: SPLICE splits both, and LIFT / CUT take both sides
 selected track and the one below it, which become a pair. An armed track
 without a neighbour records the left and right inputs mixed.
 
+Recording onto either track of a pair on its own (in MIX or EACH INPUT mode,
+or in STEREO with only that one armed) splits the pair back into two normal
+mono tracks, panned to the centre. SHIFT+CUT undoes that along with the
+recording.
+
 **Pan:** SHIFT + turn a track's knob, or `,` / `.` on a keyboard for the
 selected track. Any track can be panned; the stereo mix and what you hear
 follow it. A bounce is mono, in the centre.
+
+## Mute and solo
+
+Push a track's knob to mute it; SHIFT+push to solo it. While any track is
+soloed, only soloed tracks play (the others' tabs go grey). Solo more than
+one to hear a few together. EXPORT ignores solo and uses the mutes.
 
 ## Bouncing tracks together
 
@@ -157,7 +169,7 @@ key to zoom to that one instead.
 
 | Knob | Turn | Push |
 |---|---|---|
-| 1–8 (above the tracks) | Track volume (with SHIFT: pan) | Mute / unmute (the only way to mute on the board) |
+| 1–8 (above the tracks) | Track volume (with SHIFT: pan) | Mute / unmute (with SHIFT: solo / unsolo) |
 | Left of the right-hand three | Zoom | Zoom back to 4 bars |
 | Right of the right-hand three | Grid: 1/4, 1/8, 1/16, 1/32 | Loop on / off |
 | Big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
@@ -189,7 +201,7 @@ key to zoom to that one instead.
 | V / Shift+V | Drop (replace / insert) |
 | U | Undo |
 | B | Bounce the armed tracks onto the selected track (press twice) |
-| M | Mute the armed track |
+| M | Mute the selected track (Shift+M: solo it) |
 | 9 / 0 | Armed track volume down / up |
 | , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |

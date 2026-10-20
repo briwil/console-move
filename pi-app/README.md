@@ -1,6 +1,6 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.5.**
+The recorder that runs on the Raspberry Pi. **Version 0.6.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
@@ -13,13 +13,14 @@ The recorder that runs on the Raspberry Pi. **Version 0.5.**
   OP-XY's play to start recording.
 - In/out points with punch-in recording, and REPLACE or OVERDUB record modes
   (overdub with the loop on keeps layering every time round).
-- Editing: copy, cut and paste between tracks, splice, and undo (the last 8 changes).
+- OP-1 style editing: splice the tape into pieces, lift (copy), cut and drop
+  pieces, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/Song 1/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,
-  volumes, mutes, in/out points and record mode), and loads it again at start-up.
+  volumes, mutes, in/out points, record mode and splices), and loads it again at start-up.
 - Exports stems (every track with audio, all the same length so they line up
   in a DAW) plus a stereo mix to `~/console-data/exports/`.
 

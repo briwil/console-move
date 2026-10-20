@@ -10,10 +10,10 @@ window that's running the app.
 |---|---|---|
 | AUDIO | Input: all inputs to tracks 1–8, or inputs mixed onto the armed track | |
 | MIDI, FX, FILE, IMPORT | Not yet (coming in a later version) | |
-| SPLICE | Remove the region and close the gap (the rest moves earlier). The removed bit goes on the clipboard | Same, on all tracks |
-| CUT | Take the region off the track onto the clipboard, leaving silence | Undo |
-| LIFT | Copy the region onto the clipboard (the track stays as it is) | Copy it from all tracks |
-| DROP | Paste the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest later |
+| SPLICE | Cut the tape at the playhead on the armed track. On an existing splice: take it away | Same, on all tracks |
+| CUT | Take the piece under the playhead off the tape onto the clipboard, leaving a gap. Hold to take several pieces (see below) | Undo |
+| LIFT | Copy the piece under the playhead onto the clipboard. Hold to copy several pieces | Start / stop selecting several pieces (no holding needed) |
+| DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest of the track later |
 | LOOP | Loop on / off (the first time, loops 4 bars from the current bar) | Clear the in/out points |
 | EXPORT | Export stems and a stereo mix to Exports | |
 | RECORD | Record on / off. When the OP-XY's clock is coming in and the tape is stopped: get ready, and recording starts when you press play on the OP-XY | Switch between REPLACE and OVERDUB |
@@ -22,12 +22,25 @@ window that's running the app.
 | ← / → | Move one grid step | Set the IN / OUT point at the playhead |
 | 1–8 | Arm that track. Press the armed track again to zoom it big (see below) | Mute / unmute that track |
 
-**The region** that SPLICE, CUT and LIFT work on is between the IN and OUT
-points (the loop), if they're set, or else the bar under the playhead.
+## Splices and pieces (like the OP-1)
 
-**Between tracks:** arm a track, LIFT (or CUT), arm another track, move the
-playhead, DROP. Copying from all tracks and dropping puts each track back on
-its own track.
+SPLICE cuts a track's tape at the playhead, shown as a white line with
+notches. The splices divide the track into pieces; the piece under the
+playhead on the armed track is lit up, and that's what LIFT and CUT take.
+With no splices, the whole track is one piece.
+
+- **One piece:** tap LIFT (copy) or CUT.
+- **Several pieces:** hold LIFT or CUT, move with ← / → or the big knob
+  until everything you want is lit up, then let go. On a keyboard (or with
+  SHIFT+LIFT on the board), press `A`, move, then `C` or `X`.
+- Several pieces are lifted as **one piece**: the splices between them go,
+  and it drops back as one piece.
+- **DROP** puts the clipboard on the armed track at the playhead, with a
+  splice at each end, so it's its own piece. Drop on another track to move
+  things between tracks. SHIFT+DROP inserts it instead of replacing.
+- CUT leaves a gap where the piece was (it's still a piece, just silent).
+- SPLICE on a splice takes it away, joining the two pieces.
+- SHIFT+CUT undoes, including splices.
 
 ## In / out points, replace and overdub
 
@@ -41,6 +54,7 @@ its own track.
     playing parts in. It's gently tape-saturated so stacking layers doesn't
     clip harshly.
 - SHIFT+CUT (undo) takes back a whole recording pass, or the last edit.
+- In/out points are only for recording and playback; editing uses splices.
   It remembers 8 steps.
 
 ## Zooming into one track
@@ -79,10 +93,11 @@ key to zoom to that one instead.
 | K | Clear the in/out points |
 | O | Replace / overdub |
 | F | Zoom the armed track in / out |
-| C / Shift+C | Copy (this track / all tracks) |
-| V / Shift+V | Paste (replace / insert) |
-| X / Shift+X | Cut (this track / all tracks) |
 | S / Shift+S | Splice (this track / all tracks) |
+| C | Lift (copy) the piece |
+| X | Cut the piece |
+| A | Start / stop selecting several pieces |
+| V / Shift+V | Drop (replace / insert) |
 | U | Undo |
 | M | Mute the armed track |
 | 9 / 0 | Armed track volume down / up |

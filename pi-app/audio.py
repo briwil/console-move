@@ -15,6 +15,7 @@
 
 Needs python3-numpy and python3-alsaaudio (installed by setup.sh).
 """
+import bisect
 import datetime
 import json
 import os
@@ -188,7 +189,9 @@ class Engine:
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
         self.latency = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1)))
-        self.clip = None                        # what LIFT took, for DROP
+        self.clip = None                        # audio on the clipboard (one piece), for DROP
+        self.splices = [[] for _ in range(TRACKS)]  # splice points on each track, in frames, sorted
+        self.sel_anchor = None                  # while selecting several pieces: where the selection started
         self.undo_stack = []                    # each entry: list of (track, start, old samples)
         self._rec_undo = None                   # the undo entry the current recording pass adds to
         self._rec_saved = {}                    # track -> [start, end) already saved for undo this pass
@@ -244,6 +247,9 @@ class Engine:
         self.mutes = set(meta.get("mutes", []))
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
+        if meta.get("splices"):
+            self.splices = [sorted(int(f) for f in sp) for sp in meta["splices"]][:TRACKS]
+            self.splices += [[] for _ in range(TRACKS - len(self.splices))]
         if meta.get("loop"):
             self.loop_on, self.loop_a, self.loop_b = bool(meta["loop"][0]), int(meta["loop"][1]), int(meta["loop"][2])
         for t in range(TRACKS):
@@ -269,7 +275,7 @@ class Engine:
             self.dirty.clear()
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
                     "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b],
-                    "rec_mode": self.rec_mode}
+                    "rec_mode": self.rec_mode, "splices": [list(sp) for sp in self.splices]}
         if not changed:
             return False
 
@@ -440,81 +446,150 @@ class Engine:
             self.dirty.add(-1)
             return (track - 1) in self.mutes
 
-    # ---- editing (LIFT, DROP, CUT, SPLICE, UNDO)
+    # ---- editing, OP-1 style: SPLICE cuts the tape into pieces; LIFT, CUT and DROP work on pieces
 
-    def edit_region(self):
-        """The loop if there is one, otherwise the bar under the playhead."""
-        r = self.loop_region()
-        if r:
-            return r
-        bar = 4 * self.frames_per_beat()
-        a = int((self.pos // bar) * bar)
-        return a, int(min(self.frames, a + bar))
+    def track_end(self, t):
+        """Where the audio on track t ends, in frames (from the drawn levels, so it's quick)."""
+        lv = self.levels[t]
+        nz = np.flatnonzero(lv > 1e-6)
+        if not len(nz):
+            return 0
+        return int(min(self.frames, np.ceil((nz[-1] + 1) / RES * self.frames_per_beat())))
 
-    def _edit_tracks(self, all_tracks):
-        return list(range(TRACKS)) if all_tracks else [self.armed - 1]
+    def _near(self, t, f):
+        """The splice on track t at frame f (within a 1/64 note), or None."""
+        tol = self.frames_per_beat() / 16
+        for s in self.splices[t]:
+            if abs(s - f) <= tol:
+                return s
+        return None
+
+    def piece(self, t, f):
+        """(start, end) of the piece of track t at frame f, or None if there's nothing there.
+
+        A piece runs from one splice to the next. The last piece ends where the audio ends."""
+        sp = self.splices[t]
+        i = bisect.bisect_right(sp, f)
+        a = sp[i - 1] if i else 0
+        b = sp[i] if i < len(sp) else self.track_end(t)
+        return (a, b) if b > a and f < b else None
+
+    def selection(self):
+        """(track index, start, end) of what LIFT and CUT would take: the piece under the playhead,
+        or, while selecting, every piece from where the selection started to the playhead."""
+        t = self.armed - 1
+        lo, hi = sorted((self.sel_anchor, self.pos)) if self.sel_anchor is not None else (self.pos, self.pos)
+        sp = self.splices[t]
+        i = bisect.bisect_right(sp, lo)
+        start = sp[i - 1] if i else 0
+        j = bisect.bisect_right(sp, hi)
+        end = sp[j] if j < len(sp) else self.track_end(t)
+        return (t, start, end) if end > start and lo < end else None
+
+    def begin_selection(self):
+        with self.lock:
+            if self.sel_anchor is None:
+                self.sel_anchor = self.pos
+
+    def end_selection(self):
+        with self.lock:
+            self.sel_anchor = None
 
     def _changed(self, t, a, b):
         self._update_levels(t, a, b, reset=True)
         self.dirty.add(t)
 
-    def copy(self, all_tracks=False):
-        """Copy the region of the track(s) into the clipboard. Returns its length in beats."""
+    def _splices_changed(self, t, entries):
+        entries.append(("splices", t, list(self.splices[t])))
+        self.dirty.add(-1)
+
+    def splice(self, all_tracks=False):
+        """Cut the tape at the playhead, or take away the splice that's there. Returns "added", "removed" or None."""
         with self.lock:
-            a, b = self.edit_region()
-            ts = self._edit_tracks(all_tracks)
-            self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
+            f = int(self.pos)
+            t0 = self.armed - 1
+            ts = list(range(TRACKS)) if all_tracks else [t0]
+            remove = self._near(t0, f) is not None
+            if not remove and (f <= 0 or f >= self.frames):
+                return None
+            entries = []
+            for t in ts:
+                self._splices_changed(t, entries)
+                s = self._near(t, f)
+                if remove and s is not None:
+                    self.splices[t].remove(s)
+                elif not remove and s is None:
+                    bisect.insort(self.splices[t], f)
+            self._push_undo(entries)
+            return "removed" if remove else "added"
+
+    def copy(self):
+        """Copy the selected piece(s) to the clipboard as one piece. Returns its length in beats, or None."""
+        with self.lock:
+            sel = self.selection()
+            self.sel_anchor = None
+            if not sel:
+                return None
+            t, a, b = sel
+            self.clip = self.tracks[t][a:b].copy()
+            self.sel_anchor = None
             return (b - a) / self.frames_per_beat()
 
-    def cut(self, all_tracks=False):
-        """Move the region of the track(s) into the clipboard, leaving silence. Returns its length in beats."""
+    def cut(self):
+        """Take the selected piece(s) off the tape onto the clipboard, leaving a gap (silence).
+        Several pieces become one: the splices between them go. Returns the length in beats, or None."""
         with self.lock:
-            a, b = self.edit_region()
-            ts = self._edit_tracks(all_tracks)
-            self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
-            self._push_undo([(t, a, self.tracks[t][a:b].copy()) for t in ts])
-            for t in ts:
-                self.tracks[t][a:b] = 0
-                self._changed(t, a, b)
+            sel = self.selection()
+            self.sel_anchor = None
+            if not sel:
+                return None
+            t, a, b = sel
+            self.clip = self.tracks[t][a:b].copy()
+            entries = [(t, a, self.tracks[t][a:b].copy())]
+            self._splices_changed(t, entries)
+            self.splices[t] = [s for s in self.splices[t] if not a < s < b]
+            if b < self.track_end(t) and b not in self.splices[t]:
+                bisect.insort(self.splices[t], b)       # keep the gap as its own piece
+            if a > 0 and a not in self.splices[t]:
+                bisect.insort(self.splices[t], a)
+            self.tracks[t][a:b] = 0
+            self._changed(t, a, b)
+            self._push_undo(entries)
+            self.sel_anchor = None
             return (b - a) / self.frames_per_beat()
 
     def drop(self, insert=False):
-        """Put the clipboard down at the playhead, replacing what's there (insert=True: push the rest later)."""
+        """Put the clipboard down on the armed track at the playhead, as one piece with splices at both ends.
+        insert=False replaces what's there; insert=True pushes the rest of the track later."""
         with self.lock:
-            if not self.clip:
+            if self.clip is None:
                 return False
-            a = self.pos
+            t, a = self.armed - 1, int(self.pos)
+            x = self.clip
+            n = min(len(x), self.frames - a)
+            if n <= 0:
+                return False
             entries = []
-            for key, x in self.clip.items():
-                t = (self.armed - 1) if key is None else key
-                n = min(len(x), self.frames - a)
-                if n <= 0:
-                    continue
-                if insert:
-                    entries.append((t, a, self.tracks[t][a:].copy()))
-                    tail = self.tracks[t][a:self.frames - n].copy()
-                    self.tracks[t][a + n:] = tail
-                    self.tracks[t][a:a + n] = x[:n]
-                    self._changed(t, a, self.frames)
-                else:
-                    entries.append((t, a, self.tracks[t][a:a + n].copy()))
-                    self.tracks[t][a:a + n] = x[:n]
-                    self._changed(t, a, a + n)
+            self._splices_changed(t, entries)
+            sp = self.splices[t]
+            if insert:
+                entries.append((t, a, self.tracks[t][a:].copy()))
+                tail = self.tracks[t][a:self.frames - n].copy()
+                self.tracks[t][a + n:] = tail
+                self.tracks[t][a:a + n] = x[:n]
+                sp = [s if s <= a else s + n for s in sp]
+                self._changed(t, a, self.frames)
+            else:
+                entries.append((t, a, self.tracks[t][a:a + n].copy()))
+                self.tracks[t][a:a + n] = x[:n]
+                sp = [s for s in sp if not a < s < a + n]
+                self._changed(t, a, a + n)
+            for s in (a, a + n):
+                if 0 < s < self.frames and s not in sp:
+                    sp.append(s)
+            self.splices[t] = sorted(s for s in sp if 0 < s < self.frames)
             self._push_undo(entries)
             return True
-
-    def splice(self, all_tracks=False):
-        """Remove the region and close the gap: everything after it moves earlier. The region goes to the clipboard."""
-        with self.lock:
-            a, b = self.edit_region()
-            ts = self._edit_tracks(all_tracks)
-            self.clip = {t if all_tracks else None: self.tracks[t][a:b].copy() for t in ts}
-            self._push_undo([(t, a, self.tracks[t][a:].copy()) for t in ts])
-            for t in ts:
-                tail = self.tracks[t][b:].copy()
-                self.tracks[t][a:a + len(tail)] = tail
-                self.tracks[t][a + len(tail):] = 0
-                self._changed(t, a, self.frames)
 
     def _push_undo(self, entries):
         if entries:
@@ -527,7 +602,12 @@ class Engine:
                 self.undo_stack.pop()               # a recording pass that recorded nothing
             if not self.undo_stack or self.recording:
                 return False
-            for t, a, old in reversed(self.undo_stack.pop()):
+            for item in reversed(self.undo_stack.pop()):
+                if item[0] == "splices":
+                    self.splices[item[1]] = item[2]
+                    self.dirty.add(-1)
+                    continue
+                t, a, old = item
                 self.tracks[t][a:a + len(old)] = old
                 self._changed(t, a, a + len(old))
             return True

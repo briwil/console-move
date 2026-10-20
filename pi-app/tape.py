@@ -34,6 +34,9 @@ LOOP_FILL = (30, 36, 52)
 LOOP_FILL_OFF = (24, 26, 31)
 LOOP_MARK = (79, 140, 255)
 LOOP_MARK_OFF = (70, 76, 88)
+PIECE_FILL = (40, 44, 54)          # the piece under the playhead on the armed track: what LIFT / CUT would take
+SELECT_FILL = (52, 66, 98)         # while selecting several pieces
+SPLICE = (226, 229, 235)
 
 # how much of each sample track has something on it, in bars
 SAMPLE_FILL = [64, 48, 40, 64, 12, 56, 32, 0]
@@ -175,6 +178,12 @@ class Tape:
             lx0, lx1 = max(x0, loop[0]), min(x0 + w, loop[1])
             if lx1 > lx0:
                 pygame.draw.rect(surf, LOOP_FILL if loop[2] else LOOP_FILL_OFF, (lx0, y0, lx1 - lx0, h))
+        sel = self.selection_x(it)
+        if sel:
+            sx0, sx1, selecting = sel
+            sx0, sx1 = max(x0, sx0), min(x0 + w, sx1)
+            if sx1 > sx0:
+                pygame.draw.rect(surf, SELECT_FILL if selecting else PIECE_FILL, (sx0, y0, sx1 - sx0, h))
         colours = {"bar": BAR_LINE, "beat": BEAT_LINE, "grid": GRID_LINE}
         for x, kind in self.lines(x0, x0 + w):
             pygame.draw.line(surf, colours[kind], (x, y0 + 2), (x, y0 + h - 3), 1)
@@ -198,6 +207,22 @@ class Tape:
             a = self.shape(a)
             bh = max(1, round(a * (it["h"] - 2)))
             surf.fill(col, (px, round(cy - bh / 2), 2, bh))
+        self.draw_splices(surf, it, track)
+
+    def draw_splices(self, surf, it, track):
+        """A splice: a white line across the lane with a small notch at the top and bottom, like cut tape."""
+        e = self.engine
+        if not e:
+            return
+        fpb = e.frames_per_beat()
+        lane = self.s.get("track%d_lane" % track) or it
+        y0, y1 = lane["y"], lane["y"] + lane["h"] - 1
+        for f in e.splices[track - 1]:
+            x = round(self.x_of(f / fpb))
+            if it["x"] - 4 <= x <= it["x"] + it["w"] + 4:
+                pygame.draw.line(surf, SPLICE, (x, y0 + 1), (x, y1 - 1), 1)
+                pygame.draw.polygon(surf, SPLICE, [(x - 3, y0), (x + 3, y0), (x, y0 + 4)])
+                pygame.draw.polygon(surf, SPLICE, [(x - 3, y1), (x + 3, y1), (x, y1 - 4)])
 
     def draw_ruler(self, surf, it):
         self.s.draw_default(surf, it)
@@ -227,6 +252,17 @@ class Tape:
             for x in (loop[0], loop[1]):
                 if it["x"] <= x <= it["x"] + it["w"]:
                     pygame.draw.line(surf, col, (x, it["y"]), (x, y_bottom - 1), 2)
+
+    def selection_x(self, it):
+        """(x start, x end, selecting) of the selected piece(s) when `it` is the armed track's lane, or None."""
+        e = self.engine
+        if not e or it["name"] != "track%d_lane" % e.armed or e.recording:
+            return None
+        sel = e.selection()
+        if not sel:
+            return None
+        fpb = e.frames_per_beat()
+        return round(self.x_of(sel[1] / fpb)), round(self.x_of(sel[2] / fpb)), e.sel_anchor is not None
 
     def loop_x(self):
         """(x start, x end, on) of the loop on screen, or None."""

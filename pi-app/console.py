@@ -40,8 +40,8 @@ CHAR_ACTIONS = {
     "g": "GRID", "G": "GRID", "+": "ZOOM_IN", "=": "ZOOM_IN", "-": "ZOOM_OUT", "_": "ZOOM_OUT",
     "[": "BAR_LEFT", "]": "BAR_RIGHT", "i": "INPUT", "I": "INPUT", "e": "EXPORT", "E": "EXPORT",
     "l": "LOOP", "L": "LOOP", "{": "LOOP_IN", "}": "LOOP_OUT", "k": "CLEAR_REGION", "K": "CLEAR_REGION",
-    "c": "COPY", "C": "COPY_ALL", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT_ALL",
-    "s": "SPLICE", "S": "SPLICE_ALL", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
+    "c": "COPY", "C": "COPY", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT",
+    "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME",
 }
@@ -98,10 +98,11 @@ BOARD_KEYS = ["INPUT", "MIDI", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
               "LOOP", "IMPORT", "EXPORT", "RECORD", "SHIFT", "PLAY", "LEFT", "RIGHT"] + \
              ["TRACK%d" % n for n in range(1, 9)]
 BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
-WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "COPY_ALL",
+WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "SELECT",
               "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "RECORD": "REC_MODE",
               "LOOP": "CLEAR_REGION", "INPUT": "INPUT", "EXPORT": "EXPORT"}
 # knob pushes: notes 32-42 = ENC1-ENC11
+HOLD_KEYS = ("COPY", "CUT")            # hold one and move to take several pieces; let go to copy / cut
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
 
 
@@ -111,6 +112,7 @@ class Board:
     def __init__(self, q):
         self.q = q
         self.shift = False
+        self.held = set()                  # hold keys pressed without SHIFT, waiting for their release
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -118,6 +120,14 @@ class Board:
                 name = BOARD_KEYS[number]
                 if name == "SHIFT":
                     self.shift = bool(value)
+                    return
+                if name in HOLD_KEYS and (not value or not self.shift):
+                    if value:
+                        self.held.add(name)
+                        self.q.put(("HOLD", name))
+                    elif name in self.held:
+                        self.held.discard(name)
+                        self.q.put(("RELEASE", name))
                     return
                 if not value:
                     return
@@ -151,6 +161,7 @@ class Transport:
         self._armed = 4
         self.message = ""
         self.message_until = 0.0
+        self.holding = None                # the hold key (LIFT or CUT) being held, if any
         self._bpm_seen = None
         self._bpm_since = 0.0
         self.tab_colours = {n: (screen.get("track%d_tab" % n) or {}).get("c") for n in range(1, 9)}
@@ -215,7 +226,12 @@ class Transport:
 
     def key(self, name):
         if isinstance(name, tuple):
-            self.knob(*name[1:])
+            if name[0] == "KNOB":
+                self.knob(*name[1:])
+            elif name[0] == "HOLD":
+                self.hold(name[1])
+            elif name[0] == "RELEASE":
+                self.release(name[1])
             self.update_screen()
             return
         t, e = self.tape, self.engine
@@ -314,6 +330,19 @@ class Transport:
         muted = self.engine.toggle_mute(track)
         self.say("TRACK %d %s" % (track, "MUTED" if muted else "ON"), 2)
 
+    def hold(self, name):
+        """LIFT or CUT pressed on the board: start selecting from the piece under the playhead."""
+        if self.engine and not self.recording:
+            self.engine.begin_selection()
+            self.holding = name
+            self.say("MOVE TO TAKE MORE PIECES, LET GO TO %s" % ("COPY" if name == "COPY" else "CUT"), 30)
+
+    def release(self, name):
+        if self.holding == name:
+            self.holding = None
+            self.message_until = 0
+            self.edit(name)
+
     def edit(self, name):
         e = self.engine
         if not e:
@@ -339,23 +368,31 @@ class Transport:
         if self.recording:
             self.say("STOP RECORDING FIRST")
             return
-        where = "IN/OUT" if e.loop_region() else "THIS BAR"
-        which = lambda all_: "ALL TRACKS" if all_ else "TRACK %d" % self.armed
-        if name in ("COPY", "COPY_ALL"):
-            e.copy(name == "COPY_ALL")
-            self.say("COPIED %s OF %s" % (where, which(name == "COPY_ALL")))
-        elif name in ("CUT", "CUT_ALL"):
-            e.cut(name == "CUT_ALL")
-            self.say("CUT %s OF %s" % (where, which(name == "CUT_ALL")))
-        elif name in ("DROP", "DROP_INSERT"):
-            target = "ALL TRACKS" if (e.clip and None not in e.clip) else "TRACK %d" % self.armed
-            if e.drop(insert=name == "DROP_INSERT"):
-                self.say("PASTED ON %s AT %s%s" % (target, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
+        if name == "SELECT":
+            if e.sel_anchor is None:
+                e.begin_selection()
+                self.say("SELECTING: MOVE TO TAKE MORE PIECES, THEN COPY OR CUT", 30)
             else:
-                self.say("NOTHING TO PASTE: CUT OR COPY SOMETHING FIRST")
+                e.end_selection()
+                self.say("SELECTION CANCELLED", 2)
+        elif name == "COPY":
+            beats = e.copy()
+            self.say("COPIED %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
+                     else "NOTHING HERE TO COPY")
+        elif name == "CUT":
+            beats = e.cut()
+            self.say("CUT %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
+                     else "NOTHING HERE TO CUT")
+        elif name in ("DROP", "DROP_INSERT"):
+            if e.drop(insert=name == "DROP_INSERT"):
+                self.say("DROPPED ON TRACK %d AT %s%s" % (self.armed, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
+            else:
+                self.say("NOTHING TO DROP: CUT OR COPY SOMETHING FIRST")
         elif name in ("SPLICE", "SPLICE_ALL"):
-            e.splice(name == "SPLICE_ALL")
-            self.say("SPLICED OUT %s OF %s" % (where, which(name == "SPLICE_ALL")))
+            done = e.splice(name == "SPLICE_ALL")
+            where = "ALL TRACKS" if name == "SPLICE_ALL" else "TRACK %d" % self.armed
+            self.say("SPLICED %s AT %s" % (where, pos) if done == "added"
+                     else "SPLICE TAKEN AWAY FROM %s" % where if done == "removed" else "CAN'T SPLICE HERE", 2)
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
 
@@ -415,12 +452,17 @@ class Transport:
         r = e.loop_region()
         fpb = e.frames_per_beat()
         inout = ("IN %s  OUT %s" % (self.position_text(r[0] / fpb), self.position_text(r[1] / fpb))) if r else "NO IN/OUT POINTS"
-        if e.clip:
-            beats = len(next(iter(e.clip.values()))) / fpb
-            clip = "CLIPBOARD %s BEATS%s" % (("%g" % round(beats, 2)), "  ALL TRACKS" if None not in e.clip else "")
+        if e.clip is not None:
+            clip = "CLIPBOARD %s" % self.beats_text(len(e.clip) / fpb)
         else:
             clip = "CLIPBOARD EMPTY"
         return [vol, mode, inout, clip]
+
+    def beats_text(self, beats):
+        if beats >= 4 and abs(beats / 4 - round(beats / 4)) < 0.01:
+            bars = round(beats / 4)
+            return "%d BAR%s" % (bars, "" if bars == 1 else "S")
+        return "%g BEAT%s" % (round(beats, 2), "" if abs(beats - 1) < 0.01 else "S")
 
     def position_text(self, beats):
         b = int(beats)
@@ -446,8 +488,9 @@ class Transport:
         ready = bool(e and e.rec_ready)
         state = "RECORDING" if self.recording else "REC READY" if ready else "PLAYING" if self.playing else "STOPPED"
         overdub = bool(e and e.rec_mode == "overdub")
-        s.set("status", t="%s  %s%s" % (state, "ALL TRACKS" if all_in else "TRACK %d" % self.armed,
-                                        "  OVERDUB" if overdub else ""))
+        selecting = bool(e and e.sel_anchor is not None)
+        s.set("status", t="%s  %s%s%s" % (state, "ALL TRACKS" if all_in else "TRACK %d" % self.armed,
+                                          "  OVERDUB" if overdub else "", "  SELECTING" if selecting else ""))
         if self.focus.active:
             self.focus.info["lines"] = self.panel_lines()
         red = "#FF5A4E" if (self.recording or ready) else "#7D838C"

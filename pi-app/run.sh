@@ -10,4 +10,15 @@ if [ -S "$RUNDIR/wayland-0" ]; then
 else
   export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 fi
-exec python3 console.py "$@"
+
+# The copy that starts at boot has the screen: pause it while this one runs, and start it again afterwards.
+RESTART=0
+if systemctl is-active --quiet console 2>/dev/null; then
+  echo "Stopping the copy of Console that started at boot (it may ask for your password)..."
+  sudo systemctl stop console && RESTART=1
+fi
+python3 console.py "$@"
+if [ "$RESTART" = 1 ]; then
+  echo "Starting the boot copy of Console again..."
+  sudo systemctl start console
+fi

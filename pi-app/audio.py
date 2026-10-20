@@ -200,6 +200,7 @@ class Engine:
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
         self.latency = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1)))
         self.clip = None                        # audio on the clipboard (one piece), for DROP
+        self.last_edit = None                   # (start, end) in frames of the last lift, cut or drop
         # the boxes on each track: [start, end, colour] in frames, sorted, never overlapping.
         # Recording makes a box; SPLICE splits one; CUT takes boxes away and leaves an empty space.
         self.regions = [[] for _ in range(TRACKS)]
@@ -721,6 +722,7 @@ class Engine:
                 return None
             t, a, b = sel
             self.clip = self.tracks[t][a:b].copy()
+            self.last_edit = (a, b)
             return (b - a) / self.frames_per_beat()
 
     def cut(self):
@@ -733,6 +735,7 @@ class Engine:
                 return None
             t, a, b = sel
             self.clip = self.tracks[t][a:b].copy()
+            self.last_edit = (a, b)
             entries = [(t, a, self.tracks[t][a:b].copy())]
             self._regions_changed(t, entries)
             self._carve(t, a, b)
@@ -775,6 +778,7 @@ class Engine:
                 self.tracks[t][a:a + n] = x[:n]
                 self._changed(t, a, a + n)
             self._add_region(t, a, a + n)
+            self.last_edit = (a, a + n)
             self._push_undo(entries)
             return True
 

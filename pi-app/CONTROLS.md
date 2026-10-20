@@ -84,6 +84,8 @@ like a region in a DAW. Empty tape has no boxes.
   on the board), press `A`, move, then `C` or `X`. They're lifted as one
   piece, including any empty space between them.
 - **CUT** leaves an empty space. The boxes either side stay as they are.
+- After LIFT or CUT the playhead glides to where the box started; after DROP,
+  to where the new box ends (ready to drop the next one after it).
 - **DROP** puts the clipboard on the selected track at the playhead as a
   new box, covering what's there. SHIFT+DROP inserts it instead, pushing the
   rest of the track later (splitting a box it lands in the middle of).

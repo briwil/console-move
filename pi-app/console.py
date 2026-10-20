@@ -181,6 +181,7 @@ class Transport:
         self.holding = None                # the hold key (LIFT or CUT) being held, if any
         self.bounce_pending = None         # (sources, dest) after the first BOUNCE press
         self._dirty_since = None
+        self.glide = None                  # (from beat, to beat, seconds so far): the playhead easing somewhere
         self._bpm_seen = None
         self._bpm_since = 0.0
         self.tab_colours = {n: (screen.get("track%d_tab" % n) or {}).get("c") for n in range(1, 9)}
@@ -256,6 +257,8 @@ class Transport:
         t, e = self.tape, self.engine
         if name != "BOUNCE":
             self.bounce_pending = None
+        if not isinstance(name, tuple) or name[0] == "KNOB":
+            self.glide = None                     # any other control stops the playhead gliding
         if name == "PLAY":
             if self.playing:
                 self.stop()
@@ -413,14 +416,19 @@ class Transport:
                 self.say("SELECTION CANCELLED", 2)
         elif name == "COPY":
             beats = e.copy()
+            if beats:
+                self.glide_to_edit(0)
             self.say("COPIED %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
                      else "NOTHING HERE TO COPY")
         elif name == "CUT":
             beats = e.cut()
+            if beats:
+                self.glide_to_edit(0)
             self.say("CUT %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
                      else "NOTHING HERE TO CUT")
         elif name in ("DROP", "DROP_INSERT"):
             if e.drop(insert=name == "DROP_INSERT"):
+                self.glide_to_edit(1)
                 self.say("DROPPED ON TRACK %d AT %s%s" % (self.armed, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
             else:
                 self.say("NOTHING TO DROP: CUT OR COPY SOMETHING FIRST")
@@ -456,6 +464,7 @@ class Transport:
     def tick(self, seconds):
         t, e = self.tape, self.engine
         if e:
+            self.update_glide(seconds)
             was = self._playing
             t.pos = e.beats()
             self._playing = e.playing
@@ -473,6 +482,30 @@ class Transport:
                 t.record(self.armed, start, t.pos)
         self.focus.update(seconds, self.playing)
         self.update_screen()
+
+    def glide_to_edit(self, which):
+        """Ease the playhead to the start (0) or end (1) of the box just lifted, cut or dropped."""
+        e = self.engine
+        if not e.last_edit or self.playing:
+            return
+        to = e.last_edit[which] / e.frames_per_beat()
+        here = e.beats()
+        if abs(to - here) > 1e-6:
+            self.glide = (here, to, 0.0)
+
+    def update_glide(self, seconds):
+        if not self.glide:
+            return
+        if self.playing:
+            self.glide = None
+            return
+        a, b, done = self.glide
+        length = min(0.9, 0.3 + 0.04 * abs(b - a) ** 0.5)          # longer moves take a little longer
+        done += seconds
+        f = min(1.0, done / length)
+        f = f * f * (3 - 2 * f)                                       # ease in and out
+        self.engine.set_beats(a + (b - a) * f)
+        self.glide = None if done >= length else (a, b, done)
 
     def autosave(self):
         """While stopped, write changes to the song's files a moment after the last edit."""

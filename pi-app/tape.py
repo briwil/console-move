@@ -30,6 +30,10 @@ GRID_LINE = (29, 32, 38)
 BEFORE_START = (14, 15, 18)
 RULER_TEXT = (125, 131, 140)
 RULER_NOW = (242, 243, 245)
+LOOP_FILL = (30, 36, 52)
+LOOP_FILL_OFF = (24, 26, 31)
+LOOP_MARK = (79, 140, 255)
+LOOP_MARK_OFF = (70, 76, 88)
 
 # how much of each sample track has something on it, in bars
 SAMPLE_FILL = [64, 48, 40, 64, 12, 56, 32, 0]
@@ -76,6 +80,10 @@ class Tape:
     # ------------------------------------------------------------ settings
 
     @property
+    def total_beats(self):
+        return self.engine.tape_beats if self.engine else TAPE_BEATS
+
+    @property
     def ppb(self):
         """Pixels per beat at the current zoom."""
         lane = self.s.get("track1_wave")
@@ -105,7 +113,7 @@ class Tape:
         n = math.floor(self.pos / size + 1e-6) + steps
         if steps < 0 and abs(self.pos / size - round(self.pos / size)) > 1e-6:
             n += 1          # first step back only goes to the line just behind
-        self.pos = min(max(0.0, n * size), TAPE_BEATS)
+        self.pos = min(max(0.0, n * size), self.total_beats)
 
     # ------------------------------------------------------------ recording (made-up input for now)
 
@@ -122,7 +130,7 @@ class Tape:
             lv[i] = max(self._rec_env * (.5 + random.random() * .5), .04)
 
     def level_at(self, track, beat):
-        if beat < 0 or beat >= TAPE_BEATS:
+        if beat < 0 or beat >= self.total_beats:
             return 0.0
         return self.shape(float(self.levels[track - 1][int(beat * RES)]))
 
@@ -143,7 +151,7 @@ class Tape:
         ppb = self.ppb
         step = self.step if self.step * ppb >= 5 else 1 if ppb >= 5 else BEATS_PER_BAR
         b0 = max(0.0, self.beat_of(x0))
-        b1 = min(float(TAPE_BEATS), self.beat_of(x1))
+        b1 = min(float(self.total_beats), self.beat_of(x1))
         k = math.ceil(b0 / step - 1e-9)
         while k * step <= b1 + 1e-9:
             beat = k * step
@@ -162,6 +170,11 @@ class Tape:
         start = round(self.x_of(0))
         if start > x0:
             pygame.draw.rect(surf, BEFORE_START, (x0, y0, start - x0, h), 0, it.get("r", 0))
+        loop = self.loop_x()
+        if loop:
+            lx0, lx1 = max(x0, loop[0]), min(x0 + w, loop[1])
+            if lx1 > lx0:
+                pygame.draw.rect(surf, LOOP_FILL if loop[2] else LOOP_FILL_OFF, (lx0, y0, lx1 - lx0, h))
         colours = {"bar": BAR_LINE, "beat": BEAT_LINE, "grid": GRID_LINE}
         for x, kind in self.lines(x0, x0 + w):
             pygame.draw.line(surf, colours[kind], (x, y0 + 2), (x, y0 + h - 3), 1)
@@ -176,7 +189,7 @@ class Tape:
         span = max(1, int(3 / ppb * RES))          # level values covered by one 3-pixel column
         for px in range(it["x"], it["x"] + it["w"] - 1, 3):
             beat = self.beat_of(px + 1)
-            if beat < 0 or beat >= TAPE_BEATS:
+            if beat < 0 or beat >= self.total_beats:
                 continue
             i = int(beat * RES)
             a = float(lv[i:i + span].max()) if span > 1 else float(lv[i])
@@ -198,10 +211,27 @@ class Tape:
             if kind == "bar":
                 bar = round(self.beat_of(x) / BEATS_PER_BAR)
                 pygame.draw.line(surf, BAR_LINE, (x, y_bottom - 5), (x, y_bottom - 1), 1)
-                if bar % every == 0 and bar < TAPE_BARS:
+                if bar % every == 0 and bar < self.total_beats / BEATS_PER_BAR:
                     col = RULER_NOW if bar == now_bar else RULER_TEXT
                     img = font.render(str(bar + 1), True, col)
                     if x + 3 + img.get_width() <= it["x"] + it["w"]:
                         surf.blit(img, (x + 3, it["y"]))
             elif kind == "beat":
                 pygame.draw.line(surf, BEAT_LINE, (x, y_bottom - 3), (x, y_bottom - 1), 1)
+        loop = self.loop_x()
+        if loop:
+            col = LOOP_MARK if loop[2] else LOOP_MARK_OFF
+            lx0, lx1 = max(it["x"], loop[0]), min(it["x"] + it["w"], loop[1])
+            if lx1 > lx0:
+                pygame.draw.rect(surf, col, (lx0, y_bottom - 3, lx1 - lx0, 3))
+            for x in (loop[0], loop[1]):
+                if it["x"] <= x <= it["x"] + it["w"]:
+                    pygame.draw.line(surf, col, (x, it["y"]), (x, y_bottom - 1), 2)
+
+    def loop_x(self):
+        """(x start, x end, on) of the loop on screen, or None."""
+        e = self.engine
+        if not e or not e.loop_region():
+            return None
+        fpb = e.frames_per_beat()
+        return round(self.x_of(e.loop_a / fpb)), round(self.x_of(e.loop_b / fpb)), e.loop_on

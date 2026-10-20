@@ -1,25 +1,30 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.3** records real audio.
+The recorder that runs on the Raspberry Pi. **Version 0.4.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
 - Records from a USB audio device. An OP-XY in its 8-channel USB mode records
   all 8 tracks at once (input 1 to track 1, and so on). A stereo device, like a
-  UCA202, records its inputs mixed together onto the armed track. Press I to
-  switch between the two.
+  UCA202, records its inputs mixed together onto the armed track.
 - Plays the tape back out of the same device (on the OP-XY, through its
-  headphone jack).
+  headphone jack), with a volume and mute for each track.
+- Follows the OP-XY's tempo and play/stop over USB MIDI, and can wait for the
+  OP-XY's play to start recording.
+- Editing: loop, lift, drop, cut, splice, and undo (the last 8 changes).
+- Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/Song 1/`
-  (`track1.wav`…`track8.wav`, 24-bit), and loads it again at start-up.
-- E exports stems (every track with audio, all the same length so they line
-  up in a DAW) plus a stereo mix to `~/console-data/exports/`. Grab them from the
-  file page at console.local.
+  (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,
+  volumes, mutes and loop), and loads it again at start-up.
+- Exports stems (every track with audio, all the same length so they line up
+  in a DAW) plus a stereo mix to `~/console-data/exports/`.
 
-Tracks are mono, the tape is 64 bars at 120 BPM (about 2 minutes), and the
-OP-XY runs at 44.1 kHz. Without an audio device the app still runs and says
-NO AUDIO DEVICE; plug one in and it connects within a couple of seconds.
-`run.sh --demo` shows made-up waveforms instead.
+**All the controls are in [CONTROLS.md](CONTROLS.md).**
+
+Tracks are mono and the tape is 5 minutes long (change it with
+`"tape_seconds"` in `~/console-data/settings.json`). Without an audio device
+the app still runs and says NO AUDIO DEVICE; plug one in and it connects
+within a couple of seconds. `run.sh --demo` shows made-up waveforms instead.
 
 ## Recording timing
 
@@ -45,21 +50,8 @@ pi-app/setup.sh
 ```
 
 When you run it over SSH while the desktop is up, the app opens full screen on
-the Pi's display. Keys you type in the SSH window control it, and so does a
-keyboard plugged into the Pi:
-
-| Key | Does |
-|---|---|
-| 1–8 | Arm that track for recording |
-| Space | Play / stop |
-| R | Record on / off (also starts playing) |
-| ← / → | Move back / forward one grid step |
-| [ / ] or Shift+← / → | Move back / forward one bar |
-| G | Change the grid: 1/4, 1/8, 1/16, 1/32 |
-| + / − | Zoom in / out (16, 8, 4, 2 or 1 bars across the screen) |
-| I | Input: all inputs to tracks 1–8, or inputs mixed onto the armed track |
-| E | Export stems and a stereo mix |
-| Q | Quit (ignored when it starts at boot) |
+the Pi's display. Keys you type in the SSH window control it (see
+[CONTROLS.md](CONTROLS.md)); Q quits.
 
 ## Starting straight into the app at boot
 
@@ -131,7 +123,8 @@ If it's upside down, change the line `ExecStart=...console.py` in
 
 - `console.py` is the app: the screen, the keys and the transport (play,
   record, position).
-- `audio.py` is the audio engine: finding the device, recording, playback, saving and export.
+- `audio.py` is the audio engine: finding the device, recording, playback, loop, editing, undo, saving and export.
+- `midi.py` reads the control board and the OP-XY's MIDI clock.
 - `tape.py` is the tape: the tracks over time, the grid and zoom, and drawing the lanes, waveforms and ruler.
 - `ui.py` reads and draws layouts made with the Screen Designer
   (`tools/screen-designer.html`).

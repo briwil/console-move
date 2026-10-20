@@ -1,6 +1,6 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.8.**
+The recorder that runs on the Raspberry Pi. **Version 0.9.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
@@ -9,15 +9,16 @@ The recorder that runs on the Raspberry Pi. **Version 0.8.**
   UCA202, records its inputs mixed together onto the armed track.
 - Plays the tape back out of the same device (on the OP-XY, through its
   headphone jack), with a volume and mute for each track.
-- Follows the OP-XY's tempo and play/stop over USB MIDI, and can wait for the
-  OP-XY's play to start recording.
+- MIDI sync with the OP-XY either way round: follow its clock (and wait for its
+  play to start recording), or lead it, sending clock, start and stop.
+- Bounce tracks together onto one track, OP-1 style.
 - In/out points with punch-in recording, and REPLACE or OVERDUB record modes
   (overdub with the loop on keeps layering every time round).
 - Every recording is a coloured box on its track. Split boxes, lift (copy),
   cut and drop them, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
-- Starts on a project menu (NEW and SAVE work so far; LOAD and SETTINGS are next).
+- Starts on a project menu (NEW, SAVE and SETTINGS work; LOAD is next).
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/<song name>/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,

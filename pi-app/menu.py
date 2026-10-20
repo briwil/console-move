@@ -8,6 +8,9 @@ saved: naming works like the OP-1: the big knob picks the letter under
 the cursor, ← / → move the cursor, CUT deletes a letter. On a keyboard you can
 just type.
 
+SETTINGS: the big knob (or ↑ ↓) picks a row, ← / → (or the right-hand
+small knob) change it. SHIFT+← / → changes the tempo in small steps.
+
 The look comes from layouts/menu.ui, made with the Screen Designer.
 """
 import os
@@ -22,6 +25,7 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
+SETTINGS = ["SYNC", "TEMPO"]
 
 
 class Menu:
@@ -30,13 +34,16 @@ class Menu:
         self.transport = transport
         self.open = True
         self.choice = 2                       # LOAD, as in the design
-        self.mode = "list"                    # "list" or "name"
+        self.mode = "list"                    # "list", "name" or "settings"
+        self.row = 0                          # the settings row being changed
         self.name = []
         self.cursor = 0
         self.ys = {n: (self.s.get(n) or {}).get("y", 0) for _, n in ITEMS}
         bar = self.s.get("menu_bar")
         load = self.s.get("menu_load")
         self.bar_offset = (bar["y"] - load["y"]) if bar and load else -4
+        self.bar_w = bar["w"] if bar else 920
+        self.prompt_y = (self.s.get("prompt") or {}).get("y", 120)
         self.s.after["name_text"] = self.draw_cursor
         self.msg = ""
         self.confirm_new = False              # NEW pressed once on an unsaved song with audio
@@ -60,12 +67,16 @@ class Menu:
         if isinstance(name, tuple):
             if name[0] == "KNOB" and name[1] == 11:
                 self.turn(name[2])
+            elif name[0] == "KNOB" and name[1] == 10 and self.mode == "settings":
+                self.change(name[2], fine=name[3])
             elif name[0] == "CHAR":
                 self.char(name[1])
             self.refresh()
             return
         if self.mode == "name":
             self.name_key(name)
+        elif self.mode == "settings":
+            self.settings_key(name)
         elif name in ("LEFT", "UP", "BAR_LEFT"):
             self.turn(-1)
         elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
@@ -77,6 +88,10 @@ class Menu:
         self.refresh()
 
     def turn(self, delta):
+        if self.mode == "settings":
+            self.row = max(0, min(len(SETTINGS) - 1, self.row + delta))
+            self.msg = ""
+            return
         if self.mode == "list":
             self.choice = max(0, min(len(ITEMS) - 1, self.choice + delta))
             self.msg = ""
@@ -106,6 +121,50 @@ class Menu:
         elif name == "FILE":
             self.mode = "list"
             self.msg = ""
+
+    def settings_key(self, name):
+        if name == "UP":
+            self.turn(-1)
+        elif name == "DOWN":
+            self.turn(1)
+        elif name in ("LEFT", "RIGHT"):
+            self.change(-1 if name == "LEFT" else 1)
+        elif name in ("BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT"):     # with shift: small steps
+            self.change(-1 if name in ("BAR_LEFT", "LOOP_IN") else 1, fine=True)
+        elif name in CONFIRM:
+            if SETTINGS[self.row] == "SYNC":
+                self.change(1)
+        elif name == "FILE":
+            self.mode, self.msg = "list", ""
+
+    def change(self, delta, fine=False):
+        e = self.engine
+        if not e:
+            self.say("SETTINGS NEED THE AUDIO ENGINE")
+            return
+        what = SETTINGS[self.row]
+        if what == "SYNC":
+            e.set_sync_mode("internal" if e.sync_mode == "external" else "external")
+            self.say("CONSOLE SENDS MIDI CLOCK, START AND STOP" if e.sync_mode == "internal"
+                     else "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP")
+        elif what == "TEMPO":
+            if self.transport.synced:
+                self.say("THE TEMPO COMES FROM THE OP-XY (EXTERNAL SYNC)")
+            elif e.playing:
+                self.say("STOP FIRST TO CHANGE THE TEMPO")
+            else:
+                e.set_bpm(round(min(300.0, max(30.0, e.bpm + delta * (0.1 if fine else 1.0))), 1))
+                self.msg = ""
+
+    def setting_text(self, what):
+        e = self.engine
+        if not e:
+            return "-"
+        if what == "SYNC":
+            return "EXTERNAL  (follow the OP-XY)" if e.sync_mode == "external" else "INTERNAL  (Console leads)"
+        if what == "TEMPO":
+            return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")
+        return ""
 
     def char(self, ch):
         if self.mode != "name":
@@ -151,6 +210,8 @@ class Menu:
             else:
                 e.save(wait=True)
                 self.say("SAVED %s" % e.song.upper())
+        elif what == "SETTINGS":
+            self.mode, self.row, self.msg = "settings", 0, ""
         else:
             self.say("%s COMES NEXT" % what)
 
@@ -196,18 +257,34 @@ class Menu:
             text = {"NEW": "NEW Project", "SAVE": "SAVE Project", "LOAD": "LOAD Project", "SETTINGS": "SETTINGS"}[label]
             s.set(item, t=text if listing else "", c=ON if on else OFF, s=SIZE_ON if on else SIZE_OFF,
                   y=self.ys[item] - (2 if on else 0))
+        settings = self.mode == "settings"
+        for i in range(1, 5):
+            what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
+            on = what is not None and i - 1 == self.row
+            s.set("set_label%d" % i, t={"SYNC": "MIDI SYNC", "TEMPO": "TEMPO"}.get(what, ""), c=ON if on else OFF)
+            s.set("set_value%d" % i, t=self.setting_text(what) if what else "",
+                  c=ON if on else "#F2F3F5")
         bar = s.get("menu_bar")
         if bar:
-            item = ITEMS[self.choice][1]
-            s.set("menu_bar", y=self.ys[item] + self.bar_offset, h=bar["h"] if listing else 0)
+            if settings:
+                row = s.get("set_label%d" % (self.row + 1))
+                s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
+            else:
+                item = ITEMS[self.choice][1]
+                s.set("menu_bar", y=self.ys[item] + self.bar_offset, h=bar["h"] if listing else 0, w=self.bar_w)
         if listing:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = "TURN OR ← → TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
+            hint = "TURN OR \u2190 \u2192 TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
+        elif settings:
+            s.set("prompt", t="SETTINGS")
+            s.set("prompt", y=self.prompt_y - 40)
+            s.set("name_text", t="")
+            hint = "BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
         else:
-            s.set("prompt", t="NAME THIS PROJECT")
+            s.set("prompt", t="NAME THIS PROJECT", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
-            hint = "BIG KNOB: LETTER   ← →: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
+            hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
         s.set("menu_hint", t=hint)
         s.set("menu_msg", t=self.msg)
 

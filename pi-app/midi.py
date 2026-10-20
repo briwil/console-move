@@ -1,4 +1,8 @@
-"""MIDI in: the control board's keys and knobs, and tempo sync from an OP-XY (or anything sending MIDI clock).
+"""MIDI: the control board's keys and knobs, and tempo sync with an OP-XY (or anything else with MIDI clock).
+
+Sync works either way round (the SETTINGS menu, saved as "sync" in settings.json):
+  external  Console follows the OP-XY's clock, start and stop.
+  internal  Console leads: it sends clock, start and stop to the OP-XY.
 
 Reads ALSA raw MIDI devices (/dev/snd/midiC<card>D0) directly, so nothing extra
 needs installing. Each source runs in its own thread and keeps retrying, so
@@ -125,8 +129,13 @@ class Clock:
         span = self.ticks[-1] - self.ticks[0]
         return 60.0 / (span / (len(self.ticks) - 1) * 24) if span > 0 else None
 
+    def following(self):
+        return self.engine is not None and self.engine.sync_mode == "external"
+
     def realtime(self, b):
         now = time.monotonic()
+        if b in (0xFA, 0xFB, 0xFC) and not self.following():
+            return
         if b == 0xF8:                                # clock: 24 per beat
             if now - self.last_tick > 0.5:
                 self.ticks = []
@@ -142,10 +151,90 @@ class Clock:
             self.engine.sync_stop()
 
     def message(self, status, d1, d2):
-        if status == 0xF2:                           # song position, in 16th notes
+        if status == 0xF2 and self.following():      # song position, in 16th notes
             self.song_pos = ((d2 << 7) | d1) / 4.0
             if self.engine and not self.engine.playing:
                 self.engine.set_beats(self.song_pos)
+
+
+class ClockOut(threading.Thread):
+    """In internal sync, sends MIDI clock (24 per beat, all the time so the other device shows the tempo),
+    plus start / continue / stop as Console plays and stops."""
+
+    def __init__(self, engine, choose):
+        super().__init__(daemon=True, name="Clock out")
+        self.engine = engine
+        self.choose = choose
+        self.fd = None
+        self.connected = None
+
+    def _close(self):
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+        self.fd = self.connected = None
+
+    def _send(self, data):
+        try:
+            os.write(self.fd, bytes(data))
+            return True
+        except OSError:
+            print("Clock out: %s disconnected" % self.connected)
+            self._close()
+            return False
+
+    def run(self):
+        e = self.engine
+        was_playing = False
+        next_tick = 0.0
+        while True:
+            if e.sync_mode != "internal":
+                if self.fd is not None:
+                    if was_playing:
+                        self._send([0xFC])
+                    self._close()
+                was_playing = False
+                time.sleep(0.2)
+                continue
+            if self.fd is None:
+                idx = self.choose(midi_cards())
+                path = "/dev/snd/midiC%dD0" % idx if idx is not None else None
+                try:
+                    self.fd = os.open(path, os.O_WRONLY) if path else None
+                except OSError:
+                    self.fd = None
+                if self.fd is None:
+                    time.sleep(2)
+                    continue
+                self.connected = path
+                print("Clock out: sending to", path)
+                next_tick = time.perf_counter()
+            now = time.perf_counter()
+            playing = e.playing
+            if playing and not was_playing:
+                beats = e.beats()
+                if beats < 0.01:
+                    ok = self._send([0xFA])                       # start from the top
+                else:
+                    sixteenths = int(beats * 4) & 0x3FFF
+                    ok = self._send([0xF2, sixteenths & 0x7F, sixteenths >> 7, 0xFB])   # song position, continue
+                next_tick = now                                   # the first clock after start is beat 1
+                was_playing = playing
+                if not ok:
+                    continue
+            elif was_playing and not playing:
+                was_playing = False
+                if not self._send([0xFC]):
+                    continue
+            if now >= next_tick:
+                if not self._send([0xF8]):
+                    continue
+                next_tick += 60.0 / (max(20.0, e.bpm) * 24)
+                if now - next_tick > 0.1:                         # fell behind (busy system): don't rush to catch up
+                    next_tick = now
+            time.sleep(max(0.0, min(0.002, next_tick - time.perf_counter())))
 
 
 def start(on_control, engine, clock_name=None):
@@ -185,4 +274,6 @@ def start(on_control, engine, clock_name=None):
     clk = Source(pick_clock, clock.message, clock.realtime, label="Clock")
     ctl.start()
     clk.start()
+    if engine:
+        ClockOut(engine, pick_clock).start()
     return ctl, clk, clock

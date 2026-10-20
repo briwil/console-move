@@ -21,9 +21,21 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
   deletes a letter. On a keyboard just type, with Backspace and Enter.
   (The app also saves by itself whenever you stop; an untitled song is kept
   in `~/console-data/unsaved` until you name it.)
-- **LOAD, SETTINGS:** coming next.
+- **SETTINGS:** the big knob (or ↑ ↓) picks a row, ← / → (or the right-hand
+  small knob) change it.
+  - **MIDI SYNC — EXTERNAL:** Console follows the OP-XY's clock, start and
+    stop (see "Syncing with the OP-XY" below).
+  - **MIDI SYNC — INTERNAL:** Console leads. It sends MIDI clock to the OP-XY
+    all the time (so it takes Console's tempo), and start / stop when you
+    play and stop Console. The top right shows LEAD.
+  - **TEMPO:** the song's tempo (SHIFT+← / → for 0.1 steps). In external
+    sync it comes from the OP-XY.
+- **LOAD:** coming next.
 
-Console opens whichever project you used last.
+Console opens whichever project you used last. Every change is written to
+the song's files (`projects/<song>/track1.wav`…) a moment after you make it,
+so they're always up to date. EXPORT is for a separate copy (stems + a
+stereo mix) in the Exports folder.
 
 ## Keys on the board
 
@@ -37,7 +49,7 @@ Console opens whichever project you used last.
 | LIFT | Copy the box under the playhead onto the clipboard. Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
 | DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest of the track later |
 | LOOP | Loop on / off (the first time, loops 4 bars from the current bar) | Clear the in/out points |
-| EXPORT | Export stems and a stereo mix to Exports | |
+| EXPORT | Export stems and a stereo mix to Exports | Bounce: the armed tracks onto the selected track (press twice) |
 | RECORD | Record on / off. When the OP-XY's clock is coming in and the tape is stopped: get ready, and recording starts when you press play on the OP-XY | Switch between REPLACE and OVERDUB |
 | SHIFT | Hold for the second column | |
 | PLAY | Play / stop | Back to the start (or the IN point) |
@@ -81,6 +93,18 @@ like a region in a DAW. Empty tape has no boxes.
 
 The boxes are only how the tape is divided up; what you hear is the audio on
 the track. EXPORT writes each track as a plain WAV.
+
+## Bouncing tracks together
+
+Like on the OP-1: mix tracks down onto one track to free the others.
+
+1. Select the track to bounce onto (e.g. press 2).
+2. Arm the tracks to bounce into it with SHIFT+track (e.g. SHIFT+1).
+3. Press SHIFT+EXPORT (B on a keyboard). It asks first; press it again.
+
+The tracks are mixed as you hear them (at their volumes) onto the selected
+track, whose volume goes to 100% so it sounds the same, and the other tracks
+are emptied. SHIFT+CUT undoes it. Stop first; it doesn't work while playing.
 
 ## In / out points, replace and overdub
 
@@ -141,6 +165,7 @@ key to zoom to that one instead.
 | A | Start / stop selecting several boxes |
 | V / Shift+V | Drop (replace / insert) |
 | U | Undo |
+| B | Bounce the armed tracks onto the selected track (press twice) |
 | M | Mute the armed track |
 | 9 / 0 | Armed track volume down / up |
 | Tab or Esc | Project menu |
@@ -148,7 +173,7 @@ key to zoom to that one instead.
 
 ## Syncing with the OP-XY
 
-Console follows the MIDI clock from the first other MIDI device it finds (the
+This is EXTERNAL sync (the default; change it in SETTINGS). Console follows the MIDI clock from the first other MIDI device it finds (the
 OP-XY), so turn on the OP-XY's USB MIDI clock output. Then:
 
 - When the OP-XY is stopped, Console takes its tempo (the top right shows

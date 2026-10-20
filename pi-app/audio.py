@@ -238,6 +238,14 @@ class Engine:
         except OSError as e:
             print("Couldn't save settings:", e)
 
+    @property
+    def sync_mode(self):
+        """"external": follow the OP-XY's MIDI clock. "internal": Console leads and sends clock to it."""
+        return "internal" if self.settings.get("sync") == "internal" else "external"
+
+    def set_sync_mode(self, mode):
+        self.remember("sync", mode)
+
     def song_exists(self, name):
         return os.path.exists(os.path.join(DATA, "projects", name))
 
@@ -770,6 +778,44 @@ class Engine:
             self._push_undo(entries)
             return True
 
+    def bounce(self, sources, dest):
+        """Mix tracks (0-7) down onto track dest, as you hear them (at their volumes), and empty the
+        others. dest's volume goes to 100% so it sounds the same. Returns the length in beats, or None."""
+        with self.lock:
+            if self.playing or self.recording:
+                return None
+            ts = sorted(set(sources) | {dest})
+            end = max(self.track_end(t) for t in ts)
+            if len(ts) < 2 or not end:
+                return None
+            entries = []
+            for t in ts:
+                entries.append(("volume", t, self.volumes[t]))
+                self._regions_changed(t, entries)
+                entries.append((t, 0, self.tracks[t][:end].copy()))
+            mix = np.zeros(end, np.float32)
+            spans = []
+            for t in ts:
+                mix += self.tracks[t][:end] * self.volumes[t]
+                spans += [(r[0], r[1]) for r in self.regions[t]]
+            for t in ts:
+                self.tracks[t][:end] = 0
+                self.regions[t] = []
+            self.tracks[dest][:end] = saturate(mix)
+            self.volumes[dest] = 1.0
+            merged = []                                  # where any of the tracks had a box, the bounce has one
+            for a, b in sorted(spans):
+                if merged and a <= merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], b)
+                else:
+                    merged.append([a, b])
+            for a, b in merged:
+                self._add_region(dest, a, b)
+            for t in ts:
+                self._changed(t, 0, end)
+            self._push_undo(entries)
+            return end / self.frames_per_beat()
+
     def _push_undo(self, entries):
         if entries:
             self.undo_stack.append(entries)
@@ -784,6 +830,10 @@ class Engine:
             for item in reversed(self.undo_stack.pop()):
                 if item[0] == "regions":
                     self.regions[item[1]] = item[2]
+                    self.dirty.add(-1)
+                    continue
+                if item[0] == "volume":
+                    self.volumes[item[1]] = item[2]
                     self.dirty.add(-1)
                     continue
                 t, a, old = item

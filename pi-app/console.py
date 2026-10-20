@@ -45,6 +45,7 @@ CHAR_ACTIONS = {
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
+    "b": "BOUNCE", "B": "BOUNCE",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
@@ -116,7 +117,7 @@ BOARD_KEYS = ["INPUT", "MIDI", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
 BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
 WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "SELECT",
               "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "RECORD": "REC_MODE",
-              "LOOP": "CLEAR_REGION", "INPUT": "ARM_ALL", "EXPORT": "EXPORT"}
+              "LOOP": "CLEAR_REGION", "INPUT": "ARM_ALL", "EXPORT": "BOUNCE"}
 # knob pushes: notes 32-42 = ENC1-ENC11
 HOLD_KEYS = ("COPY", "CUT")            # hold one and move to take several pieces; let go to copy / cut
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
@@ -178,6 +179,8 @@ class Transport:
         self.message = ""
         self.message_until = 0.0
         self.holding = None                # the hold key (LIFT or CUT) being held, if any
+        self.bounce_pending = None         # (sources, dest) after the first BOUNCE press
+        self._dirty_since = None
         self._bpm_seen = None
         self._bpm_since = 0.0
         self.tab_colours = {n: (screen.get("track%d_tab" % n) or {}).get("c") for n in range(1, 9)}
@@ -226,7 +229,7 @@ class Transport:
 
     @property
     def synced(self):
-        return bool(self.clock and self.clock.active)
+        return bool(self.clock and self.clock.active and self.engine and self.engine.sync_mode == "external")
 
     def say(self, text, seconds=4):
         self.message, self.message_until = text, time.monotonic() + seconds
@@ -251,6 +254,8 @@ class Transport:
             self.update_screen()
             return
         t, e = self.tape, self.engine
+        if name != "BOUNCE":
+            self.bounce_pending = None
         if name == "PLAY":
             if self.playing:
                 self.stop()
@@ -276,6 +281,8 @@ class Transport:
                 e.cycle_input()
         elif name == "EXPORT":
             self.export()
+        elif name == "BOUNCE":
+            self.bounce()
         elif name.startswith("TRACK"):
             n = int(name[5:])
             if n == self.armed or self.focus.track:
@@ -455,6 +462,7 @@ class Transport:
             if was and not self._playing:           # stopped by the tape end, or by MIDI stop
                 self.stop()
             self.follow_tempo()
+            self.autosave()
         elif self.playing:
             start = t.pos
             t.pos += seconds * BPM / 60
@@ -466,9 +474,48 @@ class Transport:
         self.focus.update(seconds, self.playing)
         self.update_screen()
 
+    def autosave(self):
+        """While stopped, write changes to the song's files a moment after the last edit."""
+        e = self.engine
+        if self.playing or not e.dirty:
+            self._dirty_since = None
+            return
+        now = time.monotonic()
+        if self._dirty_since is None:
+            self._dirty_since = now
+        elif now - self._dirty_since > 1.0:
+            self._dirty_since = None
+            e.save()
+
+    def bounce(self):
+        e = self.engine
+        if not e:
+            self.say("BOUNCING NEEDS THE AUDIO ENGINE")
+            return
+        if self.playing:
+            self.say("STOP FIRST, THEN BOUNCE")
+            return
+        sources = sorted(e.arm_extra)
+        dest = self.armed - 1
+        if not sources:
+            self.say("ARM THE TRACKS TO BOUNCE WITH SHIFT+TRACK; THEY GO ONTO THE SELECTED TRACK", 6)
+            return
+        names = ",".join(str(t + 1) for t in sources)
+        if self.bounce_pending != (tuple(sources), dest):
+            self.bounce_pending = (tuple(sources), dest)
+            self.say("BOUNCE TRACK%s %s INTO TRACK %d? PRESS AGAIN TO DO IT" % ("S" if len(sources) > 1 else "", names, dest + 1), 8)
+            return
+        self.bounce_pending = None
+        beats = e.bounce(sources, dest)
+        if beats is None:
+            self.say("NOTHING TO BOUNCE")
+            return
+        e.arm_extra = set()
+        self.say("BOUNCED %s INTO TRACK %d (SHIFT+CUT UNDOES)" % (names, dest + 1), 5)
+
     def follow_tempo(self):
         """Take the OP-XY's tempo while stopped, once it has held steady for a moment."""
-        bpm = self.clock.bpm if self.clock else None
+        bpm = self.clock.bpm if (self.clock and self.synced) else None
         if not bpm or self.playing:
             self._bpm_seen = None
             return
@@ -518,7 +565,8 @@ class Transport:
         region = e.loop_region() if e else None
         s.set("grid", t=t.label() + ("   LOOP" if (region and e.loop_on) else "   IN/OUT" if region else ""))
         bpm = e.bpm if e else BPM
-        s.set("bpm", t="%.1f BPM  4/4%s" % (bpm, "  SYNC" if self.synced else ""))
+        internal = bool(e and e.sync_mode == "internal")
+        s.set("bpm", t="%.1f BPM  4/4%s" % (bpm, "  SYNC" if self.synced else "  LEAD" if internal else ""))
         all_in = bool(e and e.device and e.input_mode == "all")
         armed = [t + 1 for t in e.armed_tracks()] if e else [self.armed]
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)

@@ -129,6 +129,13 @@ If it's upside down, change the line `ExecStart=...console.py` in
 `console.service` to end in `console.py --rotate 90`, then run
 `./boot-to-app.sh` again.
 
+## If something goes wrong
+
+Problems are written to `~/console-data/console.log` (with the details I
+need to fix them). See the last part with `tail -40 ~/console-data/console.log`.
+If the audio connection hiccups while recording, recording carries on by
+itself once it reconnects (you lose about a second).
+
 ## Files
 
 - `console.py` is the app: the screen, the keys and the transport (play,

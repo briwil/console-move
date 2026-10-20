@@ -771,44 +771,16 @@ def main():
     fps = pygame.time.Clock()
 
     try:
-        running = True
-        while running:
-            seconds = fps.tick(FPS) / 1000
-            for ev in pygame.event.get():
-                if ev.type == pygame.QUIT:
-                    running = False
-                elif ev.type == pygame.KEYDOWN:
-                    name = pygame_key(ev)
-                    if name:
-                        keys.put(name)
-            while not keys.empty():
-                name = keys.get()
-                if name == "QUIT":
-                    if os.environ.get("CONSOLE_SERVICE"):
-                        print("Q ignored: Console is running as the boot app. Stop it with: sudo systemctl stop console")
-                    else:
-                        running = False
-                elif project_menu.open:
-                    project_menu.key(name)
-                elif name == "FILE":
-                    project_menu.show()
-                elif not (isinstance(name, tuple) and name[0] == "CHAR"):
-                    transport.key(name)
-                TEXT_INPUT["on"] = project_menu.text_input
-            transport.tick(seconds)
-
-            if project_menu.open:
-                project_menu.draw(frame)
-            else:
-                screen.draw(frame)
-            out = pygame.transform.rotate(frame, rotate) if rotate else frame
-            if out.get_size() != (dw, dh):
-                scale = min(dw / out.get_width(), dh / out.get_height())
-                size = (round(out.get_width() * scale), round(out.get_height() * scale))
-                out = pygame.transform.smoothscale(out, size)
-                display.fill((0, 0, 0))
-            display.blit(out, ((dw - out.get_width()) // 2, (dh - out.get_height()) // 2))
-            pygame.display.flip()
+        run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh)
+    except Exception:
+        import traceback
+        details = traceback.format_exc()
+        try:
+            import audio
+            audio.log("Console crashed", details)
+        except Exception:
+            print(details)
+        raise
     finally:
         if restore_terminal:
             restore_terminal()
@@ -817,6 +789,48 @@ def main():
             engine.stop()
             engine.save(wait=True)
         pygame.quit()
+
+
+def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh):
+    """The main loop: keys in, screen out, until Q."""
+    running = True
+    while running:
+        seconds = fps.tick(FPS) / 1000
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                running = False
+            elif ev.type == pygame.KEYDOWN:
+                name = pygame_key(ev)
+                if name:
+                    keys.put(name)
+        while not keys.empty():
+            name = keys.get()
+            if name == "QUIT":
+                if os.environ.get("CONSOLE_SERVICE"):
+                    print("Q ignored: Console is running as the boot app. Stop it with: sudo systemctl stop console")
+                else:
+                    running = False
+            elif project_menu.open:
+                project_menu.key(name)
+            elif name == "FILE":
+                project_menu.show()
+            elif not (isinstance(name, tuple) and name[0] == "CHAR"):
+                transport.key(name)
+            TEXT_INPUT["on"] = project_menu.text_input
+        transport.tick(seconds)
+
+        if project_menu.open:
+            project_menu.draw(frame)
+        else:
+            screen.draw(frame)
+        out = pygame.transform.rotate(frame, rotate) if rotate else frame
+        if out.get_size() != (dw, dh):
+            scale = min(dw / out.get_width(), dh / out.get_height())
+            size = (round(out.get_width() * scale), round(out.get_height() * scale))
+            out = pygame.transform.smoothscale(out, size)
+            display.fill((0, 0, 0))
+        display.blit(out, ((dw - out.get_width()) // 2, (dh - out.get_height()) // 2))
+        pygame.display.flip()
 
 
 if __name__ == "__main__":

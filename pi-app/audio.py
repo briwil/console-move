@@ -29,6 +29,7 @@ import re
 import shutil
 import threading
 import time
+import traceback
 import wave
 
 import numpy as np
@@ -131,6 +132,24 @@ def encode(x, fmt):
     return v.view(np.uint8).reshape(-1, 4)[:, :3].tobytes()
 
 
+def log(text, details=None):
+    """Print a message, and keep it in ~/console-data/console.log so it can be looked at later."""
+    print(text)
+    if details:
+        print(details)
+    try:
+        os.makedirs(DATA, exist_ok=True)
+        path = os.path.join(DATA, "console.log")
+        if os.path.exists(path) and os.path.getsize(path) > 1_000_000:
+            os.replace(path, path + ".old")
+        with open(path, "a") as f:
+            f.write("%s  %s\n" % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), text))
+            if details:
+                f.write(details + "\n")
+    except OSError:
+        pass
+
+
 def pan_gains(pan):
     """(left, right) gain for a pan from -1 (left) to 1 (right). Centre is full in both, as before pan existed."""
     return min(1.0, 1.0 - pan), min(1.0, 1.0 + pan)
@@ -221,6 +240,7 @@ class Engine:
         self._rec_saved = {}                    # track -> [start, end) already saved for undo this pass
         self._rec_boxes = {}                    # track -> the box this recording pass is making
         self._stop = False
+        self._resume_recording = False
         self._set_beats_len()
         self.load()
 
@@ -1007,9 +1027,17 @@ class Engine:
                 self.status = ""
                 print("Audio: %s, %d in / %d out, %d Hz" % (dev["name"], dev["capture"]["channels"],
                                                           play["channels"] if play else 0, rate))
+                if self._resume_recording:
+                    with self.lock:
+                        if self.playing:
+                            self.recording = True        # carry on the same recording pass after a hiccup
+                            log("Recording resumed")
+                self._resume_recording = False
                 self._loop(cap, pb, dev)
             except Exception as e:
-                print("Audio stopped:", e)
+                self._resume_recording = self.recording
+                log("Audio stopped%s: %s" % (" while recording" if self.recording else "", e),
+                    traceback.format_exc())
                 self.status = "AUDIO DEVICE LOST"
             finally:
                 for p in (cap, pb):

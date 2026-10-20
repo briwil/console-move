@@ -41,7 +41,7 @@ stereo mix) in the Exports folder.
 
 | Key | Press | With SHIFT held |
 |---|---|---|
-| AUDIO | Input: each input to its own track (OP-XY 8-channel), or all inputs mixed together | Arm all 8 tracks / back to just the selected one |
+| AUDIO | Input: each input to its own track (OP-XY 8-channel) / stereo (left and right onto a pair of tracks) / all inputs mixed together | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | MIDI, FX, IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
@@ -96,6 +96,27 @@ like a region in a DAW. Empty tape has no boxes.
 The boxes are only how the tape is divided up; what you hear is the audio on
 the track. EXPORT writes each track as a plain WAV.
 
+## Stereo
+
+Tracks are mono, and two neighbouring tracks can be a stereo pair.
+
+1. Press AUDIO until the bottom right says STEREO (it starts in STEREO when
+   the OP-XY is in its 2-channel USB mode).
+2. Select a track and SHIFT+arm the one below it, e.g. 7 and SHIFT+8. The
+   bottom right shows "STEREO > 7+8".
+3. Record. Left goes onto 7, right onto 8. They become a pair: a bracket
+   joins their numbers, they're panned left and right, and EXPORT writes them
+   as one stereo file ("track7-8 stereo.wav").
+
+A pair edits together: SPLICE splits both, and LIFT / CUT take both sides
+(with either track of the pair selected). A stereo piece drops onto the
+selected track and the one below it, which become a pair. An armed track
+without a neighbour records the left and right inputs mixed.
+
+**Pan:** SHIFT + turn a track's knob, or `,` / `.` on a keyboard for the
+selected track. Any track can be panned; the stereo mix and what you hear
+follow it. A bounce is mono, in the centre.
+
 ## Bouncing tracks together
 
 Like on the OP-1: mix tracks down onto one track to free the others.
@@ -136,7 +157,7 @@ key to zoom to that one instead.
 
 | Knob | Turn | Push |
 |---|---|---|
-| 1–8 (above the tracks) | Track volume (with SHIFT: fine steps) | Mute / unmute (the only way to mute on the board) |
+| 1–8 (above the tracks) | Track volume (with SHIFT: pan) | Mute / unmute (the only way to mute on the board) |
 | Left of the right-hand three | Zoom | Zoom back to 4 bars |
 | Right of the right-hand three | Grid: 1/4, 1/8, 1/16, 1/32 | Loop on / off |
 | Big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
@@ -170,6 +191,7 @@ key to zoom to that one instead.
 | B | Bounce the armed tracks onto the selected track (press twice) |
 | M | Mute the armed track |
 | 9 / 0 | Armed track volume down / up |
+| , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |
 

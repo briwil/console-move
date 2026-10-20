@@ -1,12 +1,14 @@
 # Pi app
 
-The recorder that runs on the Raspberry Pi. **Version 0.9.**
+The recorder that runs on the Raspberry Pi. **Version 0.10.**
 
 - An OP-1 style tape: the playhead stays in the middle and the tape moves past
   it, with bar, beat and grid lines and bar numbers.
 - Records from a USB audio device. An OP-XY in its 8-channel USB mode records
   all 8 tracks at once (input 1 to track 1, and so on). A stereo device, like a
   UCA202, records its inputs mixed together onto the armed track.
+- Stereo: two neighbouring tracks record left and right as a stereo pair,
+  edit together and export as one stereo file. Every track has a pan.
 - Plays the tape back out of the same device (on the OP-XY, through its
   headphone jack), with a volume and mute for each track.
 - MIDI sync with the OP-XY either way round: follow its clock (and wait for its

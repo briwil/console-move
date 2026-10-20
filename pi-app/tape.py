@@ -288,7 +288,7 @@ class Tape:
     def selection_x(self, it):
         """(x start, x end, selecting) of the selected piece(s) when `it` is the armed track's lane, or None."""
         e = self.engine
-        if not e or it["name"] != "track%d_lane" % e.armed or e.recording:
+        if not e or e.recording or it["name"] not in ["track%d_lane" % (t + 1) for t in e.edit_tracks()]:
             return None
         sel = e.selection()
         if not sel:

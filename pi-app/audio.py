@@ -5,8 +5,11 @@
 - Input modes:
     "all"  input channel N goes to track N, on every armed track (an OP-XY in
            8-channel mode can record all 8 tracks at once)
-    "mix"  every input channel mixed together goes to the armed track(s) (for a
-           stereo source like a synth into a UCA202)
+    "stereo" input 1 (left) and 2 (right) go to pairs of neighbouring armed
+           tracks (e.g. 7 and 8), which become a stereo pair: panned left
+           and right, and exported as one stereo file. An armed track
+           without a neighbour gets the mix.
+    "mix"  every input channel mixed together goes to the armed track(s)
 - One track is selected (self.armed: editing works on it, and it always
   records); more can be armed with it (self.arm_extra).
 - Plays the tape out of the same device, if it has an output (the OP-XY does,
@@ -128,6 +131,11 @@ def encode(x, fmt):
     return v.view(np.uint8).reshape(-1, 4)[:, :3].tobytes()
 
 
+def pan_gains(pan):
+    """(left, right) gain for a pan from -1 (left) to 1 (right). Centre is full in both, as before pan existed."""
+    return min(1.0, 1.0 - pan), min(1.0, 1.0 + pan)
+
+
 def saturate(x):
     """Gentle tape-style limit above 0.8, so overdubs that pile up never pass 1.0."""
     y = np.abs(x)
@@ -182,6 +190,8 @@ class Engine:
         self.bpm = bpm
         self.tape_beats = 0.0
         self.volumes = [0.8] * TRACKS
+        self.pans = [0.0] * TRACKS              # -1 left ... 0 centre ... 1 right
+        self.pairs = set()                      # t: tracks t and t+1 are a stereo pair (left, right)
         self.mutes = set()
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
@@ -199,7 +209,7 @@ class Engine:
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
         self.latency = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1)))
-        self.clip = None                        # audio on the clipboard (one piece), for DROP
+        self.clip = None                        # the clipboard, for DROP: [audio] or [left, right] for a stereo pair
         self.last_edit = None                   # (start, end) in frames of the last lift, cut or drop
         # the boxes on each track: [start, end, colour] in frames, sorted, never overlapping.
         # Recording makes a box; SPLICE splits one; CUT takes boxes away and leaves an empty space.
@@ -276,6 +286,8 @@ class Engine:
             self.regions = [[] for _ in range(TRACKS)]
             self.undo_stack = []
             self.volumes = [0.8] * TRACKS
+            self.pans = [0.0] * TRACKS
+            self.pairs = set()
             self.mutes = set()
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
@@ -339,6 +351,8 @@ class Engine:
             self._set_beats_len()
         self.volumes = [float(v) for v in meta.get("volumes", self.volumes)][:TRACKS]
         self.mutes = set(meta.get("mutes", []))
+        self.pans = ([float(v) for v in meta.get("pans", [])] + [0.0] * TRACKS)[:TRACKS]
+        self.pairs = {int(t) for t in meta.get("pairs", []) if 0 <= int(t) < TRACKS - 1}
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
         self._meta_regions = meta.get("regions")
@@ -368,6 +382,7 @@ class Engine:
             changed = bool(self.dirty)
             self.dirty.clear()
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
+                    "pans": self.pans, "pairs": sorted(self.pairs),
                     "mutes": sorted(self.mutes), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions]}
         if not changed:
@@ -409,7 +424,7 @@ class Engine:
         Stems are the tracks as recorded. The mix uses the track volumes and mutes."""
         with self.lock:
             tracks = [x.copy() for x in self.tracks]
-            vols, mutes = list(self.volumes), set(self.mutes)
+            vols, mutes, pans, pairs = list(self.volumes), set(self.mutes), list(self.pans), set(self.pairs)
         ends = [self._extent(x) for x in tracks]
         end = max(ends)
         if end == 0:
@@ -418,17 +433,27 @@ class Engine:
         name = "%s %s" % (self.song_label, stamp)
         folder = os.path.join(DATA, "exports", name)
         os.makedirs(folder, exist_ok=True)
-        mix = np.zeros(end, np.float32)
+        done = set()
+        for t in range(TRACKS):
+            if t in done:
+                continue
+            if t in pairs and (ends[t] or ends[t + 1]):           # a stereo pair: one stereo file
+                write_wav(os.path.join(folder, "%s track%d-%d stereo.wav" % (self.song_label, t + 1, t + 2)),
+                          np.stack([tracks[t][:end], tracks[t + 1][:end]], axis=1), self.rate)
+                done |= {t, t + 1}
+            elif ends[t]:
+                write_wav(os.path.join(folder, "%s track%d.wav" % (self.song_label, t + 1)), tracks[t][:end], self.rate)
+        mix = np.zeros((end, 2), np.float32)
         for t, x in enumerate(tracks):
-            if ends[t]:
-                write_wav(os.path.join(folder, "%s track%d.wav" % (self.song_label, t + 1)), x[:end], self.rate)
-                if t not in mutes:
-                    mix += x[:end] * vols[t]
+            if ends[t] and t not in mutes:
+                left, right = pan_gains(pans[t])
+                mix[:, 0] += x[:end] * vols[t] * left
+                mix[:, 1] += x[:end] * vols[t] * right
         mix *= MIX_GAIN
         peak = float(np.abs(mix).max())
         if peak > 0.98:
             mix *= 0.98 / peak                   # turn the whole mix down rather than clip it
-        write_wav(os.path.join(folder, "%s mix.wav" % self.song_label), np.stack([mix, mix], axis=1), self.rate)
+        write_wav(os.path.join(folder, "%s mix.wav" % self.song_label), mix, self.rate)
         return name
 
     # ------------------------------------------------------------ transport (called from the app)
@@ -446,7 +471,29 @@ class Engine:
         if self.input_mode == "all" and self.device:
             ch = self.device["capture"]["channels"]
             return {t: t for t in tracks if t < ch}
+        if self.input_mode == "stereo" and self.device and self.device["capture"]["channels"] >= 2:
+            out = {}
+            for t in tracks:
+                if t in out:
+                    continue
+                if t + 1 in tracks:
+                    out[t], out[t + 1] = 0, 1             # left input, right input
+                else:
+                    out[t] = None
+            return out
         return {t: None for t in tracks}
+
+    def stereo_pairs_armed(self):
+        """The armed pairs that stereo mode would record onto: [left track index, ...]."""
+        tg = self.targets()
+        return [t for t, ch in tg.items() if ch == 0 and tg.get(t + 1) == 1]
+
+    def change_pan(self, track, delta):
+        with self.lock:
+            p = min(1.0, max(-1.0, self.pans[track - 1] + delta))
+            self.pans[track - 1] = round(p, 3) if abs(p) > 0.01 else 0.0
+            self.dirty.add(-1)
+            return self.pans[track - 1]
 
     def armed_tracks(self):
         """The armed tracks, 0-7: the selected one plus any others."""
@@ -455,11 +502,19 @@ class Engine:
     def cycle_input(self):
         if not self.device:
             return
-        modes = ["all", "mix"] if self.device["capture"]["channels"] >= 3 else ["mix"]
+        ch = self.device["capture"]["channels"]
+        modes = ["all", "stereo", "mix"] if ch >= 3 else ["stereo", "mix"] if ch == 2 else ["mix"]
         self.input_mode = modes[(modes.index(self.input_mode) + 1) % len(modes)] if self.input_mode in modes else modes[0]
 
     def start_recording(self):
         """Start a recording pass (call with the lock held or from set_recording)."""
+        if self.input_mode == "stereo":
+            for t in self.stereo_pairs_armed():              # recording in stereo makes the pair
+                self.pairs.add(t)
+                self.pans[t], self.pans[t + 1] = -1.0, 1.0
+                self.pairs.discard(t - 1)
+                self.pairs.discard(t + 1)
+                self.dirty.add(-1)
         self.recording = True
         self.playing = True
         self._rec_undo = []
@@ -636,7 +691,8 @@ class Engine:
             own[1] = max(own[1], b)
             self.regions[t] = sorted(self.regions[t] + [own])
             return
-        self._rec_boxes[t] = self._add_region(t, a, b)
+        partner = self._rec_boxes.get(t - 1) if (t - 1) in self.pairs else None
+        self._rec_boxes[t] = self._add_region(t, a, b, partner[2] if partner else None)
 
     # ---- editing: SPLICE splits a box; LIFT, CUT and DROP work on whole boxes
 
@@ -648,18 +704,28 @@ class Engine:
             return 0
         return int(min(self.frames, np.ceil((nz[-1] + 1) / RES * self.frames_per_beat())))
 
-    def selection(self):
-        """(track index, start, end) of what LIFT and CUT would take: the box under the playhead,
-        or, while selecting, every box from where the selection started to the playhead."""
+    def edit_tracks(self):
+        """The track(s) LIFT, CUT and DROP work on: the selected track, or both tracks of its stereo pair."""
         t = self.armed - 1
+        if t in self.pairs:
+            return [t, t + 1]
+        if t - 1 in self.pairs:
+            return [t - 1, t]
+        return [t]
+
+    def selection(self):
+        """(track indexes, start, end) of what LIFT and CUT would take: the box under the playhead,
+        or, while selecting, every box from where the selection started to the playhead."""
+        ts = self.edit_tracks()
         if self.sel_anchor is None:
-            r = self.region_at(t, self.pos)
-            return (t, r[0], r[1]) if r else None
-        lo, hi = sorted((self.sel_anchor, self.pos))
-        rs = [r for r in self.regions[t] if r[0] <= hi and r[1] > lo]
+            lo = hi = self.pos
+            rs = [r for t in ts for r in self.regions[t] if r[0] <= lo < r[1]]
+        else:
+            lo, hi = sorted((self.sel_anchor, self.pos))
+            rs = [r for t in ts for r in self.regions[t] if r[0] <= hi and r[1] > lo]
         if not rs:
             return None
-        return t, min(r[0] for r in rs), max(r[1] for r in rs)
+        return ts, min(r[0] for r in rs), max(r[1] for r in rs)
 
     def begin_selection(self):
         with self.lock:
@@ -682,6 +748,8 @@ class Engine:
             f = int(self.pos)
             t0 = self.armed - 1
             ts = list(range(TRACKS)) if all_tracks else self.armed_tracks()
+            ts = sorted(set(ts) | {p for t in ts for p in (t - 1, t + 1)
+                                   if 0 <= p < TRACKS and (min(t, p) in self.pairs)})    # stereo pairs split together
             tol = self.frames_per_beat() / 16
 
             def join_at(t):
@@ -720,8 +788,8 @@ class Engine:
             self.sel_anchor = None
             if not sel:
                 return None
-            t, a, b = sel
-            self.clip = self.tracks[t][a:b].copy()
+            ts, a, b = sel
+            self.clip = [self.tracks[t][a:b].copy() for t in ts]
             self.last_edit = (a, b)
             return (b - a) / self.frames_per_beat()
 
@@ -733,51 +801,70 @@ class Engine:
             self.sel_anchor = None
             if not sel:
                 return None
-            t, a, b = sel
-            self.clip = self.tracks[t][a:b].copy()
+            ts, a, b = sel
+            self.clip = [self.tracks[t][a:b].copy() for t in ts]
             self.last_edit = (a, b)
-            entries = [(t, a, self.tracks[t][a:b].copy())]
-            self._regions_changed(t, entries)
-            self._carve(t, a, b)
-            self.tracks[t][a:b] = 0
-            self._changed(t, a, b)
+            entries = []
+            for t in ts:
+                entries.append((t, a, self.tracks[t][a:b].copy()))
+                self._regions_changed(t, entries)
+                self._carve(t, a, b)
+                self.tracks[t][a:b] = 0
+                self._changed(t, a, b)
             self._push_undo(entries)
             return (b - a) / self.frames_per_beat()
 
     def drop(self, insert=False):
-        """Put the clipboard down on the armed track at the playhead as a new box.
-        insert=False covers what's there; insert=True pushes the rest of the track later."""
+        """Put the clipboard down at the playhead as a new box. A stereo piece goes onto two tracks (the
+        selected track's pair, or the selected track and the one below it) and makes them a pair.
+        insert=False covers what's there; insert=True pushes the rest of the track(s) later.
+        Returns True, or a reason it couldn't."""
         with self.lock:
             if self.clip is None:
-                return False
-            t, a = self.armed - 1, int(self.pos)
-            x = self.clip
-            n = min(len(x), self.frames - a)
-            if n <= 0:
-                return False
-            entries = []
-            self._regions_changed(t, entries)
-            if insert:
-                entries.append((t, a, self.tracks[t][a:].copy()))
-                tail = self.tracks[t][a:self.frames - n].copy()
-                self.tracks[t][a + n:] = tail
-                self.tracks[t][a:a + n] = x[:n]
-                moved = []
-                for r in self.regions[t]:
-                    if r[1] <= a:
-                        moved.append(r)
-                    elif r[0] >= a:
-                        moved.append([r[0] + n, r[1] + n, r[2]])
-                    else:                                   # a box across the playhead splits around the new one
-                        moved.append([r[0], a, r[2]])
-                        moved.append([a + n, r[1] + n, r[2]])
-                self.regions[t] = sorted([r[0], min(r[1], self.frames), r[2]] for r in moved if r[0] < self.frames)
-                self._changed(t, a, self.frames)
+                return "NOTHING TO DROP: CUT OR COPY SOMETHING FIRST"
+            a = int(self.pos)
+            if len(self.clip) == 2:
+                base = self.edit_tracks()[0]
+                if base + 1 >= TRACKS:
+                    return "A STEREO PIECE NEEDS TWO TRACKS: SELECT TRACK 7 OR LOWER"
+                ts = [base, base + 1]
             else:
-                entries.append((t, a, self.tracks[t][a:a + n].copy()))
-                self.tracks[t][a:a + n] = x[:n]
-                self._changed(t, a, a + n)
-            self._add_region(t, a, a + n)
+                ts = [self.armed - 1]
+            n = min(len(self.clip[0]), self.frames - a)
+            if n <= 0:
+                return "NO ROOM LEFT ON THE TAPE"
+            entries = [("pairs", None, set(self.pairs))]
+            colour = None
+            for t, x in zip(ts, self.clip):
+                self._regions_changed(t, entries)
+                if insert:
+                    entries.append((t, a, self.tracks[t][a:].copy()))
+                    tail = self.tracks[t][a:self.frames - n].copy()
+                    self.tracks[t][a + n:] = tail
+                    self.tracks[t][a:a + n] = x[:n]
+                    moved = []
+                    for r in self.regions[t]:
+                        if r[1] <= a:
+                            moved.append(r)
+                        elif r[0] >= a:
+                            moved.append([r[0] + n, r[1] + n, r[2]])
+                        else:                               # a box across the playhead splits around the new one
+                            moved.append([r[0], a, r[2]])
+                            moved.append([a + n, r[1] + n, r[2]])
+                    self.regions[t] = sorted([r[0], min(r[1], self.frames), r[2]] for r in moved if r[0] < self.frames)
+                    self._changed(t, a, self.frames)
+                else:
+                    entries.append((t, a, self.tracks[t][a:a + n].copy()))
+                    self.tracks[t][a:a + n] = x[:n]
+                    self._changed(t, a, a + n)
+                box = self._add_region(t, a, a + n, colour)
+                colour = box[2] if box else colour             # both sides of a stereo piece share a colour
+            if len(ts) == 2 and ts[0] not in self.pairs:
+                entries += [("pan", ts[0], self.pans[ts[0]]), ("pan", ts[1], self.pans[ts[1]])]
+                self.pairs -= {ts[0] - 1, ts[1]}
+                self.pairs.add(ts[0])
+                self.pans[ts[0]], self.pans[ts[1]] = -1.0, 1.0
+                self.dirty.add(-1)
             self.last_edit = (a, a + n)
             self._push_undo(entries)
             return True
@@ -792,9 +879,10 @@ class Engine:
             end = max(self.track_end(t) for t in ts)
             if len(ts) < 2 or not end:
                 return None
-            entries = []
+            entries = [("pairs", None, set(self.pairs))]
             for t in ts:
                 entries.append(("volume", t, self.volumes[t]))
+                entries.append(("pan", t, self.pans[t]))
                 self._regions_changed(t, entries)
                 entries.append((t, 0, self.tracks[t][:end].copy()))
             mix = np.zeros(end, np.float32)
@@ -807,6 +895,8 @@ class Engine:
                 self.regions[t] = []
             self.tracks[dest][:end] = saturate(mix)
             self.volumes[dest] = 1.0
+            self.pans[dest] = 0.0                        # a bounce is mono, in the centre
+            self.pairs -= {p for p in self.pairs if p in ts or p + 1 in ts}
             merged = []                                  # where any of the tracks had a box, the bounce has one
             for a, b in sorted(spans):
                 if merged and a <= merged[-1][1]:
@@ -836,8 +926,13 @@ class Engine:
                     self.regions[item[1]] = item[2]
                     self.dirty.add(-1)
                     continue
-                if item[0] == "volume":
-                    self.volumes[item[1]] = item[2]
+                if item[0] in ("volume", "pan", "pairs"):
+                    if item[0] == "volume":
+                        self.volumes[item[1]] = item[2]
+                    elif item[0] == "pan":
+                        self.pans[item[1]] = item[2]
+                    else:
+                        self.pairs = set(item[2])
                     self.dirty.add(-1)
                     continue
                 t, a, old = item
@@ -883,7 +978,8 @@ class Engine:
                         pb.write(silence)
                 self.device = dev
                 if self.input_mode is None:
-                    self.input_mode = "all" if dev["capture"]["channels"] >= 8 else "mix"
+                    ch = dev["capture"]["channels"]
+                    self.input_mode = "all" if ch >= 8 else "stereo" if ch == 2 else "mix"
                 self.status = ""
                 print("Audio: %s, %d in / %d out, %d Hz" % (dev["name"], dev["capture"]["channels"],
                                                           play["channels"] if play else 0, rate))
@@ -955,12 +1051,19 @@ class Engine:
                 idx[over] = loop[0] + (idx[over] - loop[1]) % length
         idx = np.minimum(idx, self.frames - 1)
         overdub = self.rec_mode == "overdub"
-        mix = np.zeros(m, np.float32)
+        left = np.zeros(m, np.float32)
+        right = np.zeros(m, np.float32)
         for t in range(TRACKS):
             if (overdub or t not in targets) and t not in self.mutes:
-                mix += self.tracks[t][idx] * self.volumes[t]
+                sig = self.tracks[t][idx] * self.volumes[t]
+                gl, gr = pan_gains(self.pans[t])
+                if gl:
+                    left += sig * gl
+                if gr:
+                    right += sig * gr
         out = np.empty((m, 2), np.float32)
-        out[:, 0] = out[:, 1] = np.tanh(mix * MIX_GAIN)      # tanh: gentle limiting instead of harsh clipping
+        out[:, 0] = np.tanh(left * MIX_GAIN)                 # tanh: gentle limiting instead of harsh clipping
+        out[:, 1] = np.tanh(right * MIX_GAIN)
         if targets:
             # what you played now was in time with what you heard (latency - read_ahead) ago
             w0 = pos - (self.latency - self.read_ahead)

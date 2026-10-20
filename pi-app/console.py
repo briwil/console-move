@@ -45,7 +45,7 @@ CHAR_ACTIONS = {
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "MUTE",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
-    "b": "BOUNCE", "B": "BOUNCE",
+    "b": "BOUNCE", "B": "BOUNCE", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
@@ -172,6 +172,8 @@ class Transport:
         self.engine = engine
         self.clock = clock
         self.tape = tape.Tape(screen, engine)
+        for n in range(1, 8):
+            screen.custom["track%d_num" % n] = self.draw_num
         self.focus = focus.Focus(screen, self.tape)
         self._playing = False
         self._recording = False
@@ -282,6 +284,11 @@ class Transport:
         elif name == "INPUT":
             if e:
                 e.cycle_input()
+                self.say({"all": "INPUT: EACH INPUT ONTO ITS OWN TRACK",
+                          "stereo": "INPUT: STEREO. ARM TWO NEIGHBOURING TRACKS FOR LEFT AND RIGHT",
+                          "mix": "INPUT: ALL INPUTS MIXED ONTO THE ARMED TRACK(S)"}.get(e.input_mode, "NO AUDIO DEVICE"), 4)
+        elif name in ("PAN_LEFT", "PAN_RIGHT"):
+            self.pan(self.armed, -0.1 if name == "PAN_LEFT" else 0.1)
         elif name == "EXPORT":
             self.export()
         elif name == "BOUNCE":
@@ -319,7 +326,10 @@ class Transport:
     def knob(self, number, delta, shift):
         t = self.tape
         if number <= 8:
-            self.volume(number, delta * (0.005 if shift else 0.02))
+            if shift:
+                self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
+            else:
+                self.volume(number, delta * 0.02)
         elif number == 9:
             for _ in range(abs(delta)):
                 t.zoom_in() if delta > 0 else t.zoom_out()
@@ -362,6 +372,38 @@ class Transport:
             return
         v = self.engine.change_volume(track, delta)
         self.say("TRACK %d  VOLUME %d%%" % (track, round(v * 100)), 2)
+
+    def edit_text(self):
+        ts = self.engine.edit_tracks()
+        return "TRACKS %d+%d (STEREO)" % (ts[0] + 1, ts[1] + 1) if len(ts) == 2 else "TRACK %d" % (ts[0] + 1)
+
+    def draw_num(self, surf, it):
+        """The track number, plus a bracket joining a stereo pair's two tabs."""
+        self.s.draw_default(surf, it)
+        e = self.engine
+        n = int(it["name"][5:it["name"].index("_")])
+        if not e or (n - 1) not in e.pairs or self.focus.active:
+            return
+        a, b = self.s.get("track%d_tab" % n), self.s.get("track%d_tab" % (n + 1))
+        if not a or not b:
+            return
+        x = a["x"] - 6
+        y0, y1 = a["y"] + 4, b["y"] + b["h"] - 4
+        col = (205, 210, 218)
+        pygame.draw.line(surf, col, (x, y0), (x, y1), 2)
+        pygame.draw.line(surf, col, (x, y0), (x + 3, y0), 2)
+        pygame.draw.line(surf, col, (x, y1), (x + 3, y1), 2)
+
+    def pan(self, track, delta):
+        if not self.engine:
+            return
+        self.say("TRACK %d  PAN %s" % (track, self.pan_text(self.engine.change_pan(track, delta))), 2)
+
+    @staticmethod
+    def pan_text(p):
+        if abs(p) < 0.01:
+            return "CENTRE"
+        return "%s %d" % ("L" if p < 0 else "R", round(abs(p) * 100))
 
     def mute(self, track):
         if not self.engine:
@@ -418,23 +460,28 @@ class Transport:
             beats = e.copy()
             if beats:
                 self.glide_to_edit(0)
-            self.say("COPIED %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
+            self.say("COPIED %s FROM %s" % (self.beats_text(beats), self.edit_text()) if beats
                      else "NOTHING HERE TO COPY")
         elif name == "CUT":
             beats = e.cut()
             if beats:
                 self.glide_to_edit(0)
-            self.say("CUT %s FROM TRACK %d" % (self.beats_text(beats), self.armed) if beats
+            self.say("CUT %s FROM %s" % (self.beats_text(beats), self.edit_text()) if beats
                      else "NOTHING HERE TO CUT")
         elif name in ("DROP", "DROP_INSERT"):
-            if e.drop(insert=name == "DROP_INSERT"):
+            done = e.drop(insert=name == "DROP_INSERT")
+            if done is True:
                 self.glide_to_edit(1)
-                self.say("DROPPED ON TRACK %d AT %s%s" % (self.armed, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
+                ts = e.edit_tracks() if len(e.clip) == 2 else [self.armed - 1]
+                where = "TRACKS %d+%d" % (ts[0] + 1, ts[0] + 2) if len(e.clip) == 2 else "TRACK %d" % self.armed
+                self.say("DROPPED ON %s AT %s%s" % (where, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
             else:
-                self.say("NOTHING TO DROP: CUT OR COPY SOMETHING FIRST")
+                self.say(done)
         elif name in ("SPLICE", "SPLICE_ALL"):
             done = e.splice(name == "SPLICE_ALL")
-            where = "ALL TRACKS" if name == "SPLICE_ALL" else self.armed_text([t + 1 for t in e.armed_tracks()])
+            ts = set(e.armed_tracks())
+            ts |= {p for t in ts for p in (t - 1, t + 1) if 0 <= p < 8 and min(t, p) in e.pairs}
+            where = "ALL TRACKS" if name == "SPLICE_ALL" else self.armed_text(sorted(t + 1 for t in ts))
             self.say("SPLIT %s AT %s" % (where, pos) if done == "added"
                      else "JOINED BACK TOGETHER ON %s" % where if done == "removed"
                      else "NO BOX HERE TO SPLIT", 2)
@@ -564,13 +611,14 @@ class Transport:
         e, n = self.engine, self.focus.shown
         if not e:
             return ["DEMO MODE", "NO AUDIO ENGINE"]
-        vol = "VOLUME %d%%%s" % (round(e.volumes[n - 1] * 100), "  MUTED" if (n - 1) in e.mutes else "")
+        vol = "VOLUME %d%%  PAN %s%s" % (round(e.volumes[n - 1] * 100), self.pan_text(e.pans[n - 1]),
+                                         "  MUTED" if (n - 1) in e.mutes else "")
         mode = "REC: OVERDUB" if e.rec_mode == "overdub" else "REC: REPLACE"
         r = e.loop_region()
         fpb = e.frames_per_beat()
         inout = ("IN %s  OUT %s" % (self.position_text(r[0] / fpb), self.position_text(r[1] / fpb))) if r else "NO IN/OUT POINTS"
         if e.clip is not None:
-            clip = "CLIPBOARD %s" % self.beats_text(len(e.clip) / fpb)
+            clip = "CLIPBOARD %s%s" % (self.beats_text(len(e.clip[0]) / fpb), "  STEREO" if len(e.clip) == 2 else "")
         else:
             clip = "CLIPBOARD EMPTY"
         return [vol, mode, inout, clip]
@@ -631,6 +679,11 @@ class Transport:
             hint = e.status or "NO AUDIO DEVICE"
         elif all_in:
             hint = "%s  EACH INPUT > ITS OWN TRACK" % e.device["name"].upper()
+        elif e.input_mode == "stereo":
+            pairs = e.stereo_pairs_armed()
+            hint = "%s  STEREO > %s" % (e.device["name"].upper(),
+                                        ", ".join("%d+%d" % (t + 1, t + 2) for t in pairs) if pairs
+                                        else "ARM 2 NEIGHBOURING TRACKS")
         else:
             hint = "%s  IN MIX > %s" % (e.device["name"].upper(), self.armed_text(armed))
         s.set("hint", t=hint)

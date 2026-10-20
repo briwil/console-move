@@ -54,6 +54,7 @@ for _n in range(1, 9):
 CHAR_ACTIONS.update({"\r": "ENTER", "\n": "ENTER", "\t": "FILE"})
 ESCAPES = {"\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT",
            "\x1b[A": "UP", "\x1b[B": "DOWN", "\x1b": "FILE"}
+MODE_NAMES = {"all": "MULTI", "stereo": "STEREO", "mix": "MONO"}     # input modes as shown on screen
 TEXT_INPUT = {"on": False}      # while typing a name, keys arrive as ("CHAR", letter) instead of commands
 
 
@@ -287,9 +288,7 @@ class Transport:
         elif name == "INPUT":
             if e:
                 e.cycle_input()
-                self.say({"all": "INPUT: EACH INPUT ONTO ITS OWN TRACK",
-                          "stereo": "INPUT: STEREO. ARM TWO NEIGHBOURING TRACKS FOR LEFT AND RIGHT",
-                          "mix": "INPUT: ALL INPUTS MIXED ONTO THE ARMED TRACK(S)"}.get(e.input_mode, "NO AUDIO DEVICE"), 4)
+                self.say("INPUT: %s" % MODE_NAMES.get(e.input_mode, "NO AUDIO DEVICE"), 2)
         elif name in ("PAN_LEFT", "PAN_RIGHT"):
             self.pan(self.armed, -0.1 if name == "PAN_LEFT" else 0.1)
         elif name == "EXPORT":
@@ -691,14 +690,14 @@ class Transport:
         elif not e.device:
             hint = e.status or "NO AUDIO DEVICE"
         elif all_in:
-            hint = "%s  EACH INPUT > ITS OWN TRACK" % e.device["name"].upper()
+            hint = "%s  MULTI > %s" % (e.device["name"].upper(), self.armed_text(armed))
         elif e.input_mode == "stereo":
             pairs = e.stereo_pairs_armed()
             hint = "%s  STEREO > %s" % (e.device["name"].upper(),
                                         ", ".join("%d+%d" % (t + 1, t + 2) for t in pairs) if pairs
-                                        else "ARM 2 NEIGHBOURING TRACKS")
+                                        else "ARM 2 TRACKS SIDE BY SIDE")
         else:
-            hint = "%s  IN MIX > %s" % (e.device["name"].upper(), self.armed_text(armed))
+            hint = "%s  MONO > %s" % (e.device["name"].upper(), self.armed_text(armed))
         s.set("hint", t=hint)
 
         targets = e.targets() if (e and e.device) else {}

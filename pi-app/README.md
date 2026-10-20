@@ -6,7 +6,8 @@ The recorder that runs on the Raspberry Pi. **Version 0.10.**
   it, with bar, beat and grid lines and bar numbers.
 - Records from a USB audio device. An OP-XY in its 8-channel USB mode records
   all 8 tracks at once (input 1 to track 1, and so on). A stereo device, like a
-  UCA202, records its inputs mixed together onto the armed track.
+  UCA202, records in STEREO onto two tracks or in MONO onto one. (Input modes:
+  MULTI, STEREO, MONO.)
 - Stereo: two neighbouring tracks record left and right as a stereo pair,
   edit together and export as one stereo file. Every track has a pan.
 - Plays the tape back out of the same device (on the OP-XY, through its

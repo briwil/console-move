@@ -41,7 +41,7 @@ stereo mix) in the Exports folder.
 
 | Key | Press | With SHIFT held |
 |---|---|---|
-| AUDIO | Input: each input to its own track (OP-XY 8-channel) / stereo (left and right onto a pair of tracks) / all inputs mixed together | Arm all 8 tracks / back to just the selected one |
+| AUDIO | Input: MULTI / STEREO / MONO (see Input modes below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | MIDI, FX, IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
@@ -62,8 +62,8 @@ The selected track (thick outline) always records. Hold SHIFT and press
 other track keys to arm them too (thin outline); SHIFT+AUDIO arms all 8.
 Pressing a track key without SHIFT goes back to just that track.
 
-With the OP-XY in 8-channel mode, each armed track records its own input:
-input 1 to track 1, input 2 to track 2, and so on. In mix mode (AUDIO
+In MULTI mode (the OP-XY in 8-channel mode), each armed track records its own input:
+input 1 to track 1, input 2 to track 2, and so on. In MONO mode (AUDIO
 switches), every armed track records all the inputs mixed together.
 
 Editing (splice, lift, cut, drop) always works on the selected track.
@@ -96,6 +96,16 @@ like a region in a DAW. Empty tape has no boxes.
 The boxes are only how the tape is divided up; what you hear is the audio on
 the track. EXPORT writes each track as a plain WAV.
 
+## Input modes
+
+AUDIO (I on a keyboard) switches between them; the bottom right shows which.
+
+| Mode | What the armed tracks record |
+|---|---|
+| MULTI | Each its own input: input 1 onto track 1, input 2 onto track 2… (the OP-XY's 8-channel USB mode) |
+| STEREO | Left and right onto two tracks side by side, as a stereo pair |
+| MONO | All the inputs mixed together, in mono |
+
 ## Stereo
 
 Tracks are mono, and any two neighbouring tracks (1+2, 4+5, 7+8…) can be a
@@ -112,9 +122,9 @@ stereo pair.
 A pair edits together: SPLICE splits both, and LIFT / CUT take both sides
 (with either track of the pair selected). A stereo piece drops onto the
 selected track and the one below it, which become a pair. An armed track
-without a neighbour records the left and right inputs mixed.
+without a neighbour records left and right mixed, in mono.
 
-Recording onto either track of a pair on its own (in MIX or EACH INPUT mode,
+Recording onto either track of a pair on its own (in MONO or MULTI mode,
 or in STEREO with only that one armed) splits the pair back into two normal
 mono tracks, panned to the centre. SHIFT+CUT undoes that along with the
 recording.

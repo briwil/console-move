@@ -2,7 +2,7 @@
 
 - Finds the first USB audio device (an OP-XY, a UCA202, ...) and keeps retrying
   if none is plugged in, so you can plug one in while the app runs.
-- Input modes:
+- Input modes (shown on screen as MULTI, STEREO and MONO):
     "all"  input channel N goes to track N, on every armed track (an OP-XY in
            8-channel mode can record all 8 tracks at once)
     "stereo" input 1 (left) and 2 (right) go to pairs of neighbouring armed

@@ -512,11 +512,12 @@ class Engine:
         self.dirty.add(-1)
 
     def splice(self, all_tracks=False):
-        """Cut the tape at the playhead, or take away the splice that's there. Returns "added", "removed" or None."""
+        """Cut the armed tracks' tape at the playhead, or take away the splice that's there (decided by the
+        selected track). all_tracks: every track. Returns "added", "removed" or None."""
         with self.lock:
             f = int(self.pos)
             t0 = self.armed - 1
-            ts = list(range(TRACKS)) if all_tracks else [t0]
+            ts = list(range(TRACKS)) if all_tracks else self.armed_tracks()
             remove = self._near(t0, f) is not None
             if not remove and (f <= 0 or f >= self.frames):
                 return None

@@ -405,7 +405,7 @@ class Transport:
                 self.say("NOTHING TO DROP: CUT OR COPY SOMETHING FIRST")
         elif name in ("SPLICE", "SPLICE_ALL"):
             done = e.splice(name == "SPLICE_ALL")
-            where = "ALL TRACKS" if name == "SPLICE_ALL" else "TRACK %d" % self.armed
+            where = "ALL TRACKS" if name == "SPLICE_ALL" else self.armed_text([t + 1 for t in e.armed_tracks()])
             self.say("SPLICED %s AT %s" % (where, pos) if done == "added"
                      else "SPLICE TAKEN AWAY FROM %s" % where if done == "removed" else "CAN'T SPLICE HERE", 2)
         elif name == "UNDO":

@@ -10,7 +10,7 @@ window that's running the app.
 |---|---|---|
 | AUDIO | Input: each input to its own track (OP-XY 8-channel), or all inputs mixed together | Arm all 8 tracks / back to just the selected one |
 | MIDI, FX, FILE, IMPORT | Not yet (coming in a later version) | |
-| SPLICE | Cut the tape at the playhead on the armed track. On an existing splice: take it away | Same, on all tracks |
+| SPLICE | Cut the tape at the playhead on the armed track(s). On an existing splice: take it away | Same, on all tracks |
 | CUT | Take the piece under the playhead off the tape onto the clipboard, leaving a gap. Hold to take several pieces (see below) | Undo |
 | LIFT | Copy the piece under the playhead onto the clipboard. Hold to copy several pieces | Start / stop selecting several pieces (no holding needed) |
 | DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest of the track later |

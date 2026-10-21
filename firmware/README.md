@@ -31,6 +31,16 @@ on the CIRCUITPY drive, and save. It restarts by itself.
 
 ## Testing it
 
+**Easiest:** on the Pi, with the board plugged in, run
+
+```
+~/console/pi-app/test-controls.sh
+```
+
+It shows every key and knob on the Pi's screen. Each one lights up as you use
+it and stays green once it has worked (knobs need a turn left, a turn right
+and a push). R clears the marks, Q quits, and Console starts again afterwards.
+
 On your computer, any MIDI monitor shows the messages. On the Pi, with the
 board plugged in:
 

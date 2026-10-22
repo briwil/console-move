@@ -70,13 +70,13 @@ FORMATS = {              # ALSA name -> (bytes per sample, numpy decode)
 
 # ---------------------------------------------------------------- finding a device
 
-def find_device(prefer=None):
-    """The first USB audio device with an input, as a dict, or None."""
+def usb_inputs():
+    """Every USB audio device with an input, as dicts (id, name, capture, playback...)."""
     try:
         with open("/proc/asound/cards") as f:
             cards = re.findall(r"^\s*(\d+)\s+\[(\S+)\s*\]:\s*(.*)$", f.read(), re.M)
     except OSError:
-        return None
+        return []
     found = []
     for index, cid, desc in cards:
         info = read_stream_info("/proc/asound/card%s/stream0" % index)
@@ -84,7 +84,17 @@ def find_device(prefer=None):
             continue
         info.update(index=int(index), id=cid, name=desc.split(" - ")[-1].strip())
         found.append(info)
+    return found
+
+
+def find_device(prefer=None):
+    """The USB audio device to record from: the one asked for (by card id, or part of its name) if it's
+    plugged in, otherwise the first one with an input. None if there's none."""
+    found = usb_inputs()
     if prefer:
+        for d in found:
+            if prefer.lower() == d["id"].lower():
+                return d
         for d in found:
             if prefer.lower() in (d["id"] + " " + d["name"]).lower():
                 return d
@@ -486,6 +496,37 @@ class Engine:
         """None (the input device, or the headphones if it has no output), "phones" or "usb:<card id>"."""
         return self.settings.get("output")
 
+    @property
+    def input_choice(self):
+        """The card id of the device to record from, or None for the first one found."""
+        return self.prefer or self.settings.get("device")
+
+    def _inputs(self):
+        """usb_inputs(), looked at no more than once a second (the settings page asks every frame)."""
+        now = time.monotonic()
+        cached = getattr(self, "_inputs_cache", None)
+        if not cached or now - cached[0] > 1.0:
+            cached = self._inputs_cache = (now, usb_inputs())
+        return cached[1]
+
+    def input_plugged(self, cid):
+        return any(d["id"] == cid for d in self._inputs())
+
+    def input_choices(self):
+        """[(card id, label)] for the SETTINGS page: every USB device with an input."""
+        choices = [(d["id"], d["name"].upper()) for d in self._inputs()]
+        key = self.input_choice
+        if key and key not in [k for k, _ in choices]:
+            choices.append((key, self.settings.get("device_name", key).upper()))
+        return choices
+
+    def set_input(self, cid, label=None):
+        self.prefer = None
+        self.remember("device", cid)
+        if label:
+            self.remember("device_name", label)
+        self._input_due = 0.0                   # the audio thread switches over straight away
+
     def output_choices(self):
         """[(key, label)] for the SETTINGS page: the headphone jack on the screen, then each USB output."""
         now = time.monotonic()
@@ -561,6 +602,7 @@ class Engine:
         if route == self.route and (route in ("device", None) or self.port):
             if route == "device":                       # block sizes may have changed with a new device
                 self.read_ahead = self.dev_buffer
+                self.output_label = dev["name"].upper()
             elif self.port:
                 self.port.TARGET = max(PERIOD * 3, 2 * self.in_period)
                 self.read_ahead = self.port.delay()
@@ -1418,7 +1460,7 @@ class Engine:
     def _run(self):
         import alsaaudio
         while not self._stop:
-            dev = find_device(self.prefer or self.settings.get("device"))
+            dev = find_device(self.input_choice)
             if not dev:
                 self.device = None
                 if not self._play_without_input():
@@ -1492,8 +1534,17 @@ class Engine:
         play = dev.get("playback")
         pb = None
         self._dev_out_retry = 0.0
+        self._input_due = time.monotonic() + 2.0
         try:
             while not self._stop:
+                if time.monotonic() >= self._input_due:
+                    self._input_due = time.monotonic() + 2.0
+                    want = find_device(self.input_choice)
+                    if want and want["id"] != dev["id"]:
+                        log("Input: switching to %s" % want["name"])
+                        with self.lock:
+                            self._resume_recording = self.recording
+                        return                       # _run opens the other one
                 n, data = cap.read()
                 if n <= 0:
                     continue                         # an overrun: skip and carry on
@@ -1553,7 +1604,7 @@ class Engine:
             self.status = "NO INPUT DEVICE  ·  PLAYING ON %s" % self.output_label
             if time.monotonic() > look:
                 look = time.monotonic() + 2.0
-                if find_device(self.prefer or self.settings.get("device")):
+                if find_device(self.input_choice):
                     return True                 # an input device turned up: go and open it
         return True
 

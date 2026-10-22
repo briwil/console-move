@@ -33,6 +33,12 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
   - **EXPORT FORMAT:** what EXPORT writes: WAV, AIFF or FLAC (all 24-bit,
     FLAC about half the size) or M4A (AAC 256 kbps, smallest, for sharing).
     The song's own track files are always WAV.
+  - **INPUT:** which USB audio device Console records from (the OP-XY, a
+    RØDE, an audio interface…). Until you pick one, it uses the first one it
+    finds. If the one you picked is unplugged, it records from another one
+    and says so here, and switches back by itself when it's plugged in again.
+    The tape runs at 44.1 kHz, so record from devices that can do 44.1 kHz
+    (the OP-XY does); as an OUTPUT, any rate works.
   - **OUTPUT:** where you hear the tape: **HEADPHONES** (the jack on the
     screen; its sound comes from the Pi over HDMI), or any USB audio device
     with an output that's plugged in (the OP-XY, an audio interface…).

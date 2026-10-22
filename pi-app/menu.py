@@ -27,8 +27,8 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "FORMAT", "OUTPUT", "UPDATE"]
-LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "OUTPUT": "OUTPUT",
+SETTINGS = ["SYNC", "TEMPO", "FORMAT", "INPUT", "OUTPUT", "UPDATE"]
+LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -144,7 +144,7 @@ class Menu:
         elif name in CONFIRM:
             if SETTINGS[self.row] == "UPDATE":
                 self.update_action()
-            elif SETTINGS[self.row] in ("SYNC", "FORMAT", "OUTPUT"):
+            elif SETTINGS[self.row] in ("SYNC", "FORMAT", "INPUT", "OUTPUT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
@@ -166,6 +166,16 @@ class Menu:
             import audio
             fs = audio.EXPORT_FORMATS
             e.remember("export_format", fs[(fs.index(e.export_format) + (1 if delta > 0 else -1)) % len(fs)])
+            self.msg = ""
+        elif what == "INPUT":
+            choices = e.input_choices()
+            if not choices:
+                self.say("NO USB AUDIO DEVICE WITH AN INPUT IS PLUGGED IN")
+                return
+            keys = [k for k, _ in choices]
+            now = e.input_choice if e.input_choice in keys else (e.device["id"] if e.device and e.device["id"] in keys else keys[0])
+            key, label = choices[(keys.index(now) + (1 if delta > 0 else -1)) % len(choices)] if now in keys else choices[0]
+            e.set_input(key, label)
             self.msg = ""
         elif what == "OUTPUT":
             choices = e.output_choices()
@@ -193,6 +203,8 @@ class Menu:
             return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")
         if what == "FORMAT":
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
+        if what == "INPUT":
+            return self.input_text()
         if what == "OUTPUT":
             return self.output_text()
         if what == "UPDATE":
@@ -239,6 +251,20 @@ class Menu:
         if u.state == "installing":
             return "DON'T TURN OFF THE CONSOLE"
         return ""
+
+    def input_text(self):
+        e = self.engine
+        key, now = e.input_choice, e.device
+        if not key:
+            return "%s  (default)" % now["name"].upper() if now else "NOTHING PLUGGED IN"
+        chosen = dict(e.input_choices()).get(key, key.upper())
+        if now and now["id"] == key:
+            return chosen
+        if e.input_plugged(key):
+            return "%s  (switching...)" % chosen
+        if now:
+            return "%s  - not found, recording from %s" % (chosen, now["name"].upper())
+        return "%s  - not found" % chosen
 
     def output_text(self):
         e = self.engine

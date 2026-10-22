@@ -1425,7 +1425,7 @@ class Engine:
             rate = pick_rate(dev["capture"]["rates"])
             if rate != self.rate:
                 self.status = "%s RUNS AT %d HZ (TAPE IS %d)" % (dev["name"].upper(), rate, self.rate)
-            cap = pb = None
+            cap = None
             play = dev.get("playback")
             period = int(self.settings.get("usb_period", USB_PERIOD))
             periods = int(self.settings.get("usb_periods", USB_PERIODS))
@@ -1435,15 +1435,8 @@ class Engine:
                                     rate=rate, channels=dev["capture"]["channels"],
                                     format=getattr(alsaaudio, "PCM_FORMAT_" + cap_fmt),
                                     periodsize=period, periods=periods)
-                if play:
-                    pb = alsaaudio.PCM(type=alsaaudio.PCM_PLAYBACK, mode=alsaaudio.PCM_NORMAL, device=name,
-                                       rate=rate, channels=play["channels"],
-                                       format=getattr(alsaaudio, "PCM_FORMAT_" + play["format"]),
-                                       periodsize=period, periods=periods)
-                    silence = encode(np.zeros((period, play["channels"]), np.float32), play["format"])
-                    for _ in range(periods):
-                        pb.write(silence)
                 self.in_period, self.dev_buffer = period, period * periods
+                self._dev_open = (name, rate, period, periods)
                 self._route_due = 0.0                # work out the output again with these sizes
                 self.device = dev
                 if self.input_mode is None:
@@ -1458,41 +1451,74 @@ class Engine:
                             self.recording = True        # carry on the same recording pass after a hiccup
                             log("Recording resumed")
                 self._resume_recording = False
-                self._loop(cap, pb, dev)
+                self._loop(cap, dev)
             except Exception as e:
                 self._resume_recording = self.recording
                 log("Audio stopped%s: %s" % (" while recording" if self.recording else "", e),
                     traceback.format_exc())
                 self.status = "AUDIO DEVICE LOST"
             finally:
-                for p in (cap, pb):
-                    try:
-                        p and p.close()
-                    except Exception:
-                        pass
+                try:
+                    cap and cap.close()
+                except Exception:
+                    pass
                 self.device = None
                 with self.lock:
                     self.recording = False
             time.sleep(1)
 
-    def _loop(self, cap, pb, dev):
+    def _open_device_output(self, play):
+        """The input device's own output, primed with silence."""
+        import alsaaudio
+        name, rate, period, periods = self._dev_open
+        pb = alsaaudio.PCM(type=alsaaudio.PCM_PLAYBACK, mode=alsaaudio.PCM_NORMAL, device=name,
+                           rate=rate, channels=play["channels"],
+                           format=getattr(alsaaudio, "PCM_FORMAT_" + play["format"]),
+                           periodsize=period, periods=periods)
+        silence = encode(np.zeros((period, play["channels"]), np.float32), play["format"])
+        for _ in range(periods):
+            pb.write(silence)
+        return pb
+
+    def _loop(self, cap, dev):
+        """Read the input device, record and play. The device's own output is only opened while the tape
+        plays there: the OP-XY sometimes garbles what it sends (repeated 1 ms packets, a crackle in the
+        recording) while it's also being sent audio, so with the output elsewhere it's left alone."""
         ch_in = dev["capture"]["channels"]
         play = dev.get("playback")
-        while not self._stop:
-            n, data = cap.read()
-            if n <= 0:
-                continue                         # an overrun: skip and carry on
-            x = decode(data, dev["capture"]["format"], ch_in)[:n]
-            out = self.process(x)
-            route = self._update_route(dev)
-            if pb:
-                o = np.zeros((n, play["channels"]), np.float32)
-                if route == "device":
+        pb = None
+        try:
+            while not self._stop:
+                n, data = cap.read()
+                if n <= 0:
+                    continue                         # an overrun: skip and carry on
+                x = decode(data, dev["capture"]["format"], ch_in)[:n]
+                out = self.process(x)
+                route = self._update_route(dev)
+                if route == "device" and play and pb is None:
+                    pb = self._open_device_output(play)
+                elif route != "device" and pb is not None:
+                    self._close_pcm(pb)
+                    pb = None
+                if pb:
+                    o = np.zeros((n, play["channels"]), np.float32)
                     o[:, :min(2, play["channels"])] = out[:, :min(2, play["channels"])]
-                pb.write(encode(o, play["format"]))          # silence when playing elsewhere: keeps its timing
-            port = self.port
-            if port:
-                port.push(out)
+                    pb.write(encode(o, play["format"]))
+                port = self.port
+                if port:
+                    port.push(out)
+        finally:
+            if pb is not None:
+                self._close_pcm(pb)
+
+    @staticmethod
+    def _close_pcm(pcm):
+        try:
+            if hasattr(pcm, "drop"):
+                pcm.drop()                           # stop now, without playing out what's queued
+            pcm.close()
+        except Exception:
+            pass
 
     def _play_without_input(self):
         """With no input device plugged in, play the tape on the headphones (or a USB output) anyway.

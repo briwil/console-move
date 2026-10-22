@@ -287,8 +287,15 @@ for example `{"clock_device": "OP-XY"}`.
 
 ## If recordings crackle
 
-With small audio buffers the Pi's USB audio driver can garble what comes in
-from a USB device (it repeats tiny 1 ms pieces of audio, which sounds like
-crackly distortion). Play something loud and busy on the device, then run
-`~/console/pi-app/usb-buffer-test.py`. It tries several buffer sizes,
-counts the glitches, and saves the smallest clean one for the app.
+The OP-XY sometimes garbles what it sends over USB (it repeats tiny 1 ms
+pieces of audio, which sounds like crackly distortion) while it's also being
+sent audio. It doesn't happen every time: about one start in four. So:
+
+- **For clean recordings, set Settings → OUTPUT to HEADPHONES** and listen
+  on the screen's jack. Then Console sends nothing to the OP-XY.
+- With OUTPUT on the OP-XY, check a recording before relying on it. If it
+  crackles, unplugging and replugging the OP-XY starts things afresh.
+
+`~/console/pi-app/usb-buffer-test.py --compare` checks a device for this:
+it records several times with and without sending audio to it, and counts
+the glitches. (Without `--compare` it tries different buffer sizes.)

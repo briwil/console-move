@@ -343,10 +343,12 @@ class OutPort(threading.Thread):
                     self.pcm.write(silence)
                     continue
                 o = np.zeros((n, self.channels), np.float32)
-                if self.channels == 1:
-                    o[:, 0] = block.mean(axis=1) * self.gain
-                else:
-                    o[:, :2] = block * self.gain
+                g = self.gain
+                sig = block.mean(axis=1, keepdims=True) if self.channels == 1 else block
+                sig = sig * g
+                if g > 1.0:
+                    sig = np.tanh(sig)                    # turned up past the mix level: round off the peaks
+                o[:, :sig.shape[1]] = sig
                 self.pcm.write(encode(o, self.fmt))
         except Exception as e:
             self.dead = str(e) or e.__class__.__name__
@@ -468,6 +470,7 @@ class Engine:
     # ------------------------------------------------------------ where the tape plays
 
     PHONES_LABEL = "HEADPHONES"
+    PHONES_BOOST = 4.0                      # 100% on the headphones is 4x (+12 dB); a soft limiter keeps it clean
 
     @property
     def output_choice(self):
@@ -505,7 +508,7 @@ class Engine:
         self._phones_dirty = time.monotonic()
         port = self.port
         if port and port.key == "phones":
-            port.gain = v * v                   # squared, so the knob feels even from quiet to loud
+            port.gain = v * v * self.PHONES_BOOST   # squared, so the knob feels even from quiet to loud
         return v
 
     def save_phones_volume(self):
@@ -554,7 +557,7 @@ class Engine:
             if route == "phones":
                 self.port = OutPort("phones", "hdmi:CARD=%s,DEV=0" % info, 2, "S16_LE", self.rate, self.rate,
                                     self.PHONES_LABEL)
-                self.port.gain = self.phones_volume ** 2
+                self.port.gain = self.phones_volume ** 2 * self.PHONES_BOOST
             elif route and route.startswith("usb:"):
                 pb = info["playback"]
                 self.port = OutPort(route, "hw:CARD=%s,DEV=0" % info["id"], pb["channels"], pb["format"],

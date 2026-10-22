@@ -13,7 +13,10 @@
 - One track is selected (self.armed: editing works on it, and it always
   records); more can be armed with it (self.arm_extra).
 - Plays the tape out of the same device, if it has an output (the OP-XY does,
-  so you hear the tape on its headphone jack).
+  so you hear the tape on its headphone jack), or wherever SETTINGS > OUTPUT
+  says: the screen's headphone jack (sound over HDMI) or another USB device.
+  Those run on their own clock, so OutPort resamples to keep them in step.
+  With no input device plugged in, the tape still plays on the headphones.
 - Tracks are mono, 32-bit float in memory. Projects are saved as 24-bit WAVs
   (track1.wav ... track8.wav) in ~/console-data/projects/<song>/; exports
   (stems plus a stereo mix) go to ~/console-data/exports/.
@@ -102,6 +105,44 @@ def read_stream_info(path):
 
 def pick_rate(rates):
     return 44100 if 44100 in rates else 48000 if 48000 in rates else rates[0]
+
+
+def usb_outputs():
+    """Every USB audio device with an output: [{"id", "name", "playback"}]."""
+    try:
+        with open("/proc/asound/cards") as f:
+            cards = re.findall(r"^\s*(\d+)\s+\[(\S+)\s*\]:\s*(.*)$", f.read(), re.M)
+    except OSError:
+        return []
+    found = []
+    for index, cid, desc in cards:
+        info = read_stream_info("/proc/asound/card%s/stream0" % index)
+        if info and info.get("playback"):
+            found.append({"id": cid, "name": desc.split(" - ")[-1].strip(), "playback": info["playback"]})
+    return found
+
+
+def hdmi_card():
+    """The ALSA card for the HDMI port the screen is on. The screen plays its sound on its headphone jack."""
+    try:
+        with open("/proc/asound/cards") as f:
+            ids = re.findall(r"^\s*\d+\s+\[(vc4hdmi\d)\s*\]", f.read(), re.M)
+    except OSError:
+        return None
+    if not ids:
+        return None
+    import glob
+    for path in sorted(glob.glob("/sys/class/drm/card*-HDMI-A-*/status")):
+        try:
+            with open(path) as f:
+                if f.read().strip() != "connected":
+                    continue
+            n = int(re.search(r"HDMI-A-(\d+)", path).group(1)) - 1     # HDMI-A-1 is vc4hdmi0
+        except (OSError, ValueError, AttributeError):
+            continue
+        if "vc4hdmi%d" % n in ids:
+            return "vc4hdmi%d" % n
+    return ids[0]
 
 
 # ---------------------------------------------------------------- sample formats
@@ -215,6 +256,105 @@ def read_wav(path):
     return decode(data, fmt, ch).mean(axis=1), rate
 
 
+# ---------------------------------------------------------------- a second output
+
+class OutPort(threading.Thread):
+    """Plays the tape on a device other than the one recording: the screen's headphone jack, or another
+    USB device. That device runs on its own clock, which never quite matches, so the engine pushes blocks
+    in at the tape's rate and this resamples them to the device's rate, nudging the speed by up to 0.2%
+    (too little to hear) to keep about TARGET frames waiting."""
+
+    TARGET = PERIOD * 3
+
+    def __init__(self, key, device, channels, fmt, rate, in_rate, label):
+        super().__init__(daemon=True, name="output")
+        import alsaaudio
+        self.key, self.label = key, label
+        self.channels, self.fmt, self.in_rate = channels, fmt, in_rate
+        self.pcm = alsaaudio.PCM(type=alsaaudio.PCM_PLAYBACK, mode=alsaaudio.PCM_NORMAL, device=device,
+                                 rate=rate, channels=channels, format=getattr(alsaaudio, "PCM_FORMAT_" + fmt),
+                                 periodsize=PERIOD, periods=PERIODS)
+        try:
+            rate = int(self.pcm.info().get("rate") or rate)     # the rate the device actually took
+        except Exception:
+            pass
+        self.rate = rate
+        self.gain = 1.0
+        self.lock = threading.Lock()
+        self.buf = np.zeros((0, 2), np.float32)
+        self.frac = 0.0                           # where the next output frame falls between two input frames
+        self.primed = False
+        self.dead = None                          # what went wrong, once the device has gone
+        self.stopped = False
+
+    def delay(self):
+        """About how long, in tape frames, between pushing a block and hearing it."""
+        return int(self.TARGET + PERIOD * PERIODS * self.in_rate / self.rate)
+
+    def fill(self):
+        return len(self.buf)
+
+    def push(self, block):
+        with self.lock:
+            self.buf = np.concatenate([self.buf, block[:, :2]])
+            if len(self.buf) > self.TARGET * 8:          # the device stalled: drop the backlog
+                self.buf = self.buf[-self.TARGET:]
+
+    def _take(self, n):
+        with self.lock:
+            have = len(self.buf)
+            if not self.primed:
+                if have < self.TARGET:
+                    return None
+                self.primed = True
+                if have > self.TARGET:                    # start from exactly TARGET, so delay() is right
+                    self.buf = self.buf[have - self.TARGET:]
+                    have = self.TARGET
+            nudge = max(-1.0, min(1.0, (have - self.TARGET) / self.TARGET))
+            step = self.in_rate / self.rate * (1.0 + 0.002 * nudge)
+            end = self.frac + step * n
+            if have < int(end) + 2:
+                self.primed = False                       # ran dry: wait until there's enough again
+                return None
+            pos = self.frac + step * np.arange(n)
+            i = pos.astype(np.int64)
+            f = (pos - i)[:, None].astype(np.float32)
+            out = self.buf[i] * (1.0 - f) + self.buf[i + 1] * f
+            used = int(end)
+            self.frac = end - used
+            self.buf = self.buf[used:]
+        return out
+
+    def run(self):
+        n = PERIOD
+        silence = encode(np.zeros((n, self.channels), np.float32), self.fmt)
+        try:
+            for _ in range(PERIODS):
+                self.pcm.write(silence)
+            while not self.stopped:
+                block = self._take(n)
+                if block is None:
+                    self.pcm.write(silence)
+                    continue
+                o = np.zeros((n, self.channels), np.float32)
+                if self.channels == 1:
+                    o[:, 0] = block.mean(axis=1) * self.gain
+                else:
+                    o[:, :2] = block * self.gain
+                self.pcm.write(encode(o, self.fmt))
+        except Exception as e:
+            self.dead = str(e) or e.__class__.__name__
+            log("Output %s stopped: %s" % (self.label, self.dead))
+        finally:
+            try:
+                self.pcm.close()
+            except Exception:
+                pass
+
+    def close(self):
+        self.stopped = True
+
+
 # ---------------------------------------------------------------- the engine
 
 class Engine:
@@ -253,7 +393,14 @@ class Engine:
         self.device = None                      # dict from find_device, while connected
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
-        self.latency = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1)))
+        # round trip, out and back in: lines up what you record with what you heard. latency_frames in
+        # settings.json is a measured value for the input device's own output; the extra carries over
+        self.latency_extra = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1))) - PERIOD * (PERIODS + 1)
+        self.latency = self.read_ahead + PERIOD + self.latency_extra
+        self.port = None                        # OutPort while the tape plays somewhere other than the input device
+        self.route = None                       # "device" (the input device's own output), "phones", "usb:<id>"
+        self.output_label = ""                  # where the tape is playing, for the settings page
+        self._route_due = 0.0                   # when to look at the outputs again
         self.clip = None                        # the clipboard, for DROP: [audio] or [left, right] for a stereo pair
         self.last_edit = None                   # (start, end) in frames of the last lift, cut or drop
         # the boxes on each track: [start, end, colour] in frames, sorted, never overlapping.
@@ -307,6 +454,124 @@ class Engine:
 
     def set_sync_mode(self, mode):
         self.remember("sync", mode)
+
+    # ------------------------------------------------------------ where the tape plays
+
+    PHONES_LABEL = "HEADPHONES"
+
+    @property
+    def output_choice(self):
+        """None (the input device, or the headphones if it has no output), "phones" or "usb:<card id>"."""
+        return self.settings.get("output")
+
+    def output_choices(self):
+        """[(key, label)] for the SETTINGS page: the headphone jack on the screen, then each USB output."""
+        now = time.monotonic()
+        cached = getattr(self, "_choices", None)
+        if cached and now - cached[0] < 1.0 and cached[1] == self.output_choice:
+            return cached[2]
+        choices = [("phones", self.PHONES_LABEL)]
+        for o in usb_outputs():
+            choices.append(("usb:" + o["id"], o["name"].upper()))
+        key = self.output_choice
+        if key and key not in [k for k, _ in choices]:
+            choices.append((key, self.settings.get("output_name", key[4:]).upper()))
+        self._choices = (now, key, choices)
+        return choices
+
+    def set_output(self, key, label=None):
+        self.remember("output", key)
+        if label and key.startswith("usb:"):
+            self.remember("output_name", label)
+        self._route_due = 0.0                   # the audio thread switches over on its next block
+
+    @property
+    def phones_volume(self):
+        return max(0.0, min(1.0, float(self.settings.get("phones_volume", 0.7))))
+
+    def change_phones_volume(self, delta):
+        v = round(max(0.0, min(1.0, self.phones_volume + delta)), 2)
+        self.settings["phones_volume"] = v
+        self._phones_dirty = time.monotonic()
+        port = self.port
+        if port and port.key == "phones":
+            port.gain = v * v                   # squared, so the knob feels even from quiet to loud
+        return v
+
+    def save_phones_volume(self):
+        """Write the headphone level to settings.json (the knob calls this once it stops turning)."""
+        if getattr(self, "_phones_dirty", None):
+            self._phones_dirty = None
+            self.remember("phones_volume", self.phones_volume)
+
+    def _want_route(self, dev):
+        """Where the tape should play: (route, details), or (None, None) if there's nowhere."""
+        key = self.output_choice
+        dev_out = bool(dev and dev.get("playback"))
+        if key == "phones":
+            card = hdmi_card()
+            if card:
+                return "phones", card
+        elif key and key.startswith("usb:"):
+            cid = key[4:]
+            if dev and dev["id"] == cid and dev_out:
+                return "device", None
+            for o in usb_outputs():
+                if o["id"] == cid:
+                    return key, o
+        # the default, or the chosen one isn't there: the input device's output, else the headphones
+        if dev_out:
+            return "device", None
+        card = hdmi_card()
+        return ("phones", card) if card else (None, None)
+
+    def _update_route(self, dev):
+        """Called by the audio thread: switches outputs when the setting changes or devices come and go."""
+        now = time.monotonic()
+        port = self.port
+        if port and port.dead:
+            self._close_port()
+            self._route_due = 0.0
+        if now < self._route_due:
+            return self.route
+        self._route_due = now + 2.0
+        route, info = self._want_route(dev)
+        if route == self.route and (route in ("device", None) or self.port):
+            return route
+        self._close_port()
+        self.route, self.output_label = None, ""
+        try:
+            if route == "phones":
+                self.port = OutPort("phones", "hdmi:CARD=%s,DEV=0" % info, 2, "S16_LE", self.rate, self.rate,
+                                    self.PHONES_LABEL)
+                self.port.gain = self.phones_volume ** 2
+            elif route and route.startswith("usb:"):
+                pb = info["playback"]
+                self.port = OutPort(route, "hw:CARD=%s,DEV=0" % info["id"], pb["channels"], pb["format"],
+                                    pick_rate(pb["rates"]), self.rate, info["name"].upper())
+        except Exception as e:
+            log("Couldn't open %s: %s" % ("the headphones" if route == "phones" else route, e))
+            self.port = None
+            if dev and dev.get("playback"):
+                route = "device"                # play on the input device instead, and try again later
+            else:
+                return None
+        if self.port:
+            self.port.start()
+            self.output_label = self.port.label
+            self.read_ahead = self.port.delay()
+            log("Output: %s (%d Hz)" % (self.port.label, self.port.rate))
+        elif route == "device":
+            self.output_label = dev["name"].upper()
+            self.read_ahead = PERIOD * PERIODS
+        self.latency = self.read_ahead + PERIOD + self.latency_extra
+        self.route = route
+        return route
+
+    def _close_port(self):
+        if self.port:
+            self.port.close()
+            self.port = None
 
     def song_exists(self, name):
         return os.path.exists(os.path.join(DATA, "projects", name))
@@ -1030,14 +1295,18 @@ class Engine:
 
     def stop(self):
         self._stop = True
+        self.save_phones_volume()
+        self._close_port()
 
     def _run(self):
         import alsaaudio
         while not self._stop:
             dev = find_device(self.prefer or self.settings.get("device"))
             if not dev:
-                self.device, self.status = None, "NO AUDIO DEVICE"
-                time.sleep(2)
+                self.device = None
+                if not self._play_without_input():
+                    self.status = "NO AUDIO DEVICE"
+                    time.sleep(2)
                 continue
             cap_fmt = dev["capture"]["format"]
             rate = pick_rate(dev["capture"]["rates"])
@@ -1098,10 +1367,42 @@ class Engine:
                 continue                         # an overrun: skip and carry on
             x = decode(data, dev["capture"]["format"], ch_in)[:n]
             out = self.process(x)
+            route = self._update_route(dev)
             if pb:
                 o = np.zeros((n, play["channels"]), np.float32)
-                o[:, :min(2, play["channels"])] = out[:, :min(2, play["channels"])]
-                pb.write(encode(o, play["format"]))
+                if route == "device":
+                    o[:, :min(2, play["channels"])] = out[:, :min(2, play["channels"])]
+                pb.write(encode(o, play["format"]))          # silence when playing elsewhere: keeps its timing
+            port = self.port
+            if port:
+                port.push(out)
+
+    def _play_without_input(self):
+        """With no input device plugged in, play the tape on the headphones (or a USB output) anyway.
+        Returns False straight away if there's nowhere to play; otherwise runs until an input device appears."""
+        if self._update_route(None) is None or not self.port:
+            return False
+        self.status = "NO INPUT DEVICE  ·  PLAYING ON %s" % self.output_label
+        silence = np.zeros((PERIOD, 1), np.float32)
+        look = time.monotonic() + 2.0
+        while not self._stop:
+            port = self.port
+            if port is None or port.dead:
+                self._update_route(None)
+                if not self.port:
+                    return False
+                continue
+            if port.fill() > port.TARGET:
+                time.sleep(0.003)               # the output sets the pace
+                continue
+            port.push(self.process(silence))
+            self._update_route(None)
+            self.status = "NO INPUT DEVICE  ·  PLAYING ON %s" % self.output_label
+            if time.monotonic() > look:
+                look = time.monotonic() + 2.0
+                if find_device(self.prefer or self.settings.get("device")):
+                    return True                 # an input device turned up: go and open it
+        return True
 
     def process(self, x):
         """One block of input (frames, channels) -> one block of stereo output. Also records."""

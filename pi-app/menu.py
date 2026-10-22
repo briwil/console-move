@@ -25,7 +25,8 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "FORMAT"]
+SETTINGS = ["SYNC", "TEMPO", "FORMAT", "OUTPUT"]
+LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "OUTPUT": "OUTPUT"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
 
@@ -135,7 +136,7 @@ class Menu:
         elif name in ("BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT"):     # with shift: small steps
             self.change(-1 if name in ("BAR_LEFT", "LOOP_IN") else 1, fine=True)
         elif name in CONFIRM:
-            if SETTINGS[self.row] in ("SYNC", "FORMAT"):
+            if SETTINGS[self.row] in ("SYNC", "FORMAT", "OUTPUT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
@@ -155,6 +156,13 @@ class Menu:
             fs = audio.EXPORT_FORMATS
             e.remember("export_format", fs[(fs.index(e.export_format) + (1 if delta > 0 else -1)) % len(fs)])
             self.msg = ""
+        elif what == "OUTPUT":
+            choices = e.output_choices()
+            keys = [k for k, _ in choices]
+            now = e.output_choice if e.output_choice in keys else ("usb:" + e.device["id"] if e.device and "usb:" + e.device["id"] in keys else "phones")
+            key, label = choices[(keys.index(now) + (1 if delta > 0 else -1)) % len(choices)]
+            e.set_output(key, label)
+            self.say("SHIFT + KNOB 10 CHANGES THE HEADPHONE VOLUME" if key == "phones" else "")
         elif what == "TEMPO":
             if self.transport.synced:
                 self.say("THE TEMPO COMES FROM THE OP-XY (EXTERNAL SYNC)")
@@ -174,7 +182,29 @@ class Menu:
             return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")
         if what == "FORMAT":
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
+        if what == "OUTPUT":
+            return self.output_text()
         return ""
+
+    def output_text(self):
+        e = self.engine
+        key = e.output_choice
+        names = dict(e.output_choices())
+        if key == "phones":
+            chosen = "HEADPHONES  (screen jack, %d%%)" % round(e.phones_volume * 100)
+        elif key:
+            chosen = names.get(key, key[4:].upper())
+        else:
+            chosen = (e.device["name"].upper() if e.device and e.device.get("playback") else "HEADPHONES") + "  (default)"
+        if not e._route_due:
+            return chosen                       # the switch hasn't happened yet: give it a moment
+        playing = e.output_label
+        wanted = "HEADPHONES" if key == "phones" else names.get(key) if key else None
+        if wanted and playing and playing != wanted:
+            return "%s  - not found, playing on %s" % (chosen.split("  (")[0], playing)
+        if wanted and not playing:
+            return "%s  - not found" % chosen.split("  (")[0]
+        return chosen
 
     def char(self, ch):
         if self.mode != "name":
@@ -280,7 +310,7 @@ class Menu:
         for i in range(1, 5):
             what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
             on = what is not None and i - 1 == self.row
-            s.set("set_label%d" % i, t={"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT"}.get(what, ""), c=ON if on else OFF)
+            s.set("set_label%d" % i, t=LABELS.get(what, ""), c=ON if on else OFF)
             s.set("set_value%d" % i, t=self.setting_text(what) if what else "",
                   c=ON if on else "#F2F3F5")
         bar = s.get("menu_bar")
@@ -325,4 +355,6 @@ class Menu:
         pygame.draw.rect(surf, ui.rgb(ON), (x0 + before, y, w, 4))
 
     def draw(self, surf):
+        if self.mode == "settings":
+            self.refresh()                      # the OUTPUT row changes as devices come and go
         self.s.draw(surf)

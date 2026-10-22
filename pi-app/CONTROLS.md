@@ -33,6 +33,14 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
   - **EXPORT FORMAT:** what EXPORT writes: WAV, AIFF or FLAC (all 24-bit,
     FLAC about half the size) or M4A (AAC 256 kbps, smallest, for sharing).
     The song's own track files are always WAV.
+  - **OUTPUT:** where you hear the tape: **HEADPHONES** (the jack on the
+    screen; its sound comes from the Pi over HDMI), or any USB audio device
+    with an output that's plugged in (the OP-XY, an audio interface…).
+    Until you pick one, it plays on the input device if it has an output,
+    otherwise on the headphones. If the one you picked isn't plugged in, it
+    plays on the other and says so here. SHIFT + knob 10 sets the headphone
+    volume (it shows the level while you turn it). With nothing plugged in
+    at all, the tape still plays on the headphones; it just can't record.
 - **LOAD:** coming next.
 
 Console opens whichever project you used last. Every change is written to
@@ -183,9 +191,9 @@ key to zoom to that one instead.
 | Knob | Turn | Push |
 |---|---|---|
 | 1–8 (above the tracks) | Track volume (with SHIFT: pan) | Mute / unmute (with SHIFT: solo / unsolo) |
-| Left of the right-hand three | Zoom | Zoom back to 4 bars |
-| Right of the right-hand three | Grid: 1/4, 1/8, 1/16, 1/32 | Loop on / off |
-| Big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
+| 9 (left of the right-hand three) | Zoom | Zoom back to 4 bars |
+| 10 (the middle one) | Grid: 1/4, 1/8, 1/16, 1/32 (with SHIFT: headphone volume) | Loop on / off |
+| 11, the big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
 
 ## Keyboard
 
@@ -216,6 +224,7 @@ key to zoom to that one instead.
 | B | Bounce the armed tracks onto the selected track (press twice) |
 | M | Mute the selected track (Shift+M: solo it) |
 | 9 / 0 | Armed track volume down / up |
+| ( / ) | Headphone volume down / up |
 | , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |

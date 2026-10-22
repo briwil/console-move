@@ -44,7 +44,7 @@ CHAR_ACTIONS = {
     "c": "COPY", "C": "COPY", "v": "DROP", "V": "DROP_INSERT", "x": "CUT", "X": "CUT",
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "SOLO",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
-    "9": "VOL_DOWN", "0": "VOL_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
+    "9": "VOL_DOWN", "0": "VOL_UP", "(": "PHONES_DOWN", ")": "PHONES_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
     "b": "BOUNCE", "B": "BOUNCE", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
@@ -319,6 +319,8 @@ class Transport:
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name.startswith("SOLO"):
             self.solo(int(name[4:]) if name[4:] else self.armed)
+        elif name in ("PHONES_UP", "PHONES_DOWN"):
+            self.phones_volume(0.05 if name == "PHONES_UP" else -0.05)
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name in ("MIDI", "FX", "IMPORT"):
@@ -337,6 +339,8 @@ class Transport:
         elif number == 9:
             for _ in range(abs(delta)):
                 t.zoom_in() if delta > 0 else t.zoom_out()
+        elif number == 10 and shift:
+            self.phones_volume(delta * 0.02)       # SHIFT + knob 10: headphone volume
         elif number == 10:
             for _ in range(abs(delta)):
                 t.grid = (t.grid + (1 if delta > 0 else -1)) % len(tape.GRIDS)
@@ -376,6 +380,14 @@ class Transport:
             return
         v = self.engine.change_volume(track, delta)
         self.say("TRACK %d  VOLUME %d%%" % (track, round(v * 100)), 2)
+
+    def phones_volume(self, delta):
+        e = self.engine
+        if not e:
+            return
+        v = e.change_phones_volume(delta)
+        note = "" if e.route == "phones" else "  (OUTPUT IS %s: CHANGE IT IN SETTINGS)" % (e.output_label or "NOT SET")
+        self.say("HEADPHONES %d%%%s" % (round(v * 100), note), 2)
 
     def edit_text(self):
         ts = self.engine.edit_tracks()
@@ -531,6 +543,9 @@ class Transport:
                 self.stop()
             self.follow_tempo()
             self.autosave()
+            dirty = getattr(e, "_phones_dirty", None)
+            if dirty and time.monotonic() - dirty > 1.0:
+                e.save_phones_volume()              # once the knob has stopped turning
         elif self.playing:
             start = t.pos
             t.pos += seconds * BPM / 60

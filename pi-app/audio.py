@@ -560,13 +560,17 @@ class Engine:
                 self.port = OutPort(route, "hw:CARD=%s,DEV=0" % info["id"], pb["channels"], pb["format"],
                                     pick_rate(pb["rates"]), self.rate, info["name"].upper())
         except Exception as e:
-            log("Couldn't open %s: %s" % ("the headphones" if route == "phones" else route, e))
+            text = "Couldn't open %s: %s" % ("the headphones" if route == "phones" else route, e)
+            if text != getattr(self, "_open_error", None):     # say it once, not every 2 seconds
+                log(text)
+                self._open_error = text
             self.port = None
             if dev and dev.get("playback"):
                 route = "device"                # play on the input device instead, and try again later
             else:
                 return None
         if self.port:
+            self._open_error = None
             self.port.start()
             self.output_label = self.port.label
             self.read_ahead = self.port.delay()

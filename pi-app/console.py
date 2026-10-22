@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")   # pygame mustn't open a sound device: the audio engine owns them
 import pygame
 
 import effects
@@ -841,7 +842,8 @@ def main():
     ap.add_argument("--demo", action="store_true", help="no audio: show made-up waveforms")
     args = ap.parse_args()
 
-    pygame.init()
+    pygame.display.init()                   # not pygame.init(): that would grab the Pi's default sound device
+    pygame.font.init()
     if args.window:
         display = pygame.display.set_mode((ui.WIDTH, ui.HEIGHT))
     else:

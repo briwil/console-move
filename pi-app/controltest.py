@@ -9,6 +9,7 @@ import os
 import queue
 import time
 
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")   # pygame mustn't open a sound device: the audio engine owns them
 import pygame
 
 import midi
@@ -179,7 +180,8 @@ def main():
     ap.add_argument("--rotate", type=int, default=int(os.environ.get("CONSOLE_ROTATE", "270")))
     args = ap.parse_args()
 
-    pygame.init()
+    pygame.display.init()                   # not pygame.init(): that would grab the Pi's default sound device
+    pygame.font.init()
     if args.window:
         display = pygame.display.set_mode((W, H))
     else:

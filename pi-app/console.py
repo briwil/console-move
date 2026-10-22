@@ -889,6 +889,10 @@ def main():
             engine.stop()
             engine.save(wait=True)
         pygame.quit()
+    if project_menu.restart:
+        import updater
+        print("Restarting with the new version...")
+        sys.exit(updater.RESTART_CODE)          # run.sh (or the boot service) starts the app again
 
 
 def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh):
@@ -918,6 +922,8 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
                 transport.key(name)
             TEXT_INPUT["on"] = project_menu.text_input
         transport.tick(seconds)
+        if project_menu.restart:
+            running = False                         # a software update was installed: start again
 
         if project_menu.open:
             project_menu.draw(frame)

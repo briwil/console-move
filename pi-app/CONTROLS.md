@@ -41,6 +41,21 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     plays on the other and says so here. SHIFT + knob 10 sets the headphone
     volume (it shows the level while you turn it). With nothing plugged in
     at all, the tape still plays on the headphones; it just can't record.
+  - **SOFTWARE UPDATE:** press PLAY to check GitHub for a new version. If
+    there is one, it shows what's new; press PLAY again to install it. The
+    app then restarts by itself (your song is saved first). It needs the
+    internet and the GitHub login the Pi already uses for `git pull`:
+    - "GITHUB LOGIN NEEDED": the Pi has to remember the login. Over SSH, run
+      `git config --global credential.helper store`, then
+      `cd ~/console && git pull` once and type your GitHub name and token.
+      After that the update button works on its own.
+    - "FILES ON THE PI WERE CHANGED BY HAND": a file in `~/console` was
+      edited on the Pi. `cd ~/console && git status` shows which;
+      `git checkout -- <file>` puts it back.
+    - If an update says it needs `setup.sh`, run `~/console/pi-app/setup.sh`
+      once over SSH, then press PLAY to restart.
+    - A new start-up animation needs `~/console/pi-app/splash-setup.sh` run
+      once, then a reboot.
 - **LOAD:** coming next.
 
 Console opens whichever project you used last. Every change is written to

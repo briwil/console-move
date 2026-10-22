@@ -14,10 +14,12 @@ small knob) change it. SHIFT+← / → changes the tempo in small steps.
 The look comes from layouts/menu.ui, made with the Screen Designer.
 """
 import os
+import time
 
 import pygame
 
 import ui
+import updater
 
 ITEMS = [("NEW", "menu_new"), ("SAVE", "menu_save"), ("LOAD", "menu_load"), ("SETTINGS", "menu_settings")]
 ON, OFF = "#3CCB7F", "#5A606B"
@@ -25,8 +27,9 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "FORMAT", "OUTPUT"]
-LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "OUTPUT": "OUTPUT"}
+SETTINGS = ["SYNC", "TEMPO", "FORMAT", "OUTPUT", "UPDATE"]
+LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "OUTPUT": "OUTPUT",
+          "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
 
@@ -51,6 +54,9 @@ class Menu:
         self.msg = ""
         self.confirm_new = False              # NEW pressed once on an unsaved song with audio
         self.naming = "new"                   # what the name is for: "new" project or "save" an unnamed one
+        self.updater = None                   # made the first time SETTINGS opens
+        self.restart = False                  # True once an update is installed: the app restarts
+        self._done_at = None
         self.refresh()
 
     @property
@@ -136,12 +142,17 @@ class Menu:
         elif name in ("BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT"):     # with shift: small steps
             self.change(-1 if name in ("BAR_LEFT", "LOOP_IN") else 1, fine=True)
         elif name in CONFIRM:
-            if SETTINGS[self.row] in ("SYNC", "FORMAT", "OUTPUT"):
+            if SETTINGS[self.row] == "UPDATE":
+                self.update_action()
+            elif SETTINGS[self.row] in ("SYNC", "FORMAT", "OUTPUT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
 
     def change(self, delta, fine=False):
+        if SETTINGS[self.row] == "UPDATE":
+            self.say("PRESS PLAY")
+            return
         e = self.engine
         if not e:
             self.say("SETTINGS NEED THE AUDIO ENGINE")
@@ -184,6 +195,49 @@ class Menu:
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
         if what == "OUTPUT":
             return self.output_text()
+        if what == "UPDATE":
+            return self.update_text()
+        return ""
+
+    def update_action(self):
+        u = self.updater
+        if u.state in ("idle", "current", "error"):
+            u.check()
+            self.msg = ""
+        elif u.state == "available":
+            u.install()
+            self.msg = ""
+        elif u.state == "done":
+            self.restart = True
+
+    def update_text(self):
+        u = self.updater
+        if u.state == "checking":
+            return "CHECKING..."
+        if u.state == "current":
+            return "UP TO DATE  (%s)" % u.version
+        if u.state == "available":
+            return "NEW VERSION: PLAY TO INSTALL"
+        if u.state == "installing":
+            return "INSTALLING..."
+        if u.state == "done":
+            return "INSTALLED: PLAY TO RESTART" if u.needs_setup else "INSTALLED: RESTARTING..."
+        if u.state == "error":
+            return "COULDN'T: PLAY TO TRY AGAIN"
+        return "%s  \u00b7  PLAY TO CHECK" % u.version
+
+    def update_message(self):
+        """The line under the settings, while the update row is chosen."""
+        u = self.updater
+        if u.state == "available":
+            what = u.detail if len(u.detail) <= 60 else u.detail[:57] + "..."
+            return "%d CHANGE%s, NEWEST: %s" % (u.count, "" if u.count == 1 else "S", what.upper())
+        if u.state == "error":
+            return u.detail
+        if u.state == "done" and u.needs_setup:
+            return "THIS UPDATE NEEDS pi-app/setup.sh RUN ONCE (OVER SSH), THEN PLAY"
+        if u.state == "installing":
+            return "DON'T TURN OFF THE CONSOLE"
         return ""
 
     def output_text(self):
@@ -256,6 +310,8 @@ class Menu:
                 self.say("SAVED %s" % e.song.upper())
         elif what == "SETTINGS":
             self.mode, self.row, self.msg = "settings", 0, ""
+            if self.updater is None:
+                self.updater = updater.Updater()
         else:
             self.say("%s COMES NEXT" % what)
 
@@ -307,7 +363,7 @@ class Menu:
             s.set(item, t=text if listing else "", c=ON if on else OFF, s=SIZE_ON if on else SIZE_OFF,
                   y=self.ys[item] - (2 if on else 0))
         settings = self.mode == "settings"
-        for i in range(1, 5):
+        for i in range(1, len(SETTINGS) + 1):
             what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
             on = what is not None and i - 1 == self.row
             s.set("set_label%d" % i, t=LABELS.get(what, ""), c=ON if on else OFF)
@@ -335,7 +391,10 @@ class Menu:
             s.set("name_text", t="".join(self.name) or " ")
             hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
         s.set("menu_hint", t=hint)
-        s.set("menu_msg", t=self.msg)
+        if settings and SETTINGS[self.row] == "UPDATE" and self.updater and not self.msg:
+            s.set("menu_msg", t=self.update_message())
+        else:
+            s.set("menu_msg", t=self.msg)
 
     def draw_cursor(self, surf):
         """A block under the letter being changed, OP-1 style."""
@@ -356,5 +415,11 @@ class Menu:
 
     def draw(self, surf):
         if self.mode == "settings":
-            self.refresh()                      # the OUTPUT row changes as devices come and go
+            self.refresh()                      # the OUTPUT and UPDATE rows change by themselves
+            u = self.updater
+            if u and u.state == "done" and not u.needs_setup:
+                if self._done_at is None:
+                    self._done_at = time.monotonic()
+                elif time.monotonic() - self._done_at > 2.0:
+                    self.restart = True         # give the message a moment, then restart
         self.s.draw(surf)

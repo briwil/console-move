@@ -17,7 +17,11 @@ if systemctl is-active --quiet console 2>/dev/null; then
   echo "Stopping the copy of Console that started at boot (it may ask for your password)..."
   sudo systemctl stop console && RESTART=1
 fi
-python3 console.py "$@"
+# exit code 75: a software update was installed, so start the new version
+while true; do
+  python3 console.py "$@" && break
+  [ $? = 75 ] || break
+done
 if [ "$RESTART" = 1 ]; then
   echo "Starting the boot copy of Console again..."
   sudo systemctl start console

@@ -46,12 +46,12 @@ def glitches_per_second(path, channels):
     return count / (len(x) / 44100), level
 
 
-def record(dev, period, periods, path):
+def record(dev, period, periods, path, send=True):
     fmt, ch, rate = dev["capture"]["format"], dev["capture"]["channels"], audio.pick_rate(dev["capture"]["rates"])
     hw = "hw:CARD=%s,DEV=0" % dev["id"]
     size = [] if period is None else ["--period-size=%d" % period, "--buffer-size=%d" % (period * periods)]
     play = None
-    if dev.get("playback"):
+    if send and dev.get("playback"):
         p = dev["playback"]
         play = subprocess.Popen(["aplay", "-q", "-D", hw, "-c", str(p["channels"]), "-f", p["format"],
                                  "-r", str(audio.pick_rate(p["rates"])), "-t", "raw"] + size + ["/dev/zero"],
@@ -66,6 +66,24 @@ def record(dev, period, periods, path):
     return ch
 
 
+def compare(dev):
+    """--compare: does sending audio to the device while recording cause the glitches? 4 tries each."""
+    rows = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for i in range(4):
+            for send in (True, False):
+                path = os.path.join(tmp, "t.wav")
+                ch = record(dev, 512, 8, path, send=send)
+                rate, _ = glitches_per_second(path, ch)
+                label = "sending audio to it" if send else "recording only"
+                print("  try %d  %-20s  %s" % (i + 1, label, "too quiet" if rate is None else "%5.1f glitches a second" % rate))
+                rows.append((send, rate))
+    for send in (True, False):
+        rates = [r for s_, r in rows if s_ == send and r is not None]
+        bad = sum(1 for r in rates if r > 0.3)
+        print("%-20s  glitchy %d of %d tries" % ("Sending audio to it:" if send else "Recording only:", bad, len(rates)))
+
+
 def main():
     dev = audio.find_device()
     if not dev:
@@ -74,14 +92,18 @@ def main():
     if dev["capture"]["format"] != "S32_LE":
         print("This test only knows 32-bit devices; %s sends %s." % (dev["name"], dev["capture"]["format"]))
         return 1
+    runs = 8 if "--compare" in sys.argv else len(SIZES) + 1
     print("Testing %s. Keep it playing something loud and busy until this finishes (about %d s)."
-          % (dev["name"], (len(SIZES) + 1) * (SECONDS + 1)))
+          % (dev["name"], runs * (SECONDS + 1)))
     restart = subprocess.run(["systemctl", "is-active", "--quiet", "console"]).returncode == 0
     if restart:
         print("Pausing the Console app (it may ask for your password)...")
         subprocess.run(["sudo", "systemctl", "stop", "console"], check=True)
     results = []
     try:
+        if "--compare" in sys.argv:
+            compare(dev)
+            return 0
         with tempfile.TemporaryDirectory() as tmp:
             for period, periods in [(None, None)] + SIZES:
                 name = "Pi's default" if period is None else "%d x %d" % (period, periods)

@@ -39,8 +39,10 @@ for r in range(4):                             # ENC1-ENC8 pushes: rows 0-3, col
     NOTE[(r, 4)] = 32 + 2 * r
     NOTE[(r, 5)] = 33 + 2 * r
 NOTE[(5, 2)] = 40                              # ENC9 push
-NOTE[(5, 3)] = 41                              # ENC10 push
-NOTE[(5, 4)] = 42                              # ENC11 push
+# On the board, the knob labelled ENC11 sits between ENC9 and ENC10, so these two are
+# numbered by position instead: the 10th knob from the left sends 10, the last one 11.
+NOTE[(5, 3)] = 42                              # ENC10 on the board (last knob) push
+NOTE[(5, 4)] = 41                              # ENC11 on the board (10th knob) push
 
 # ---------------------------------------------------------------- knobs (A/B on GP14/15 ... GP34/35)
 
@@ -83,6 +85,7 @@ for e in range(11):
         polled.append(enc)
     encoders.append(enc)
 last = [enc.position for enc in encoders]
+KNOB_CC = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 10]   # by position: board ENC10 is the last knob, ENC11 the 10th
 if polled:
     print("%d knobs read by polling" % len(polled))
 
@@ -117,6 +120,6 @@ while True:
         delta = pos - last[i]
         if delta:
             last[i] = pos
-            send(0xB0 | CHANNEL, i + 1, max(1, min(127, 64 + delta)))
+            send(0xB0 | CHANNEL, KNOB_CC[i], max(1, min(127, 64 + delta)))
     if not polled:
         time.sleep(0.001)

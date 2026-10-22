@@ -360,6 +360,8 @@ class OutPort(threading.Thread):
             log("Output %s stopped: %s" % (self.label, self.dead))
         finally:
             try:
+                if hasattr(self.pcm, "drop"):
+                    self.pcm.drop()                       # stop now, without playing out what's queued
                 self.pcm.close()
             except Exception:
                 pass
@@ -602,6 +604,8 @@ class Engine:
     def _close_port(self):
         if self.port:
             self.port.close()
+            if self.port.is_alive():
+                self.port.join(1.0)             # let it actually let go of the device before anything reopens it
             self.port = None
 
     def song_exists(self, name):
@@ -1487,6 +1491,7 @@ class Engine:
         ch_in = dev["capture"]["channels"]
         play = dev.get("playback")
         pb = None
+        self._dev_out_retry = 0.0
         try:
             while not self._stop:
                 n, data = cap.read()
@@ -1495,8 +1500,12 @@ class Engine:
                 x = decode(data, dev["capture"]["format"], ch_in)[:n]
                 out = self.process(x)
                 route = self._update_route(dev)
-                if route == "device" and play and pb is None:
-                    pb = self._open_device_output(play)
+                if route == "device" and play and pb is None and time.monotonic() >= self._dev_out_retry:
+                    try:
+                        pb = self._open_device_output(play)
+                    except Exception as e:      # keep recording; try the output again in a moment
+                        log("Couldn't open %s's output: %s" % (dev["name"], e))
+                        self._dev_out_retry = time.monotonic() + 2.0
                 elif route != "device" and pb is not None:
                     self._close_pcm(pb)
                     pb = None

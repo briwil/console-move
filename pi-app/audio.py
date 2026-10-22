@@ -48,8 +48,13 @@ except Exception as _e:                     # numpy or ctypes trouble: carry on 
 
 TRACKS = 8
 RES = 16                 # waveform level values per beat, same as tape.RES
-PERIOD = 512             # frames per audio block
+PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
 PERIODS = 8              # blocks queued in the output buffer (about 90 ms: room for the screen drawing)
+# The USB input device uses bigger blocks: with 512-frame blocks the Pi's USB audio driver garbles the
+# OP-XY's recording stream (repeated 1 ms packets). usb-buffer-test.py finds the smallest clean size and
+# saves it as usb_period / usb_periods in settings.json.
+USB_PERIOD = 2048
+USB_PERIODS = 4
 MIX_GAIN = 0.6
 UNDO_STEPS = 8
 
@@ -408,7 +413,9 @@ class Engine:
         # round trip, out and back in: lines up what you record with what you heard. latency_frames in
         # settings.json is a measured value for the input device's own output; the extra carries over
         self.latency_extra = int(self.settings.get("latency_frames", PERIOD * (PERIODS + 1))) - PERIOD * (PERIODS + 1)
-        self.latency = self.read_ahead + PERIOD + self.latency_extra
+        self.in_period = PERIOD                 # frames per block from the input device
+        self.dev_buffer = PERIOD * PERIODS      # the input device's output buffer, in frames
+        self.latency = self.read_ahead + self.in_period + self.latency_extra
         self.port = None                        # OutPort while the tape plays somewhere other than the input device
         self.route = None                       # "device" (the input device's own output), "phones", "usb:<id>"
         self.output_label = ""                  # where the tape is playing, for the settings page
@@ -550,6 +557,12 @@ class Engine:
         self._route_due = now + 2.0
         route, info = self._want_route(dev)
         if route == self.route and (route in ("device", None) or self.port):
+            if route == "device":                       # block sizes may have changed with a new device
+                self.read_ahead = self.dev_buffer
+            elif self.port:
+                self.port.TARGET = max(PERIOD * 3, 2 * self.in_period)
+                self.read_ahead = self.port.delay()
+            self.latency = self.read_ahead + self.in_period + self.latency_extra
             return route
         self._close_port()
         self.route, self.output_label = None, ""
@@ -574,14 +587,15 @@ class Engine:
                 return None
         if self.port:
             self._open_error = None
+            self.port.TARGET = max(PERIOD * 3, 2 * self.in_period)    # enough to ride over the input's bigger blocks
             self.port.start()
             self.output_label = self.port.label
             self.read_ahead = self.port.delay()
             log("Output: %s (%d Hz)" % (self.port.label, self.port.rate))
         elif route == "device":
             self.output_label = dev["name"].upper()
-            self.read_ahead = PERIOD * PERIODS
-        self.latency = self.read_ahead + PERIOD + self.latency_extra
+            self.read_ahead = self.dev_buffer
+        self.latency = self.read_ahead + self.in_period + self.latency_extra
         self.route = route
         return route
 
@@ -1413,20 +1427,24 @@ class Engine:
                 self.status = "%s RUNS AT %d HZ (TAPE IS %d)" % (dev["name"].upper(), rate, self.rate)
             cap = pb = None
             play = dev.get("playback")
+            period = int(self.settings.get("usb_period", USB_PERIOD))
+            periods = int(self.settings.get("usb_periods", USB_PERIODS))
             try:
                 name = "hw:CARD=%s,DEV=0" % dev["id"]
                 cap = alsaaudio.PCM(type=alsaaudio.PCM_CAPTURE, mode=alsaaudio.PCM_NORMAL, device=name,
                                     rate=rate, channels=dev["capture"]["channels"],
                                     format=getattr(alsaaudio, "PCM_FORMAT_" + cap_fmt),
-                                    periodsize=PERIOD, periods=PERIODS)
+                                    periodsize=period, periods=periods)
                 if play:
                     pb = alsaaudio.PCM(type=alsaaudio.PCM_PLAYBACK, mode=alsaaudio.PCM_NORMAL, device=name,
                                        rate=rate, channels=play["channels"],
                                        format=getattr(alsaaudio, "PCM_FORMAT_" + play["format"]),
-                                       periodsize=PERIOD, periods=PERIODS)
-                    silence = encode(np.zeros((PERIOD, play["channels"]), np.float32), play["format"])
-                    for _ in range(PERIODS):
+                                       periodsize=period, periods=periods)
+                    silence = encode(np.zeros((period, play["channels"]), np.float32), play["format"])
+                    for _ in range(periods):
                         pb.write(silence)
+                self.in_period, self.dev_buffer = period, period * periods
+                self._route_due = 0.0                # work out the output again with these sizes
                 self.device = dev
                 if self.input_mode is None:
                     ch = dev["capture"]["channels"]
@@ -1479,6 +1497,7 @@ class Engine:
     def _play_without_input(self):
         """With no input device plugged in, play the tape on the headphones (or a USB output) anyway.
         Returns False straight away if there's nowhere to play; otherwise runs until an input device appears."""
+        self.in_period = PERIOD
         if self._update_route(None) is None or not self.port:
             return False
         self.status = "NO INPUT DEVICE  ·  PLAYING ON %s" % self.output_label

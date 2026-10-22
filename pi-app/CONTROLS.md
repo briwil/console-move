@@ -284,3 +284,11 @@ OP-XY), so turn on the OP-XY's USB MIDI clock output. Then:
 
 To follow a different device, put its name in `~/console-data/settings.json`,
 for example `{"clock_device": "OP-XY"}`.
+
+## If recordings crackle
+
+With small audio buffers the Pi's USB audio driver can garble what comes in
+from a USB device (it repeats tiny 1 ms pieces of audio, which sounds like
+crackly distortion). Play something loud and busy on the device, then run
+`~/console/pi-app/usb-buffer-test.py`. It tries several buffer sizes,
+counts the glitches, and saves the smallest clean one for the app.

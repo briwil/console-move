@@ -3,7 +3,7 @@
 # each is the part of the full 400 x 1280 screen picture starting 32 px in from the left, at the top.
 # Made from splash/loader-source/ (Brian's 1280 x 400 renders) by pi-app/splash/make-frames.py.
 FRAMES = 48;
-FPS = 30;                       # Plymouth redraws 50 times a second; this is how many frames that shows
+FPS = 24;                       # Plymouth redraws 50 times a second; this is how many frames that shows
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 i = 0;

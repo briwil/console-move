@@ -17,3 +17,6 @@ recordings/
 # OS clutter
 .DS_Store
 Thumbs.db
+
+# Built on the Pi by setup.sh
+*.so

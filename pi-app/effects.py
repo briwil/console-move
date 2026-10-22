@@ -1,0 +1,124 @@
+"""The send effects: a reverb (ported from Mutable Instruments Elements/Rings) and a tape delay.
+
+The sound work happens in fx/fx.c, compiled to fx/libconsolefx.so. setup.sh builds it; if it's
+missing (or older than fx.c) this tries to build it with gcc, and if that isn't possible the
+effects are simply off and AVAILABLE is False.
+"""
+import ctypes
+import os
+import subprocess
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(HERE, "fx", "fx.c")
+LIB = os.path.join(HERE, "fx", "libconsolefx.so")
+
+# Delay times the delay knob steps through, in beats (a beat is a quarter note)
+DELAY_TIMES = [("1/16", 0.25), ("1/8T", 1 / 3), ("1/8", 0.5), ("1/8.", 0.75), ("1/4T", 2 / 3),
+               ("1/4", 1.0), ("1/4.", 1.5), ("1/2", 2.0)]
+DELAY_TIMES.sort(key=lambda t: t[1])
+DEFAULTS = {"rev_size": 0.5, "rev_tone": 0.5, "rev_level": 0.8,
+            "dly_time": "1/8.", "dly_feedback": 0.4, "dly_level": 0.7}
+REVERB_MAKEUP = 4.0       # the reverb comes out quieter than it goes in; this brings it up to match
+PROBLEM = ""              # why the effects are off, if they are
+
+
+def _build():
+    try:
+        r = subprocess.run(["gcc", "-O2", "-shared", "-fPIC", "-o", LIB, SRC, "-lm"],
+                           capture_output=True, text=True, timeout=120)
+        return r.returncode == 0, r.stderr.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, str(e)
+
+
+def _load():
+    global PROBLEM
+    stale = os.path.exists(LIB) and os.path.exists(SRC) and os.path.getmtime(SRC) > os.path.getmtime(LIB)
+    if not os.path.exists(LIB) or stale:
+        ok, err = _build()
+        if not ok and not os.path.exists(LIB):
+            PROBLEM = "EFFECTS NEED BUILDING: RUN pi-app/setup.sh"
+            print("Effects: couldn't build fx/libconsolefx.so (%s). Run pi-app/setup.sh." % err)
+            return None
+    try:
+        lib = ctypes.CDLL(LIB)
+    except OSError as e:
+        PROBLEM = "EFFECTS NEED BUILDING: RUN pi-app/setup.sh"
+        print("Effects: couldn't load %s: %s" % (LIB, e))
+        return None
+    f, p, i = ctypes.c_float, ctypes.c_void_p, ctypes.c_int
+    fp = ctypes.POINTER(ctypes.c_float)
+    for name, args, res in [("rev_new", [f], p), ("rev_free", [p], None), ("rev_clear", [p], None),
+                            ("rev_params", [p, f, f, f, f], None), ("rev_process", [p, fp, fp, fp, fp, i], None),
+                            ("dly_new", [f, f], p), ("dly_free", [p], None), ("dly_clear", [p], None),
+                            ("dly_params", [p, f, f, f], None), ("dly_process", [p, fp, fp, fp, fp, i], None)]:
+        fn = getattr(lib, name)
+        fn.argtypes, fn.restype = args, res
+    return lib
+
+
+_lib = _load()
+AVAILABLE = _lib is not None
+
+
+def _ptr(a):
+    return a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+
+class _Effect:
+    def __init__(self, handle, process, free):
+        self.h, self._process, self._free = handle, process, free
+
+    def process(self, x):
+        """x: (frames, 2) float32 send signal -> (frames, 2) wet signal."""
+        n = len(x)
+        l = np.ascontiguousarray(x[:, 0], np.float32)
+        r = np.ascontiguousarray(x[:, 1], np.float32)
+        ol = np.empty(n, np.float32)
+        orr = np.empty(n, np.float32)
+        if n:
+            self._process(self.h, _ptr(l), _ptr(r), _ptr(ol), _ptr(orr), n)
+        return np.stack([ol, orr], axis=1)
+
+    def __del__(self):
+        try:
+            if self.h:
+                self._free(self.h)
+                self.h = None
+        except Exception:
+            pass
+
+
+class Reverb(_Effect):
+    def __init__(self, rate):
+        super().__init__(_lib.rev_new(rate), _lib.rev_process, _lib.rev_free)
+
+    def set(self, size, tone):
+        """size and tone 0..1. Ranges from the Elements and Rings modules."""
+        _lib.rev_params(self.h, 0.35 + 0.53 * size, 0.3 + 0.6 * tone, 0.625, 0.2)
+
+    def clear(self):
+        _lib.rev_clear(self.h)
+
+
+class Delay(_Effect):
+    def __init__(self, rate, max_seconds=8.0):
+        super().__init__(_lib.dly_new(rate, max_seconds), _lib.dly_process, _lib.dly_free)
+
+    def set(self, samples, feedback, tone=0.55):
+        _lib.dly_params(self.h, samples, feedback, tone)
+
+    def clear(self):
+        _lib.dly_clear(self.h)
+
+
+def delay_beats(name):
+    return dict(DELAY_TIMES).get(name, 0.75)
+
+
+def step_delay_time(name, delta):
+    names = [n for n, _ in DELAY_TIMES]
+    i = names.index(name) if name in names else names.index("1/8.")
+    return names[max(0, min(len(names) - 1, i + delta))]

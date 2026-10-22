@@ -25,6 +25,7 @@ import time
 
 import pygame
 
+import effects
 import focus
 import menu
 import tape
@@ -45,7 +46,7 @@ CHAR_ACTIONS = {
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "SOLO",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "(": "PHONES_DOWN", ")": "PHONES_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
-    "b": "BOUNCE", "B": "BOUNCE", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
+    "b": "BOUNCE", "B": "BOUNCE", "w": "FX", "W": "FX", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
@@ -179,6 +180,8 @@ class Transport:
         for n in range(1, 8):
             screen.custom["track%d_num" % n] = self.draw_num
         self.focus = focus.Focus(screen, self.tape)
+        self.fx_page = None                       # None, "reverb" or "delay": what the FX key shows
+        screen.after["playhead"] = self.draw_fx
         self._playing = False
         self._recording = False
         self._armed = 4
@@ -323,7 +326,11 @@ class Transport:
             self.phones_volume(0.05 if name == "PHONES_UP" else -0.05)
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
-        elif name in ("MIDI", "FX", "IMPORT"):
+        elif name == "FX":
+            self.fx_page = {None: "reverb", "reverb": "delay", "delay": None}[self.fx_page]
+            if self.fx_page and not effects.AVAILABLE:
+                self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)
+        elif name in ("MIDI", "IMPORT"):
             self.say("%s COMES IN A LATER VERSION" % name)
         else:
             self.edit(name)
@@ -331,7 +338,9 @@ class Transport:
 
     def knob(self, number, delta, shift):
         t = self.tape
-        if number <= 8:
+        if self.fx_page and self.engine and not (number == 10 and shift):
+            self.fx_knob(number, delta)
+        elif number <= 8:
             if shift:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
             else:
@@ -380,6 +389,80 @@ class Transport:
             return
         v = self.engine.change_volume(track, delta)
         self.say("TRACK %d  VOLUME %d%%" % (track, round(v * 100)), 2)
+
+    # ------------------------------------------------------------ send effects (the FX key)
+
+    FX_KNOBS = {"reverb": (("rev_size", "SIZE"), ("rev_tone", "TONE"), ("rev_level", "LEVEL")),
+                "delay": (("dly_time", "TIME"), ("dly_feedback", "FEEDBACK"), ("dly_level", "LEVEL"))}
+
+    def fx_knob(self, number, delta):
+        """On an FX page: knobs 1-8 are the tracks' sends, 9 and 10 the effect's settings, the big knob its level."""
+        e = self.engine
+        if number <= 8:
+            e.change_send(self.fx_page, number, delta * 0.02)
+        else:
+            key = self.FX_KNOBS[self.fx_page][number - 9][0]
+            e.change_fx(key, delta if key == "dly_time" else delta * 0.02)
+
+    def fx_value_text(self, key):
+        v = self.engine.fx[key]
+        if key == "dly_time":
+            return v
+        return "%d%%" % round(v * 100)
+
+    def draw_fx(self, surf, it=None):
+        """The FX page: each track's send as a bar across its lane, and the effect's settings on the right."""
+        page, e = self.fx_page, self.engine
+        if not page or not e:
+            return
+        s = self.s
+        sends = e.rev_sends if page == "reverb" else e.dly_sends
+        small, mid, big = s.font("mono", 600, 14), s.font("mono", 600, 18), s.font("mono", 700, 26)
+        bar_x, bar_w = 72, 720
+        for n in range(1, 9):
+            lane, tab = s.get("track%d_lane" % n), s.get("track%d_tab" % n)
+            if not lane:
+                continue
+            shade = pygame.Surface((lane["w"], lane["h"]), pygame.SRCALPHA)
+            shade.fill((12, 13, 16, 238))
+            surf.blit(shade, (lane["x"], lane["y"]))
+            colour = ui.rgb(tab["c"]) if tab else (200, 200, 200)
+            y, h = lane["y"] + 8, lane["h"] - 16
+            pygame.draw.rect(surf, (40, 43, 50), (bar_x, y, bar_w, h), border_radius=3)
+            w = round(bar_w * sends[n - 1])
+            if w:
+                pygame.draw.rect(surf, colour, (bar_x, y, w, h), border_radius=3)
+            label = small.render("%d%%" % round(sends[n - 1] * 100), True, (242, 243, 245))
+            surf.blit(label, (bar_x + bar_w + 12, lane["y"] + (lane["h"] - label.get_height()) // 2))
+        # the settings box on the right
+        first, last = s.get("track1_lane"), s.get("track8_lane")
+        bx, by = 880, first["y"]
+        bw, bh = first["x"] + first["w"] - bx, last["y"] + last["h"] - by
+        pygame.draw.rect(surf, (20, 22, 26), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(surf, (60, 203, 127), (bx, by, bw, bh), 2, border_radius=6)
+        title = big.render(page.upper(), True, (60, 203, 127))
+        surf.blit(title, (bx + 18, by + 14))
+        hint = small.render("KNOBS 1-8: SENDS", True, (125, 131, 140))
+        surf.blit(hint, (bx + bw - 18 - hint.get_width(), by + 22))
+        if not effects.AVAILABLE:
+            msg = small.render(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", True, (255, 181, 71))
+            surf.blit(msg, (bx + 18, by + 60))
+            return
+        for i, (key, name) in enumerate(self.FX_KNOBS[page]):
+            ry = by + 66 + i * 76
+            knob = ("KNOB 9", "KNOB 10", "BIG KNOB")[i]
+            surf.blit(mid.render(name, True, (242, 243, 245)), (bx + 18, ry))
+            surf.blit(small.render(knob, True, (125, 131, 140)), (bx + 18, ry + 26))
+            value = mid.render(self.fx_value_text(key), True, (242, 243, 245))
+            surf.blit(value, (bx + bw - 18 - value.get_width(), ry))
+            if key == "dly_time":
+                names = [n for n, _ in effects.DELAY_TIMES]
+                frac = (names.index(e.fx[key]) + 1) / len(names) if e.fx[key] in names else 0
+            else:
+                frac = e.fx[key] / (0.95 if key == "dly_feedback" else 1.0)
+            pygame.draw.rect(surf, (40, 43, 50), (bx + 130, ry + 30, bw - 148, 8), border_radius=4)
+            if frac > 0:
+                pygame.draw.rect(surf, (60, 203, 127), (bx + 130, ry + 30, round((bw - 148) * frac), 8), border_radius=4)
 
     def phones_volume(self, delta):
         e = self.engine
@@ -702,6 +785,8 @@ class Transport:
             hint = self.message
         elif not e:
             hint = "DEMO: NO AUDIO ENGINE"
+        elif self.fx_page:
+            hint = "FX: %s  \u00b7  PRESS FX FOR %s" % (self.fx_page.upper(), "DELAY" if self.fx_page == "reverb" else "THE TRACKS")
         elif not e.device:
             hint = e.status or "NO AUDIO DEVICE"
         elif all_in:

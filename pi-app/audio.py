@@ -40,6 +40,12 @@ import numpy as np
 
 from palette import REGION_COLOURS
 
+try:
+    import effects
+except Exception as _e:                     # numpy or ctypes trouble: carry on without effects
+    print("Effects off:", _e)
+    effects = None
+
 TRACKS = 8
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block
@@ -378,6 +384,10 @@ class Engine:
         self.pairs = set()                      # t: tracks t and t+1 are a stereo pair (left, right)
         self.mutes = set()
         self.solos = set()                      # if any track is soloed, only soloed tracks play
+        self.rev_sends = [0.0] * TRACKS         # how much of each track goes to the reverb, 0..1
+        self.dly_sends = [0.0] * TRACKS         # ... and to the delay
+        self.fx = dict(effects.DEFAULTS) if effects else {}
+        self._rev = self._dly = None            # the effects, made by the audio thread
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
         self.dirty = set()
@@ -607,6 +617,9 @@ class Engine:
             self.pairs = set()
             self.mutes = set()
             self.solos = set()
+            self.rev_sends = [0.0] * TRACKS
+            self.dly_sends = [0.0] * TRACKS
+            self.fx = dict(effects.DEFAULTS) if effects else {}
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -673,6 +686,11 @@ class Engine:
         self.solos = set(meta.get("solos", []))
         self.pans = ([float(v) for v in meta.get("pans", [])] + [0.0] * TRACKS)[:TRACKS]
         self.pairs = {int(t) for t in meta.get("pairs", []) if 0 <= int(t) < TRACKS - 1}
+        self.rev_sends = ([float(v) for v in meta.get("reverb_sends", [])] + [0.0] * TRACKS)[:TRACKS]
+        self.dly_sends = ([float(v) for v in meta.get("delay_sends", [])] + [0.0] * TRACKS)[:TRACKS]
+        if effects:
+            self.fx = dict(effects.DEFAULTS)
+            self.fx.update({k: v for k, v in (meta.get("fx") or {}).items() if k in effects.DEFAULTS})
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
         self._meta_regions = meta.get("regions")
@@ -704,7 +722,8 @@ class Engine:
             meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
                     "pans": self.pans, "pairs": sorted(self.pairs),
                     "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
-                    "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions]}
+                    "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions],
+                    "reverb_sends": self.rev_sends, "delay_sends": self.dly_sends, "fx": dict(self.fx)}
         if not changed:
             return False
 
@@ -741,10 +760,13 @@ class Engine:
     def export(self):
         """Write stems (every track with audio, all the same length) and a stereo mix. Returns the folder name.
 
-        Stems are the tracks as recorded. The mix uses the track volumes and mutes."""
+        Stems are the tracks as recorded. The mix uses the track volumes, pans and mutes, and includes the
+        reverb and delay (with their tails); those two are also written as stereo "return" stems, so the
+        dry stems plus the returns rebuild the mix."""
         with self.lock:
             tracks = [x.copy() for x in self.tracks]
             vols, mutes, pans, pairs = list(self.volumes), set(self.mutes), list(self.pans), set(self.pairs)
+            rev_sends, dly_sends, fx = list(self.rev_sends), list(self.dly_sends), dict(self.fx)
         ends = [self._extent(x) for x in tracks]
         end = max(ends)
         if end == 0:
@@ -760,28 +782,98 @@ class Engine:
 
         def out(path, x, rate):
             write_audio(path, x, rate, fmt)
+
+        playing = [t for t in range(TRACKS) if ends[t] and t not in mutes]
+        use_rev = bool(effects and effects.AVAILABLE and any(rev_sends[t] for t in playing))
+        use_dly = bool(effects and effects.AVAILABLE and any(dly_sends[t] for t in playing))
+        tail = int(12 * self.rate) if (use_rev or use_dly) else 0
+        dry = np.zeros((end + tail, 2), np.float32)
+        rev_ret = np.zeros((end + tail, 2), np.float32) if use_rev else None
+        dly_ret = np.zeros((end + tail, 2), np.float32) if use_dly else None
+        for t in playing:
+            gl, gr = pan_gains(pans[t])
+            dry[:end, 0] += tracks[t][:end] * vols[t] * gl
+            dry[:end, 1] += tracks[t][:end] * vols[t] * gr
+        total = end
+        if use_rev or use_dly:
+            rev, dly = effects.Reverb(self.rate), effects.Delay(self.rate)
+            rev.set(fx["rev_size"], fx["rev_tone"])
+            dly.set(effects.delay_beats(fx["dly_time"]) * self.frames_per_beat(), fx["dly_feedback"])
+            chunk = 65536
+            for a in range(0, end + tail, chunk):
+                b = min(end + tail, a + chunk)
+                rev_in = np.zeros((b - a, 2), np.float32)
+                dly_in = np.zeros((b - a, 2), np.float32)
+                for t in playing:
+                    if a >= end:
+                        break
+                    gl, gr = pan_gains(pans[t])
+                    sig = tracks[t][a:min(b, end)] * vols[t]
+                    k = len(sig)
+                    if rev_sends[t]:
+                        rev_in[:k, 0] += sig * gl * rev_sends[t]
+                        rev_in[:k, 1] += sig * gr * rev_sends[t]
+                    if dly_sends[t]:
+                        dly_in[:k, 0] += sig * gl * dly_sends[t]
+                        dly_in[:k, 1] += sig * gr * dly_sends[t]
+                level = 0.0
+                if use_rev:
+                    rev_ret[a:b] = rev.process(rev_in) * (fx["rev_level"] * effects.REVERB_MAKEUP)
+                    level = max(level, float(np.abs(rev_ret[a:b]).max()))
+                if use_dly:
+                    dly_ret[a:b] = dly.process(dly_in) * fx["dly_level"]
+                    level = max(level, float(np.abs(dly_ret[a:b]).max()))
+                total = b
+                if a >= end and level < 1e-4:                   # the tails have died away (-80 dB)
+                    break
         done = set()
+        pad = lambda x: np.concatenate([x[:end], np.zeros(total - end, np.float32)]) if total > end else x[:end]
         for t in range(TRACKS):
             if t in done:
                 continue
             if t in pairs and (ends[t] or ends[t + 1]):           # a stereo pair: one stereo file
                 out(os.path.join(folder, "%s track%d-%d stereo" % (self.song_label, t + 1, t + 2)),
-                          np.stack([tracks[t][:end], tracks[t + 1][:end]], axis=1), self.rate)
+                    np.stack([pad(tracks[t]), pad(tracks[t + 1])], axis=1), self.rate)
                 done |= {t, t + 1}
             elif ends[t]:
-                out(os.path.join(folder, "%s track%d" % (self.song_label, t + 1)), tracks[t][:end], self.rate)
-        mix = np.zeros((end, 2), np.float32)
-        for t, x in enumerate(tracks):
-            if ends[t] and t not in mutes:
-                left, right = pan_gains(pans[t])
-                mix[:, 0] += x[:end] * vols[t] * left
-                mix[:, 1] += x[:end] * vols[t] * right
+                out(os.path.join(folder, "%s track%d" % (self.song_label, t + 1)), pad(tracks[t]), self.rate)
+        mix = dry[:total].copy()
+        if use_rev:
+            out(os.path.join(folder, "%s reverb return" % self.song_label), rev_ret[:total], self.rate)
+            mix += rev_ret[:total]
+        if use_dly:
+            out(os.path.join(folder, "%s delay return" % self.song_label), dly_ret[:total], self.rate)
+            mix += dly_ret[:total]
         mix *= MIX_GAIN
         peak = float(np.abs(mix).max())
         if peak > 0.98:
             mix *= 0.98 / peak                   # turn the whole mix down rather than clip it
         out(os.path.join(folder, "%s mix" % self.song_label), mix, self.rate)
         return name
+
+    # ------------------------------------------------------------ effects (called from the app)
+
+    def change_send(self, kind, track, delta):
+        """kind "reverb" or "delay", track 1-8. Returns the new amount, 0..1."""
+        sends = self.rev_sends if kind == "reverb" else self.dly_sends
+        with self.lock:
+            v = round(max(0.0, min(1.0, sends[track - 1] + delta)), 2)
+            sends[track - 1] = v
+            self.dirty.add(-1)
+        return v
+
+    def change_fx(self, key, delta):
+        """Change one effect setting: rev_size, rev_tone, rev_level, dly_feedback, dly_level (by delta),
+        or dly_time (by delta steps through effects.DELAY_TIMES). Returns the new value."""
+        with self.lock:
+            if key == "dly_time":
+                v = effects.step_delay_time(self.fx[key], 1 if delta > 0 else -1)
+            else:
+                top = 0.95 if key == "dly_feedback" else 1.0
+                v = round(max(0.0, min(top, self.fx[key] + delta)), 2)
+            self.fx[key] = v
+            self.dirty.add(-1)
+        return v
 
     # ------------------------------------------------------------ transport (called from the app)
 
@@ -1407,7 +1499,9 @@ class Engine:
     def process(self, x):
         """One block of input (frames, channels) -> one block of stereo output. Also records."""
         n = len(x)
-        out = np.zeros((n, 2), np.float32)
+        mix = np.zeros((n, 2), np.float32)              # the tracks, before the limiter
+        rev_in = np.zeros((n, 2), np.float32)           # what the tracks send to the reverb
+        dly_in = np.zeros((n, 2), np.float32)           # ... and to the delay
         with self.lock:
             peaks = np.abs(x).max(axis=0) if n else np.zeros(1)
             self.in_peaks[:] = 0
@@ -1423,15 +1517,33 @@ class Engine:
                         continue
                     self.playing = self.recording = False
                     break
-                out[done:done + m] = self._block(x[done:done + m], self.pos, loop)
+                self._block(x[done:done + m], self.pos, loop,
+                            mix[done:done + m], rev_in[done:done + m], dly_in[done:done + m])
                 self.pos += m
                 done += m
                 if loop and self.pos >= loop[1] and limit == loop[1]:
                     self.pos = loop[0]
-        return out
+            # the effects run all the time, so their tails ring on after you stop
+            mix += self.run_effects(rev_in, dly_in)
+        return np.tanh(mix * MIX_GAIN)                  # tanh: gentle limiting instead of harsh clipping
 
-    def _block(self, x, pos, loop):
-        """Play and record one stretch of the tape that doesn't cross the loop end."""
+    def run_effects(self, rev_in, dly_in, rev=None, dly=None):
+        """The reverb and delay returns, (frames, 2), at their levels. Uses the live effects unless given others."""
+        if not effects or not effects.AVAILABLE:
+            return 0.0
+        if rev is None:
+            if self._rev is None:
+                self._rev, self._dly = effects.Reverb(self.rate), effects.Delay(self.rate)
+            rev, dly = self._rev, self._dly
+        fx = self.fx
+        rev.set(fx["rev_size"], fx["rev_tone"])
+        dly.set(effects.delay_beats(fx["dly_time"]) * self.frames_per_beat(), fx["dly_feedback"])
+        return (rev.process(rev_in) * (fx["rev_level"] * effects.REVERB_MAKEUP)
+                + dly.process(dly_in) * fx["dly_level"])
+
+    def _block(self, x, pos, loop, mix, rev_in, dly_in):
+        """Play and record one stretch of the tape that doesn't cross the loop end.
+        Adds the tracks into mix, and what they send to the effects into rev_in and dly_in."""
         m = len(x)
         targets = self.targets() if self.recording else {}
         # what reaches your ears now was sent read_ahead frames ago, so read that far ahead
@@ -1443,19 +1555,16 @@ class Engine:
                 idx[over] = loop[0] + (idx[over] - loop[1]) % length
         idx = np.minimum(idx, self.frames - 1)
         overdub = self.rec_mode == "overdub"
-        left = np.zeros(m, np.float32)
-        right = np.zeros(m, np.float32)
         for t in range(TRACKS):
             if (overdub or t not in targets) and self.audible(t):
                 sig = self.tracks[t][idx] * self.volumes[t]
                 gl, gr = pan_gains(self.pans[t])
-                if gl:
-                    left += sig * gl
-                if gr:
-                    right += sig * gr
-        out = np.empty((m, 2), np.float32)
-        out[:, 0] = np.tanh(left * MIX_GAIN)                 # tanh: gentle limiting instead of harsh clipping
-        out[:, 1] = np.tanh(right * MIX_GAIN)
+                stereo = np.stack([sig * gl, sig * gr], axis=1)
+                mix += stereo
+                if self.rev_sends[t]:
+                    rev_in += stereo * self.rev_sends[t]     # sends are after the volume and pan
+                if self.dly_sends[t]:
+                    dly_in += stereo * self.dly_sends[t]
         if targets:
             # what you played now was in time with what you heard (latency - read_ahead) ago
             w0 = pos - (self.latency - self.read_ahead)
@@ -1474,7 +1583,6 @@ class Engine:
                         self.tracks[t][a:b] = src
                     self._update_levels(t, a, b, reset=True)
                     self.dirty.add(t)
-        return out
 
     def _save_for_undo(self, t, a, b):
         """Keep what a recording pass overwrites, the first time it overwrites it."""

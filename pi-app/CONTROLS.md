@@ -54,7 +54,8 @@ stereo mix) in the Exports folder.
 |---|---|---|
 | AUDIO | Input: MULTI / STEREO / MONO (see Input modes below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
-| MIDI, FX, IMPORT | Not yet (coming in a later version) | |
+| FX | Effects pages: REVERB, then DELAY, then back to the tape (see Effects below) | |
+| MIDI, IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
 | CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space. Hold to take several boxes (see below) | Undo |
 | LIFT | Copy the box under the playhead onto the clipboard. Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
@@ -186,6 +187,31 @@ points and what's on the clipboard. Everything works the same in this view.
 Press the track's key again to go back to all 8; press a different track's
 key to zoom to that one instead.
 
+## Effects: reverb and delay (the FX key)
+
+Each track can send some of its sound to a **reverb** (ported from the one
+in Mutable Instruments Elements and Rings) and a **delay** (a tape-style
+echo that follows the tempo). Press **FX** to step through the pages:
+
+| Page | Knobs 1–8 | Knob 9 | Knob 10 | Big knob |
+|---|---|---|---|---|
+| **REVERB** | Each track's reverb amount | Size (how long it rings) | Tone (dark to bright) | Reverb level |
+| **DELAY** | Each track's delay amount | Time: 1/16 to 1/2, with dotted (.) and triplet (T) | Feedback (how many repeats) | Delay level |
+
+Press FX a third time to go back to the tape, with the knobs as normal.
+On a keyboard, **W** does the same as FX.
+
+- The amounts come after the track's volume and pan, so a muted track
+  sends nothing, and a track panned left echoes on the left.
+- The effects are never recorded onto the tracks, so you can change them
+  any time. They keep ringing after you stop.
+- Everything is saved with the song.
+- **EXPORT** puts the effects in the mix (with their tails) and also writes
+  `reverb return` and `delay return` as stereo files. The dry stems plus
+  the two returns rebuild the mix. BOUNCE stays dry.
+- The effects are built when you run `setup.sh`. If they haven't been, the
+  FX page says so.
+
 ## Knobs
 
 | Knob | Turn | Push |
@@ -225,6 +251,7 @@ key to zoom to that one instead.
 | M | Mute the selected track (Shift+M: solo it) |
 | 9 / 0 | Armed track volume down / up |
 | ( / ) | Headphone volume down / up |
+| W | FX: reverb page, delay page, back |
 | , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |

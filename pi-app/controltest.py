@@ -14,7 +14,7 @@ import pygame
 
 import midi
 import ui
-from console import BOARD_KEYS, PUSHES
+from console import BOARD_KEYS, PUSHES, start_terminal_keys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 W, H = ui.WIDTH, ui.HEIGHT
@@ -278,7 +278,10 @@ def main():
     fonts = (font(22, 600), font(17, 600, "sans"), font(12), font(18, 600), font(12), font(16))
     frame = pygame.Surface((W, H))
     clock = pygame.time.Clock()
-    print("Control board test: press every key, turn every knob both ways and push it. Q quits.")
+    print("Control board test: press every key, turn every knob both ways and push it.")
+    print("Here: Q quits, R clears the marks.")
+    typed = queue.Queue()
+    restore = start_terminal_keys(typed)        # Q and R from the SSH window too
     running = True
     while running:
         clock.tick(60)
@@ -290,6 +293,12 @@ def main():
                     running = False
                 elif ev.key == pygame.K_r:
                     st.clear()
+        while not typed.empty():
+            name = typed.get()
+            if name in ("QUIT", "FILE"):
+                running = False
+            elif name == "RECORD":                  # r
+                st.clear()
         while not events.empty():
             status, d1, d2 = events.get()
             kind = status & 0xF0
@@ -311,6 +320,8 @@ def main():
         display.blit(out, ((dw - out.get_width()) // 2, (dh - out.get_height()) // 2))
         pygame.display.flip()
     ctl.stopped = True
+    if restore:
+        restore()
     pygame.quit()
 
 

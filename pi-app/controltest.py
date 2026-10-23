@@ -47,19 +47,28 @@ def terminal_chars(q):
     return lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 
 
+_board_out = {}                 # path -> open file descriptor, kept open: closing straight after a write can drop it
+
+
 def tell_board(ctl, message):
     """Send a MIDI message to the control board. False if it isn't connected."""
     if ctl is None or not ctl.connected:
         return False
+    path = ctl.connected
     try:
-        fd = os.open(ctl.connected, os.O_WRONLY | os.O_NONBLOCK)
-        try:
-            os.write(fd, message)
-        finally:
-            os.close(fd)
+        fd = _board_out.get(path)
+        if fd is None:
+            fd = _board_out[path] = os.open(path, os.O_WRONLY)
+        os.write(fd, message)
         return True
     except OSError as e:
         print("Couldn't send to the board:", e)
+        fd = _board_out.pop(path, None)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         return False
 
 

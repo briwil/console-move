@@ -17,6 +17,7 @@ Options:
     --demo       no audio engine: made-up waveforms
 """
 import argparse
+import math
 import os
 import queue
 import sys
@@ -727,6 +728,7 @@ class Transport:
         tiny, small, mid, big = (s.font("mono", 600, 12), s.font("mono", 600, 14), s.font("mono", 600, 17),
                                  s.font("mono", 700, 24))
         yellow, green, grey, white, dark = (255, 181, 71), (60, 203, 127), (125, 131, 140), (242, 243, 245), (40, 43, 50)
+        purple = (178, 120, 255)
         surf.set_clip(None)
         pygame.draw.rect(surf, (12, 13, 16), (0, 36, 1280, 330))
         pages = self.drum_pages()
@@ -822,14 +824,15 @@ class Transport:
             st = lane.steps[i]
             in_bank = bank == self.seq_bank
             outline = white if in_bank else (90, 95, 104)
+            # filled yellow = plays, purple outline = has locks (both: yellow with a purple outline)
             if i in self.held_steps:
                 pygame.draw.rect(surf, green, (x0, y0, sw, sh), border_radius=3)
             elif st.on:
                 pygame.draw.rect(surf, yellow if in_bank else (150, 110, 50), (x0, y0, sw, sh), border_radius=3)
-            else:
-                pygame.draw.rect(surf, outline, (x0, y0, sw, sh), 1, border_radius=3)
             if st.locks:
-                pygame.draw.rect(surf, green if i not in self.held_steps else white, (x0 + 5, y0 + sh - 6, 5, 3))
+                pygame.draw.rect(surf, purple if in_bank else (110, 80, 160), (x0, y0, sw, sh), 2, border_radius=3)
+            elif not st.on and i not in self.held_steps:
+                pygame.draw.rect(surf, outline, (x0, y0, sw, sh), 1, border_radius=3)
             if i == playing_at:
                 pygame.draw.rect(surf, white, (x0, y0 + sh + 4, sw, 3))
         for bank in range((lane.length - 1) // 16 + 1):
@@ -1183,8 +1186,11 @@ class Transport:
         return "%g BEAT%s" % (round(beats, 2), "" if abs(beats - 1) < 0.01 else "S")
 
     def position_text(self, beats):
-        b = int(beats)
-        return "%03d.%d.%d" % (b // 4 + 1, b % 4 + 1, int(beats * 4) % 4 + 1)
+        bar = math.floor(beats / tape.BEATS_PER_BAR + 1e-9)
+        within = max(0.0, beats - bar * tape.BEATS_PER_BAR)
+        beat = math.floor(within / tape.BEAT_UNIT + 1e-9)
+        sixteenth = math.floor((within - beat * tape.BEAT_UNIT) * 4 + 1e-9)
+        return "%03d.%d.%d" % (bar + 1, beat + 1, sixteenth + 1)
 
     def update_screen(self):
         s, t, e = self.s, self.tape, self.engine
@@ -1193,7 +1199,9 @@ class Transport:
         s.set("grid", t=t.label() + ("   LOOP" if (region and e.loop_on) else "   IN/OUT" if region else ""))
         bpm = e.bpm if e else BPM
         internal = bool(e and e.sync_mode == "internal")
-        s.set("bpm", t="%.1f BPM  4/4%s" % (bpm, "  SYNC" if self.synced else "  LEAD" if internal else ""))
+        if e and tuple(e.time_sig) != tape.SIG:
+            tape.set_signature(*e.time_sig)
+        s.set("bpm", t="%.1f BPM  %s%s" % (bpm, tape.signature_text(), "  SYNC" if self.synced else "  LEAD" if internal else ""))
         all_in = bool(e and e.device and e.input_mode == "all")
         armed = [t + 1 for t in e.armed_tracks()] if e else [self.armed]
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)

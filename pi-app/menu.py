@@ -27,8 +27,8 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "FORMAT", "INPUT", "OUTPUT", "UPDATE"]
-LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
+SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "UPDATE"]
+LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -144,7 +144,7 @@ class Menu:
         elif name in CONFIRM:
             if SETTINGS[self.row] == "UPDATE":
                 self.update_action()
-            elif SETTINGS[self.row] in ("SYNC", "FORMAT", "INPUT", "OUTPUT"):
+            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
@@ -184,6 +184,14 @@ class Menu:
             key, label = choices[(keys.index(now) + (1 if delta > 0 else -1)) % len(choices)]
             e.set_output(key, label)
             self.say("SHIFT + KNOB 10 CHANGES THE HEADPHONE VOLUME" if key == "phones" else "")
+        elif what == "TIMESIG":
+            import tape
+            sigs = tape.SIGNATURES
+            now = tuple(e.time_sig)
+            i = sigs.index(now) if now in sigs else sigs.index((4, 4))
+            e.set_time_sig(*sigs[(i + (1 if delta > 0 else -1)) % len(sigs)])
+            tape.set_signature(*e.time_sig)
+            self.msg = ""
         elif what == "TEMPO":
             if self.transport.synced:
                 self.say("THE TEMPO COMES FROM THE OP-XY (EXTERNAL SYNC)")
@@ -201,6 +209,9 @@ class Menu:
             return "EXTERNAL  (follow the OP-XY)" if e.sync_mode == "external" else "INTERNAL  (Console leads)"
         if what == "TEMPO":
             return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")
+        if what == "TIMESIG":
+            n, d = e.time_sig
+            return "%d/%d%s" % (n, d, "  (%s beats of an eighth note)" % n if d == 8 else "")
         if what == "FORMAT":
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
         if what == "INPUT":
@@ -408,10 +419,9 @@ class Menu:
             s.set("name_text", t="")
             hint = "TURN OR \u2190 \u2192 TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
         elif settings:
-            s.set("prompt", t="SETTINGS")
-            s.set("prompt", y=self.prompt_y - 40)
+            s.set("prompt", t="")                 # 7 rows fill the screen: the hint says where we are
             s.set("name_text", t="")
-            hint = "BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
+            hint = "SETTINGS     BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
         else:
             s.set("prompt", t="NAME THE NEW PROJECT" if self.naming == "new" else "NAME THIS PROJECT", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")

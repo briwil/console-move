@@ -415,6 +415,7 @@ class Engine:
         self.tracks = [np.zeros(self.frames, np.float32) for _ in range(TRACKS)]
         self.levels = [None] * TRACKS
         self.bpm = bpm
+        self.time_sig = [4, 4]                  # beats in a bar, and which note is a beat (4/4, 6/8...)
         self.tape_beats = 0.0
         self.volumes = [0.8] * TRACKS
         self.pans = [0.0] * TRACKS              # -1 left ... 0 centre ... 1 right
@@ -779,6 +780,15 @@ class Engine:
         for t in range(TRACKS):
             self.levels[t] = np.zeros(n, np.float32)
 
+    def bar_beats(self):
+        """Quarter-note beats in a bar."""
+        return self.time_sig[0] * 4.0 / self.time_sig[1]
+
+    def set_time_sig(self, num, den):
+        with self.lock:
+            self.time_sig = [int(num), int(den)]
+            self.dirty.add(-1)
+
     def set_bpm(self, bpm):
         """Change the tempo (only while stopped). The audio stays put; the bar lines move."""
         with self.lock:
@@ -801,6 +811,8 @@ class Engine:
         if meta.get("bpm"):
             self.bpm = float(meta["bpm"])
             self._set_beats_len()
+        sig = meta.get("time_sig")
+        self.time_sig = [int(sig[0]), int(sig[1])] if isinstance(sig, list) and len(sig) == 2 else [4, 4]
         self.volumes = [float(v) for v in meta.get("volumes", self.volumes)][:TRACKS]
         self.mutes = set(meta.get("mutes", []))
         self.solos = set(meta.get("solos", []))
@@ -845,7 +857,7 @@ class Engine:
             todo = {t: self.tracks[t].copy() for t in self.dirty if t >= 0}
             changed = bool(self.dirty)
             self.dirty.clear()
-            meta = {"bpm": self.bpm, "rate": self.rate, "volumes": self.volumes,
+            meta = {"bpm": self.bpm, "time_sig": self.time_sig, "rate": self.rate, "volumes": self.volumes,
                     "pans": self.pans, "pairs": sorted(self.pairs),
                     "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions],
@@ -1127,7 +1139,7 @@ class Engine:
     def toggle_loop(self):
         with self.lock:
             if not self.loop_region():
-                bar = 4 * self.frames_per_beat()
+                bar = self.bar_beats() * self.frames_per_beat()
                 self.loop_a = int((self.pos // bar) * bar)
                 self.loop_b = int(min(self.frames, self.loop_a + 4 * bar))
                 self.loop_on = True
@@ -1141,11 +1153,11 @@ class Engine:
             if which == "in":
                 self.loop_a = f
                 if self.loop_b <= f:
-                    self.loop_b = int(min(self.frames, f + 4 * 4 * self.frames_per_beat()))
+                    self.loop_b = int(min(self.frames, f + 4 * self.bar_beats() * self.frames_per_beat()))
             else:
                 self.loop_b = f
                 if self.loop_a >= f:
-                    self.loop_a = int(max(0, f - 4 * 4 * self.frames_per_beat()))
+                    self.loop_a = int(max(0, f - 4 * self.bar_beats() * self.frames_per_beat()))
             self.loop_on = self.loop_b > self.loop_a
             self.dirty.add(-1)
 

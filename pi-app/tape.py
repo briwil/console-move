@@ -19,8 +19,27 @@ from palette import REGION_COLOURS
 
 RES = 16                    # level values per beat (one per 1/64 note)
 TAPE_BARS = 64
-BEATS_PER_BAR = 4
-TAPE_BEATS = TAPE_BARS * BEATS_PER_BAR
+TAPE_BEATS = TAPE_BARS * 4          # the tape's length on screen, in beats (a beat is always a quarter note)
+
+# The time signature. Tempo and beats are always in quarter notes; a bar is SIG[0] notes of 1/SIG[1].
+SIGNATURES = [(2, 4), (3, 4), (4, 4), (5, 4), (6, 4), (7, 4), (5, 8), (6, 8), (7, 8), (9, 8), (12, 8)]
+SIG = (4, 4)
+BEATS_PER_BAR = 4.0                 # quarter-note beats in a bar (6/8: 3, 7/8: 3.5)
+BEAT_UNIT = 1.0                     # quarter-note beats in one counted beat (x/4: 1, x/8: 0.5)
+
+
+def set_signature(num, den):
+    """Change the time signature (for the whole app: the bar lines, the clock, bar moves, loops)."""
+    global SIG, BEATS_PER_BAR, BEAT_UNIT
+    if (num, den) not in SIGNATURES:
+        num, den = 4, 4
+    SIG = (num, den)
+    BEAT_UNIT = 4.0 / den
+    BEATS_PER_BAR = num * BEAT_UNIT
+
+
+def signature_text():
+    return "%d/%d" % SIG
 
 GRIDS = [("1/4", 1), ("1/8", 2), ("1/16", 4), ("1/32", 8)]     # name, lines per beat
 ZOOMS = [16, 8, 4, 2, 1]                                       # bars across the screen
@@ -154,18 +173,18 @@ class Tape:
     def lines(self, x0, x1):
         """(x, kind) for every line between x0 and x1; kind is 'bar', 'beat' or 'grid'."""
         ppb = self.ppb
-        step = self.step if self.step * ppb >= 5 else 1 if ppb >= 5 else BEATS_PER_BAR
         b0 = max(0.0, self.beat_of(x0))
         b1 = min(float(self.total_beats), self.beat_of(x1))
-        k = math.ceil(b0 / step - 1e-9)
-        while k * step <= b1 + 1e-9:
-            beat = k * step
-            if abs(beat - round(beat)) < 1e-9:
-                kind = "bar" if round(beat) % BEATS_PER_BAR == 0 else "beat"
-            else:
-                kind = "grid"
-            yield round(self.x_of(beat)), kind
-            k += 1
+        found = {}                                  # beat -> kind; bars win over beats over grid lines
+        for size, kind in ((self.step, "grid"), (BEAT_UNIT, "beat"), (BEATS_PER_BAR, "bar")):
+            if kind != "bar" and size * ppb < 5:
+                continue                            # too close together to draw at this zoom
+            k = math.ceil(b0 / size - 1e-9)
+            while k * size <= b1 + 1e-9:
+                found[round(k * size, 6)] = kind
+                k += 1
+        for beat in sorted(found):
+            yield round(self.x_of(beat)), found[beat]
 
     def draw_lane(self, surf, it):
         self.s.draw_default(surf, it)

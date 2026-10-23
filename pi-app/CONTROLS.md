@@ -33,6 +33,9 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
   - **EXPORT FORMAT:** what EXPORT writes: WAV, AIFF or FLAC (all 24-bit,
     FLAC about half the size) or M4A (AAC 256 kbps, smallest, for sharing).
     The song's own track files are always WAV.
+  - **TIME SIGNATURE:** 2/4 to 7/4, and 5/8, 6/8, 7/8, 9/8, 12/8. It moves
+    the bar lines, the clock (bar.beat.16th), SHIFT+arrow bar moves and the
+    first loop. The tempo is always in quarter notes. Saved with the song.
   - **INPUT:** which USB audio device Console records from (the OP-XY, a
     RØDE, an audio interface…), or DRUM SYNTH, the built-in drums (see Drum
     synth below). Until you pick one, it uses the first one it
@@ -259,8 +262,8 @@ Kit. VEL TO and LFO TO pick what velocity or the LFO moves (LFO VOICE picks
 which voice's settings it can reach). Knob 10 and the big knob work as
 usual.
 
-**Saving and loading kits.** On the drum page, FILE opens the drum kit
-menu instead of the project menu:
+**Saving and loading kits.** On the drum page, FILE opens the DRUMS menu
+instead of the project menu:
 - **SAVE Kit**: name it (like naming a song: big knob for the letter, ← / →
   to move, CUT deletes, PLAY saves). It keeps every drum setting. Saving
   under a name that's taken asks first; PLAY again replaces it.
@@ -309,8 +312,14 @@ changes for that step only (green on screen, "LOCK"). Locking a step that's
 off turns it on. Push the knob while holding the step to take its lock off.
 The velocity and LFO destinations can't be locked.
 
-**The steps along the bottom:** hollow = off, yellow = on, green = held, a
-small green mark = has locks, the white line = where it's playing.
+**The steps along the bottom:** white outline = off, filled yellow = on,
+purple outline = has p-locks (so on with locks is yellow with a purple
+outline), green = held, the white line = where it's playing.
+
+**FILE on the drum or sequencer page** opens the DRUMS menu: SAVE Kit, LOAD
+Kit, **COPY Pattern** (the big knob picks where to; copying onto a pattern
+with steps asks first) and **CLEAR P-locks** (every lock in the current
+pattern; the steps stay on or off).
 
 **Patterns.** 16 per song: knob 10. While playing, the next one takes over
 when the current one reaches its end (shown as "> 2 NEXT"); while stopped,

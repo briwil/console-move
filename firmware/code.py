@@ -44,6 +44,48 @@ NOTE[(5, 2)] = 40                              # ENC9 push
 NOTE[(5, 3)] = 42                              # ENC10 on the board (last knob) push
 NOTE[(5, 4)] = 41                              # ENC11 on the board (10th knob) push
 
+# ---------------------------------------------------------------- pin check (hold SW1 while plugging in)
+# Instead of acting as a controller, report every knob wire (GP14-GP35) as it changes, as MIDI CC on
+# channel 14: CC number = wire (0 = GP14 ... 21 = GP35), value 127 = high, 0 = low; plus all of them
+# every half second. The Pi's test screen (test-controls.sh) shows them. Unplug to go back to normal.
+
+
+def pin_check():
+    import digitalio
+    out = usb_midi.ports[1]
+    wires = []
+    for n in range(14, 36):
+        w = digitalio.DigitalInOut(pin(n))
+        w.switch_to_input(pull=digitalio.Pull.UP)
+        wires.append(w)
+    last = [None] * len(wires)
+    every = 0.0
+    print("Pin check: turn each knob slowly; unplug to stop")
+    while True:
+        now = time.monotonic()
+        full = now - every > 0.5
+        for i, w in enumerate(wires):
+            v = w.value
+            if v != last[i] or full:
+                last[i] = v
+                try:
+                    out.write(bytes((0xB0 | 13, i, 127 if v else 0)))
+                except Exception:
+                    pass
+        if full:
+            every = now
+        time.sleep(0.0005)
+
+
+time.sleep(0.1)                                # let the matrix scan once
+_event = keypad.Event()
+_held = False
+while matrix.events.get_into(_event):
+    if _event.pressed and _event.key_number == 0:
+        _held = True
+if _held:
+    pin_check()                                # never returns
+
 # ---------------------------------------------------------------- knobs (A/B on GP14/15 ... GP34/35)
 
 

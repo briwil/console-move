@@ -30,6 +30,11 @@ AMBER = (255, 181, 71)
 RED = (255, 92, 92)
 
 KNOB_NAMES = ["TRACK %d" % n for n in range(1, 9)] + ["ENC9", "ENC10", "ENC11"]
+# pin check: knob (by position, 1-11) -> its two wires as numbered by the firmware (0 = GP14 ... 21 = GP35).
+# The 10th knob is the one labelled ENC11 on the board (GP34/35), the 11th is ENC10 (GP32/33).
+KNOB_WIRES = {k: (2 * (k - 1), 2 * (k - 1) + 1) for k in range(1, 10)}
+KNOB_WIRES[10] = (20, 21)
+KNOB_WIRES[11] = (18, 19)
 
 
 def font(size, weight=500, face="mono"):
@@ -55,6 +60,47 @@ class State:
         self.knob_dir = [0] * 12
         self.knob_left = set()
         self.knob_right = set()
+        self.wire = [None] * 22         # pin check: each wire's level (True = high)
+        self.wire_changes = [0] * 22
+        self.differ = set()             # knobs whose two wires have stayed at different levels for a moment
+        self.differ_since = {}          # knob -> when its wires last became different
+        self.pin_mode = False
+
+    def wire_level(self, i, high):
+        if self.wire[i] is not None and self.wire[i] != high:
+            self.wire_changes[i] += 1
+        self.wire[i] = high
+        self.pin_mode = True
+        for k, (a, b) in KNOB_WIRES.items():
+            if i in (a, b):
+                apart = self.wire[a] is not None and self.wire[b] is not None and self.wire[a] != self.wire[b]
+                if apart:
+                    self.differ_since.setdefault(k, time.monotonic())
+                else:
+                    self.differ_since.pop(k, None)
+
+    def tick(self, now):
+        """Wires that are joined together still arrive one message apart; only a difference that lasts counts."""
+        for k, since in list(self.differ_since.items()):
+            if now - since > 0.012:
+                self.differ.add(k)
+
+    def verdict(self, k):
+        """(text, colour) for one knob in the pin check."""
+        a, b = KNOB_WIRES[k]
+        ca, cb = self.wire_changes[a], self.wire_changes[b]
+        if self.wire[a] is None or self.wire[b] is None:
+            return "NO DATA", DIM
+        if ca == 0 and cb == 0:
+            low = [n for n, w in (("A", a), ("B", b)) if not self.wire[w]]
+            return ("%s STUCK LOW?" % "+".join(low), AMBER) if low else ("TURN IT", DIM)
+        if ca and not cb:
+            return ("B DEAD" + (" (LOW)" if not self.wire[b] else ""), RED)
+        if cb and not ca:
+            return ("A DEAD" + (" (LOW)" if not self.wire[a] else ""), RED)
+        if k not in self.differ:
+            return ("A+B JOINED", RED) if ca + cb > 6 else ("KEEP TURNING", DIM)
+        return "OK", GREEN
 
     def control(self, kind, number, value):
         now = time.monotonic()
@@ -125,8 +171,40 @@ def _centred(f, text, colour, cx, cy):
     return t, t.get_rect(center=(cx, cy))
 
 
+def draw_pins(surf, st, ctl, fonts):
+    """The pin check: each knob's two turning wires, live, and what they say about the soldering."""
+    f_title, f_key, f_sub, f_knob, f_tiny, f_status = fonts
+    surf.fill(BG)
+    surf.blit(f_title.render("PIN CHECK: KNOB WIRES", True, TEXT), (24, 14))
+    s = f_status.render("Turn each knob slowly, a few clicks each way.  Unplug the board to go back to normal.", True, DIM)
+    surf.blit(s, (24, 48))
+    w = (W - 48) // 11
+    for k in range(1, 12):
+        x = 24 + (k - 1) * w
+        cx = x + w // 2
+        surf.blit(*_centred(f_knob, "KNOB %d" % k, TEXT, cx, 104))
+        a, b = KNOB_WIRES[k]
+        for row, (name, wi) in enumerate((("A", a), ("B", b))):
+            y = 150 + row * 64
+            level = st.wire[wi]
+            colour = EDGE if level is None else (GREEN if level else AMBER)
+            pygame.draw.circle(surf, colour, (cx - 22, y), 14)
+            surf.blit(*_centred(f_key, name, BG if level is not None else TEXT, cx - 22, y))
+            info = "-" if level is None else ("HIGH" if level else "LOW")
+            surf.blit(*_centred(f_tiny, info, DIM, cx + 22, y - 8))
+            surf.blit(*_centred(f_tiny, "%d" % st.wire_changes[wi], DIM, cx + 22, y + 8))
+            surf.blit(*_centred(f_tiny, "GP%d" % (14 + wi), DIM, cx - 22, y + 26))
+        text, colour = st.verdict(k)
+        surf.blit(*_centred(f_sub, text, colour, cx, 300))
+    hint = f_status.render("A healthy knob: both wires flick between HIGH and LOW as you turn, not always together.", True, DIM)
+    surf.blit(hint, (24, H - 36))
+
+
 def draw(surf, st, ctl, fonts, now):
     f_title, f_key, f_sub, f_knob, f_tiny, f_status = fonts
+    if st.pin_mode:
+        draw_pins(surf, st, ctl, fonts)
+        return
     surf.fill(BG)
 
     # header
@@ -215,12 +293,15 @@ def main():
         while not events.empty():
             status, d1, d2 = events.get()
             kind = status & 0xF0
-            if kind == 0x90:
+            if kind == 0xB0 and (status & 0x0F) == 13 and d1 < 22:
+                st.wire_level(d1, d2 >= 64)              # pin check (board plugged in holding SW1)
+            elif kind == 0x90:
                 st.control("note", d1, 1 if d2 else 0)
             elif kind == 0x80:
                 st.control("note", d1, 0)
             elif kind == 0xB0:
                 st.control("cc", d1, d2)
+        st.tick(time.monotonic())
         draw(frame, st, ctl, fonts, time.monotonic())
         out = pygame.transform.rotate(frame, rotate) if rotate else frame
         if out.get_size() != (dw, dh):

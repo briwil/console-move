@@ -939,7 +939,7 @@ class Transport:
             mode = MODE_NAMES.get(e.input_mode, "")
             where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
                      if e.input_mode == "stereo" else self.armed_text(armed))
-            hint = "DRUMS: KEYS 1-7 PLAY  ·  %s > %s  ·  DRUMS KEY TO LEAVE" % (mode, where)
+            hint = "DRUMS  ·  %s > %s  ·  MIDI KEY TO LEAVE" % (mode, where)
         elif self.fx_page:
             hint = "FX: %s  \u00b7  PRESS FX FOR %s" % (self.fx_page.upper(), "DELAY" if self.fx_page == "reverb" else "THE TRACKS")
         elif not e.device:

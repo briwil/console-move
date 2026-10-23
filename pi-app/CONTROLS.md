@@ -237,8 +237,24 @@ the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
 On the drum page the track keys are drum pads, so they don't select tracks;
 SHIFT+track still arms one. Press MIDI again to get the track keys back.
 
-What's next: a page for shaping each voice's sound with the knobs, then a
-16-step sequencer on the 4×4 keys.
+**Shaping the sounds.** The drum page shows the settings of the voice you
+played last (its name is top right; key 7, the open hi-hat, picks the
+hi-hat). Knobs 1–8 turn the setting shown on their row; knob 9 steps
+through the voice's pages:
+
+| Voices | Pages |
+|---|---|
+| Drum 1–3 | OSC + AMP, PITCH + VELOCITY, FM + CLICK, FILTER + MIX, LFO |
+| Snare | OSC + NOISE, AMP + CLICK, PITCH + VELOCITY, FILTER + MIX, LFO |
+| Cymbal, hi-hat | OSC + AMP, VELOCITY + CLICK, OSC 2 + 3, FILTER + MIX, LFO |
+
+Turn a knob quickly to move further; hold SHIFT for one step at a time.
+The kit is saved with the song, and a new song starts from the LXR's Init
+Kit. VEL TO and LFO TO pick what velocity or the LFO moves (LFO VOICE picks
+which voice's settings it can reach). Knob 10 and the big knob work as
+usual.
+
+What's next: a 16-step sequencer on the 4×4 keys.
 
 ## Effects: reverb and delay (the FX key)
 

@@ -6,7 +6,7 @@ built for the Pi so Console can play and record them.
 
 - `lxr/`: the LXR's sound engine, copied from the firmware's `Core/Inc` and
   `Core/Src` (only the files the drum voices need), with its `LICENSE`
-  (GPL-3.0) and `NOTICE.md`. One change: in `Src/Soundengine/DSPAudio/Oscillator.c`
+  (GPL-3.0) and `NOTICE.md`. Changes: in `Src/Soundengine/DSPAudio/Oscillator.c`
   the oscillator's wrap-around test read the STM32's overflow flag with ARM
   assembly; it's the same test in plain C now. Two sound changes, also marked
   "Console change": FINE spans a semitone each way (`MidiParser.c`), and the

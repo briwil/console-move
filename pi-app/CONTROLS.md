@@ -287,54 +287,51 @@ Kits are kept in `~/console-data/kits/`, so any song can load them.
 
 The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
 plays whenever the tape plays, locked to it (it starts with the tape's
-first bar), and it records like playing the keys does: MULTI, STEREO or
-MONO onto the armed tracks, exactly on the beat.
+first bar), and records like playing the keys does: MULTI, STEREO or MONO
+onto the armed tracks, exactly on the beat. The 4×4 keys keep their normal
+jobs here.
 
-**Lanes.** 7 lanes, one per sound: track keys 1–7 (Drum 1–3, Snare,
-Cymbal, Closed hat, Open hat). Pressing one plays it and picks that lane.
+**The grid.** The 7 drums are rows (D1, D2, D3, SN, CY, HHc closed hat, HHo
+open hat), 32 steps on screen at a time; lanes go up to 64 steps. Steps past
+a lane's end are dark.
 
-**Steps.** The 4×4 keys are 16 steps of the lane, in rows (top left is step
-1, SHIFT is step 13). Press and let go to turn a step on or off. Lanes can
-be up to 64 steps: the **big knob** picks which 16 the keys reach (the
-bank); a key past the end of the lane does nothing.
+- **Knob 1** moves the cursor (the highlighted column), step 1 to 64. It
+  moves to the 16th column, then the steps scroll under it; near step 64 it
+  moves on to the end (and the same going back). Turn quickly to go faster.
+- **Track keys 1–7** are the drums: press and let go to put a step at the
+  cursor, or take it off. Each plays its sound as you press it.
+- **While recording** (RECORD on, tape playing), pressing a drum key puts
+  the step where it's playing, on the nearest step, instead of at the
+  cursor.
+- **Track key 8** undoes the last change (10 steps back), including COPY
+  Pattern and CLEAR P-locks.
+- **Knob 10** picks the pattern (16 per song; while playing, the next one
+  takes over when the current one ends). The big knob moves the tape as usual.
 
-**SHIFT on this page** is step 13 as well:
-- Press and let go on its own: toggles step 13.
-- Hold it and turn knobs: locks settings to step 13 (see below).
-- Hold it and press another 4×4 key or a track key: that key's SHIFT job
-  (SHIFT+PLAY plays / stops, SHIFT+RECORD records, SHIFT+track arms…), and
-  step 13 is left alone. SHIFT versions of keys (overdub, set IN…) need the
-  tape page.
+**Knob modes.** The row of boxes along the top shows what knobs 1–9, 10 and
+the big knob do, with their values. **Push knob 1** for the next mode:
 
-**Knobs.** The row of boxes along the top says what each knob does, in
-order: knobs 1–8, then PAGE (knob 9), PATTERN (knob 10), BANK (big knob).
-Knob 9's pages are the lane's sound pages, then two more:
-- **STEP**: VELOCITY, CHANCE (100% down to 10%, or 1:2, 2:2, 1:3… = plays
-  on that pass round the lane out of every 2, 3 or 4) and RATCHETS (up to 4
-  quick hits in the step). Hold a step and turn.
-- **LANE**: LENGTH (1–64, each lane loops on its own), EUCLID (spreads that
-  many hits evenly over the lane; it rewrites the lane's on/off steps), SHIFT
-  (rotates the Euclidean hits) and RATE (1/16, 1/16 triplets, 1/8, 1/8
-  triplets, 1/32; per lane, so triplet hats can run over straight kicks).
+- **STEP**: hold a drum key and turn: knob 2 LENGTH (1–64, each lane loops
+  on its own), 3 VELOCITY, 4 CHANCE (100% down to 10%, or 1:2, 2:2, 1:3… =
+  plays on that pass round the lane out of every 2, 3 or 4) and 5 RATCHETS
+  (up to 4 quick hits) for the step under the cursor (it turns the step on),
+  6 EUCLID (spreads that many hits over the lane, rewriting its on/off
+  steps), 7 SHIFT (rotates them), 8 RATE (1/16, 1/16T, 1/8, 1/8T, 1/32).
+  Letting go of a key after turning a knob doesn't toggle its step.
+- **The drum's sound pages** (OSC + AMP, FILTER + MIX, LFO…, for the drum
+  picked last): with no key held, knobs 2–9 change that drum's sound. Hold
+  its drum key and turn: the setting is **locked** to the step under the
+  cursor (a p-lock; the box shows it in green). The velocity and LFO
+  destinations can't be locked.
 
-**Parameter locks.** With no step held, the sound knobs change the drum's
-normal sound. Hold a step (or several) and turn a sound knob: that setting
-changes for that step only (green on screen, "LOCK"). Locking a step that's
-off turns it on. Push the knob while holding the step to take its lock off.
-The velocity and LFO destinations can't be locked.
-
-**The steps along the bottom:** white outline = off, filled yellow = on,
-purple outline = has p-locks (so on with locks is yellow with a purple
-outline), green = held, the white line = where it's playing.
+**The steps:** outlined = off, filled = on, purple outline = has p-locks, a
+white outline = where each lane is playing (lanes of different lengths are
+at different places).
 
 **FILE on the drum or sequencer page** opens the DRUMS menu: SAVE Kit, LOAD
 Kit, **COPY Pattern** (the big knob picks where to; copying onto a pattern
 with steps asks first) and **CLEAR P-locks** (every lock in the current
 pattern; the steps stay on or off).
-
-**Patterns.** 16 per song: knob 10. While playing, the next one takes over
-when the current one reaches its end (shown as "> 2 NEXT"); while stopped,
-straight away. Patterns and the kit are saved with the song.
 
 ## Effects: reverb and delay (the FX key)
 

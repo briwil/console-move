@@ -10,6 +10,7 @@ so the pattern lines up with the bars when the tape plays from the start. The au
 for each block it plays. The screen and keys change things through the methods here; one lock keeps the
 two threads apart.
 """
+import copy
 import math
 import random
 import threading
@@ -23,6 +24,7 @@ RATES = [("1/16", 4), ("1/16T", 6), ("1/8", 2), ("1/8T", 3), ("1/32", 8)]      #
 # chance: a percentage, or "A:B": plays on the A-th time round the lane out of every B
 CHANCES = ["100%", "90%", "75%", "50%", "25%", "10%", "1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4"]
 MAX_RATCHET = 4
+UNDO_STEPS = 10
 DEFAULT_VELOCITY = 100
 
 
@@ -87,12 +89,42 @@ class Sequencer:
         self.queued = None                   # the pattern to switch to at the end of this one
         self.anchor = 0.0                    # tape frame where the current pattern's step 0 falls
         self._decided = {}                   # (lane, k) -> chance result, so ratchets agree across blocks
+        self._skip = set()                   # (lane, k): a step recorded live just before it came round
+        self.undo_stack = []                 # (pattern number, copy of it before an edit), newest last
 
     @property
     def pattern(self):
         return self.patterns[self.current]
 
     # ------------------------------------------------------------ editing (from the screen's thread)
+
+    def snapshot(self):
+        """Keep the current pattern as it is, for undo (call before changing it)."""
+        with self.lock:
+            self.undo_stack.append((self.current, copy.deepcopy(self.pattern)))
+            del self.undo_stack[:-UNDO_STEPS]
+
+    def undo(self):
+        """Put back the last change. Returns the pattern number it was in, or None if there's nothing."""
+        with self.lock:
+            if not self.undo_stack:
+                return None
+            n, pattern = self.undo_stack.pop()
+            self.patterns[n] = pattern
+            return n
+
+    def live_place(self, lane, tape_frame, frames_per_beat):
+        """A drum key pressed while recording: put a step on the lane's nearest step to when you pressed it.
+        Returns the step number."""
+        with self.lock:
+            ln = self.lane(lane)
+            step_frames = frames_per_beat / ln.steps_per_beat()
+            k = round((tape_frame - self.anchor) / step_frames)
+            i = k % ln.length
+            ln.steps[i].on = True
+            if self.anchor + k * step_frames > tape_frame:
+                self._skip.add((lane, k))    # it's just ahead: you've played it already, don't play it twice
+            return i
 
     def lane(self, i):
         return self.pattern.lanes[i]
@@ -173,6 +205,7 @@ class Sequencer:
                 self.current, self.queued = self.queued, None
             self.anchor = 0.0
             self._decided.clear()
+            self._skip.clear()
 
     # ------------------------------------------------------------ playing (from the audio thread)
 
@@ -210,6 +243,10 @@ class Sequencer:
                 i = k % ln.length
                 s = ln.steps[i]
                 if not s.on:
+                    continue
+                if (li, k) in self._skip:
+                    if self.anchor + k * step_frames + step_frames <= b:
+                        self._skip.discard((li, k))
                     continue
                 t0 = self.anchor + k * step_frames
                 for r in range(s.ratchet):

@@ -192,6 +192,7 @@ class KitMenu(menu.Menu):
             self.say("PATTERN %d ISN'T EMPTY: PLAY AGAIN TO REPLACE IT" % (dst + 1))
             return
         with self.seq.lock:
+            self.seq.undo_stack.append((dst, copy.deepcopy(self.seq.patterns[dst])))   # key 8 undoes it
             self.seq.patterns[dst] = copy.deepcopy(self.seq.patterns[src])
         self.engine.seq_changed()
         self.close()
@@ -202,6 +203,7 @@ class KitMenu(menu.Menu):
         return sum(len(s.locks) for s in steps), len(steps)
 
     def clear_locks(self):
+        self.seq.snapshot()                           # key 8 on the sequencer undoes it
         with self.seq.lock:
             for ln in self.seq.pattern.lanes:
                 for st in ln.steps:

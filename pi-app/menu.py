@@ -28,7 +28,7 @@ LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
 SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "UPDATE"]
-LABELS = {"SYNC": "MIDI SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
+LABELS = {"SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -159,9 +159,15 @@ class Menu:
             return
         what = SETTINGS[self.row]
         if what == "SYNC":
-            e.set_sync_mode("internal" if e.sync_mode == "external" else "external")
-            self.say("CONSOLE SENDS MIDI CLOCK, START AND STOP" if e.sync_mode == "internal"
-                     else "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP")
+            modes = ["external", "internal", "link"]
+            e.set_sync_mode(modes[(modes.index(e.sync_mode) + (1 if delta > 0 else -1)) % len(modes)])
+            import linksync
+            if e.sync_mode == "link" and not linksync.AVAILABLE:
+                self.say("LINK NEEDS INSTALLING: RUN pi-app/setup.sh ONCE OVER SSH, THEN RESTART")
+            else:
+                self.say({"internal": "CONSOLE SENDS MIDI CLOCK, START AND STOP",
+                          "external": "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP",
+                          "link": "TEMPO, BARS AND START / STOP SHARED OVER THE NETWORK"}[e.sync_mode])
         elif what == "FORMAT":
             import audio
             fs = audio.EXPORT_FORMATS
@@ -206,6 +212,13 @@ class Menu:
         if not e:
             return "-"
         if what == "SYNC":
+            if e.sync_mode == "link":
+                link = self.transport.link
+                import linksync
+                if not linksync.AVAILABLE:
+                    return "LINK  (not installed yet)"
+                peers = link.peers if link else 0
+                return "LINK  (Ableton Link: %s)" % ("%d other%s" % (peers, "" if peers == 1 else "s") if peers else "nobody else yet")
             return "EXTERNAL  (follow the OP-XY)" if e.sync_mode == "external" else "INTERNAL  (Console leads)"
         if what == "TEMPO":
             return "%.1f BPM%s" % (e.bpm, "  (from the OP-XY)" if self.transport.synced else "")

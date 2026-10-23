@@ -217,6 +217,7 @@ class Transport:
         self.s = screen
         self.engine = engine
         self.clock = clock
+        self.link = None                          # linksync.LinkSync, set by main()
         self.tape = tape.Tape(screen, engine)
         for n in range(1, 8):
             screen.custom["track%d_num" % n] = self.draw_num
@@ -295,8 +296,15 @@ class Transport:
     def say(self, text, seconds=4):
         self.message, self.message_until = text, time.monotonic() + seconds
 
+    @property
+    def linked(self):
+        """Ableton Link is on: PLAY and stop go to everyone on the network."""
+        return bool(self.link and self.link.on)
+
     def stop(self):
         self.playing = False
+        if self.linked:
+            self.link.request_play(False)
         if self.engine:
             self.engine.rec_ready = False
             if self.engine.save():
@@ -327,8 +335,11 @@ class Transport:
         if not isinstance(name, tuple) or name[0] == "KNOB":
             self.glide = None                     # any other control stops the playhead gliding
         if name == "PLAY":
-            if self.playing:
+            if self.playing or (self.linked and self.link._waiting):
                 self.stop()
+            elif self.linked:
+                self.link.request_play(True)     # everyone starts, on the next bar
+                self.say("STARTING ON THE NEXT BAR (LINK)", 2)
             else:
                 self.playing = True
         elif name == "RECORD":
@@ -609,6 +620,11 @@ class Transport:
             e.rec_ready = not e.rec_ready
             if e.rec_ready:
                 self.say("REC READY: PRESS PLAY ON THE OP-XY", 6)
+            return
+        if e and self.linked and not self.playing:
+            e.rec_ready = True                    # recording starts with the tape, on Link's next bar
+            self.link.request_play(True)
+            self.say("RECORDING FROM THE NEXT BAR (LINK)", 3)
             return
         self.recording = True
 
@@ -1064,6 +1080,9 @@ class Transport:
             if was and not self._playing:           # stopped by the tape end, or by MIDI stop
                 self.stop()
             self.follow_tempo()
+            if self.link and self.link.message:
+                self.say(self.link.message, 3)
+                self.link.message = ""
             self.autosave()
             dirty = getattr(e, "_phones_dirty", None)
             if dirty and time.monotonic() - dirty > 1.0:
@@ -1201,7 +1220,10 @@ class Transport:
         internal = bool(e and e.sync_mode == "internal")
         if e and tuple(e.time_sig) != tape.SIG:
             tape.set_signature(*e.time_sig)
-        s.set("bpm", t="%.1f BPM  %s%s" % (bpm, tape.signature_text(), "  SYNC" if self.synced else "  LEAD" if internal else ""))
+        sync = "  SYNC" if self.synced else "  LEAD" if internal else ""
+        if self.linked:
+            sync = "  LINK %d" % self.link.peers
+        s.set("bpm", t="%.1f BPM  %s%s" % (bpm, tape.signature_text(), sync))
         all_in = bool(e and e.device and e.input_mode == "all")
         armed = [t + 1 for t in e.armed_tracks()] if e else [self.armed]
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)
@@ -1325,6 +1347,9 @@ def main():
         board = None
         print("No MIDI input:", e)
     transport = Transport(screen, engine, clock)
+    if engine:
+        import linksync
+        transport.link = linksync.LinkSync(engine)
     if board:
         board.pads = transport.pad
         board.seq_page = lambda: transport.seq_page

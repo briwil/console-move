@@ -23,11 +23,22 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
   was never named asks for a name here, and then shows up in Projects.
 - **SETTINGS:** the big knob (or ↑ ↓) picks a row, ← / → (or the right-hand
   small knob) change it.
-  - **MIDI SYNC — EXTERNAL:** Console follows the OP-XY's clock, start and
+  - **SYNC — EXTERNAL:** Console follows the OP-XY's clock, start and
     stop (see "Syncing with the OP-XY" below).
-  - **MIDI SYNC — INTERNAL:** Console leads. It sends MIDI clock to the OP-XY
+  - **SYNC — INTERNAL:** Console leads. It sends MIDI clock to the OP-XY
     all the time (so it takes Console's tempo), and start / stop when you
     play and stop Console. The top right shows LEAD.
+  - **SYNC — LINK:** Ableton Link, over the Pi's network (Wi-Fi or
+    cable), with Ableton Live, phone apps and anything else with Link.
+    Tempo: when Console joins, it takes the others' tempo (on its own, its
+    tempo leads); a tempo you set while stopped goes to everyone. While the
+    tape plays it keeps its tempo (its audio can't stretch), so a tempo
+    change from someone else is taken when you stop. PLAY starts everyone,
+    on the next bar, and Console starts from the start of the playhead's bar
+    so the bars line up; anyone else starting or stopping starts or stops
+    Console. RECORD while stopped starts recording on that next bar. The top
+    right shows LINK and how many others are connected. Needs
+    `~/console/pi-app/setup.sh` run once (it installs Link).
   - **TEMPO:** the song's tempo (SHIFT+← / → for 0.1 steps). In external
     sync it comes from the OP-XY.
   - **EXPORT FORMAT:** what EXPORT writes: WAV, AIFF or FLAC (all 24-bit,

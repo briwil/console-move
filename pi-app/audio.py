@@ -416,6 +416,7 @@ class Engine:
         self.levels = [None] * TRACKS
         self.bpm = bpm
         self.time_sig = [4, 4]                  # beats in a bar, and which note is a beat (4/4, 6/8...)
+        self.link_nudge = 0                     # Link: frames to move the tape by each block to stay on its beat
         self.tape_beats = 0.0
         self.volumes = [0.8] * TRACKS
         self.pans = [0.0] * TRACKS              # -1 left ... 0 centre ... 1 right
@@ -502,8 +503,10 @@ class Engine:
 
     @property
     def sync_mode(self):
-        """"external": follow the OP-XY's MIDI clock. "internal": Console leads and sends clock to it."""
-        return "internal" if self.settings.get("sync") == "internal" else "external"
+        """"external": follow the OP-XY's MIDI clock. "internal": Console leads and sends clock to it.
+        "link": Ableton Link over the network (linksync.py)."""
+        mode = self.settings.get("sync")
+        return mode if mode in ("internal", "link") else "external"
 
     def set_sync_mode(self, mode):
         self.remember("sync", mode)
@@ -1822,6 +1825,8 @@ class Engine:
                 self._block(x[done:done + m], self.pos, loop,
                             mix[done:done + m], rev_in[done:done + m], dly_in[done:done + m])
                 self.pos += m
+                if self.link_nudge and self.pos + self.link_nudge >= 0:
+                    self.pos += self.link_nudge         # a frame now and then, to stay on Link's beat
                 done += m
                 if loop and self.pos >= loop[1] and limit == loop[1]:
                     self.pos = loop[0]

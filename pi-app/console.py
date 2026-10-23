@@ -26,6 +26,7 @@ import time
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")   # pygame mustn't open a sound device: the audio engine owns them
 import pygame
 
+import drumparams
 import effects
 import focus
 import menu
@@ -171,6 +172,11 @@ class Board:
                 self.q.put(("KNOB", number, delta, self.shift))
 
 
+def drums_mod():
+    import drums
+    return drums
+
+
 # ---------------------------------------------------------------- the recorder's state
 
 class Transport:
@@ -186,7 +192,11 @@ class Transport:
         self.focus = focus.Focus(screen, self.tape)
         self.fx_page = None                       # None, "reverb" or "delay": what the FX key shows
         self.drum_page = False                    # the DRUMS key: track keys 1-7 play the drum synth
-        screen.after["playhead"] = self.draw_fx
+        self.drum_voice = 0                       # the voice the knobs edit (the last one played), 0-5
+        self.drum_tab = 0                         # which page of its settings (knob 9 turns them)
+        self._drum_hits = [0.0] * 6               # when each voice was last played, to light it up
+        self._knob_times = {}                     # knob -> when it last clicked, to speed up fast turns
+        screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
         self._armed = 4
@@ -370,11 +380,38 @@ class Transport:
         if not (self.drum_page and e and e.drums_input and 1 <= n <= 7):
             return False
         e.hit(n - 1, 100)
+        voice = min(n, 6) - 1                     # 7 (open hi-hat) is the hi-hat voice too
+        self.drum_voice = voice
+        self._drum_hits[voice] = time.monotonic()
         return True
+
+    def drum_pages(self):
+        return drumparams.PAGES[self.drum_voice]
+
+    def drum_knob(self, number, delta, shift):
+        """On the drum page: knobs 1-8 are the settings on the page, knob 9 turns the page."""
+        e = self.engine
+        pages = self.drum_pages()
+        if number == 9:
+            self.drum_tab = max(0, min(len(pages) - 1, self.drum_tab + (1 if delta > 0 else -1)))
+            return
+        params = pages[min(self.drum_tab, len(pages) - 1)][1]
+        if number > len(params):
+            return
+        param = params[number - 1]
+        now = time.monotonic()
+        fast = now - self._knob_times.get(number, 0) < 0.05
+        self._knob_times[number] = now
+        clicks = delta if shift else delta * (4 if fast else 1)    # turning quickly goes further; SHIFT: fine
+        e.change_drum(param, clicks)
+        self.say("%s  %s  %s" % (drums_mod().NAMES[self.drum_voice], drumparams.LABELS[param],
+                                 e.drums.value_text(param)), 2)
 
     def knob(self, number, delta, shift):
         t = self.tape
-        if self.fx_page and self.engine and not (number == 10 and shift):
+        if self.drum_page and self.engine and self.engine.drums and number <= 9:
+            self.drum_knob(number, delta, shift)
+        elif self.fx_page and self.engine and not (number == 10 and shift):
             self.fx_knob(number, delta)
         elif number <= 8:
             if shift:
@@ -445,6 +482,73 @@ class Transport:
         if key == "dly_time":
             return v
         return "%d%%" % round(v * 100)
+
+    def draw_page(self, surf, it=None):
+        if self.drum_page and self.engine and self.engine.drums:
+            self.draw_drums(surf)
+        else:
+            self.draw_fx(surf, it)
+
+    def draw_drums(self, surf):
+        """The drum page: knob n's setting across track n's lane, and the voices and pages on the right."""
+        s, e = self.s, self.engine
+        d = e.drums
+        small, mid, big = s.font("mono", 600, 14), s.font("mono", 600, 18), s.font("mono", 700, 26)
+        accent, grey, white = (255, 181, 71), (125, 131, 140), (242, 243, 245)
+        home = lambda n, part: self.focus.home.get((n, part)) or s.get("track%d_%s" % (n, part))
+        first, last = home(1, "lane"), home(8, "lane")
+        surf.set_clip(None)
+        pygame.draw.rect(surf, (12, 13, 16), (0, first["y"] - 4, 1280, last["y"] + last["h"] - first["y"] + 8))
+        pages = self.drum_pages()
+        self.drum_tab = min(self.drum_tab, len(pages) - 1)
+        page_name, params = pages[self.drum_tab]
+        label_x, bar_x, bar_w = 72, 230, 470
+        for n in range(1, 9):
+            lane, tab = home(n, "lane"), home(n, "tab")
+            if not lane:
+                continue
+            on = n <= len(params)
+            if tab:
+                pygame.draw.rect(surf, accent if on else (40, 43, 50), (tab["x"], tab["y"], tab["w"], tab["h"]), border_radius=6)
+                num = s.font("mono", 600, 16).render(str(n), True, (12, 13, 16))
+                surf.blit(num, (tab["x"] + (tab["w"] - num.get_width()) // 2, tab["y"] + (tab["h"] - num.get_height()) // 2))
+            if not on:
+                continue
+            param = params[n - 1]
+            mid_y = lane["y"] + lane["h"] // 2
+            name = mid.render(drumparams.LABELS[param], True, white)
+            surf.blit(name, (label_x, mid_y - name.get_height() // 2))
+            y, h = lane["y"] + 8, lane["h"] - 16
+            pygame.draw.rect(surf, (40, 43, 50), (bar_x, y, bar_w, h), border_radius=3)
+            w = round(bar_w * max(0.0, min(1.0, d.fraction(param))))
+            if w:
+                pygame.draw.rect(surf, accent, (bar_x, y, w, h), border_radius=3)
+            value = small.render(d.value_text(param), True, white)
+            surf.blit(value, (bar_x + bar_w + 12, mid_y - value.get_height() // 2))
+        # the box on the right: the voices (light up when played) and this voice's pages
+        bx, by = 880, first["y"]
+        bw, bh = first["x"] + first["w"] - bx, last["y"] + last["h"] - by
+        pygame.draw.rect(surf, (20, 22, 26), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(surf, accent, (bx, by, bw, bh), 2, border_radius=6)
+        names = drums_mod().NAMES
+        surf.blit(big.render(names[self.drum_voice], True, accent), (bx + 18, by + 14))
+        hint = small.render("KEYS 1-7 PLAY", True, grey)
+        surf.blit(hint, (bx + bw - 18 - hint.get_width(), by + 22))
+        now = time.monotonic()
+        cell = (bw - 36) // 6
+        for v in range(6):
+            x0, y0 = bx + 18 + v * cell, by + 56
+            glow = max(0.0, 1.0 - (now - self._drum_hits[v]) / 0.25)
+            base = (60, 64, 72) if v != self.drum_voice else (120, 92, 40)
+            colour = tuple(round(c + (255 - c) * glow) for c in base)
+            pygame.draw.rect(surf, colour, (x0, y0, cell - 6, 26), border_radius=4)
+            t = small.render(str(v + 1), True, (12, 13, 16) if (glow > 0.3 or v == self.drum_voice) else white)
+            surf.blit(t, (x0 + (cell - 6 - t.get_width()) // 2, y0 + 4))
+        py = by + 100
+        surf.blit(small.render("KNOB 9: PAGE", True, grey), (bx + 18, py))
+        for i, (pname, _) in enumerate(pages):
+            colour = accent if i == self.drum_tab else grey
+            surf.blit(mid.render(("> " if i == self.drum_tab else "  ") + pname, True, colour), (bx + 18, py + 24 + i * 26))
 
     def draw_fx(self, surf, it=None):
         """The FX page: each track's send as a bar across its lane, and the effect's settings on the right."""

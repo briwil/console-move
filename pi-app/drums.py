@@ -16,11 +16,14 @@ import threading
 
 import numpy as np
 
+import drumparams as dp
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(HERE, "drums")
 LIB = os.path.join(DIR, "libdrums.so")
 VOICES = 6
 NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "HI-HAT"]
+SHORT = ["DR1", "DR2", "DR3", "SN", "CY", "HH"]
 OPEN_HAT = 6
 PROBLEM = ""              # why the drum synth is off, if it is
 
@@ -78,6 +81,10 @@ class Drums:
             self.param_count = _lib.drums_param_count()
         else:
             self.param_count = 0
+        # what each setting is now, kept here so the screen can read it any time (the engine catches up
+        # at the start of its next block); and the LXR's Init Kit, to go back to
+        self.values = [_lib.drums_get_param(i) for i in range(self.param_count)] if AVAILABLE else []
+        self.init_values = list(self.values)
 
     # These can be called from any thread: they take effect at the start of the next block of sound.
     def hit(self, lane, velocity=100):
@@ -85,23 +92,95 @@ class Drums:
             self._pending.append(("hit", lane, velocity))
 
     def set_param(self, index, value):
+        if not 0 <= index < self.param_count:
+            return
+        value = max(0, min(127, int(value)))
         with self._lock:
+            self.values[index] = value
             self._pending.append(("param", index, value))
 
     def get_param(self, index):
-        return _lib.drums_get_param(index) if AVAILABLE else 0
+        return self.values[index] if 0 <= index < self.param_count else 0
 
     def kit(self):
         """The current sound settings, to save in the project."""
-        return [self.get_param(i) for i in range(self.param_count)]
+        return list(self.values)
 
     def load_kit(self, values):
+        """Settings saved by kit(); missing ones (from an older save) come from the Init Kit."""
+        values = [int(v) for v in values[:self.param_count]]
+        values += self.init_values[len(values):]
         with self._lock:
-            self._pending.extend(("param", i, int(v)) for i, v in enumerate(values[:self.param_count]))
+            self.values = values
+            self._pending.extend(("param", i, v) for i, v in enumerate(values))
 
     def init_kit(self):
-        with self._lock:
-            self._pending.append(("init",))
+        self.load_kit(self.init_values)
+
+    # ------------------------------------------------------------ editing with the knobs
+
+    def target_range(self, param):
+        """For a velocity or LFO destination: (first, last) entry of TARGETS it may point at."""
+        if dp.KINDS[param] == ("vel_target",):
+            voice = param - 149                        # VEL TO params are 149-154, one per voice
+        else:
+            voice = self.get_param(param - 6) - 1      # the LFO's own voice setting sits 6 below its target
+        return dp.VOICE_TARGETS[max(0, min(5, voice))]
+
+    def step(self, param, clicks):
+        """Turn a setting by some knob clicks. Returns the new value."""
+        kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
+        if kind[0] == "menu":
+            v = max(0, min(len(dp.MENUS[kind[1]]) - 1, v + (1 if clicks > 0 else -1)))
+        elif kind[0] == "onoff":
+            v = 1 if clicks > 0 else 0
+        elif kind[0] == "voice":
+            old = self.get_param(param + 6)            # keep the LFO's target on the same kind of setting
+            first, _ = dp.VOICE_TARGETS[max(0, min(5, v - 1))]
+            v = max(1, min(6, v + (1 if clicks > 0 else -1)))
+            if old:
+                nf, nl = dp.VOICE_TARGETS[v - 1]
+                self.set_param(param + 6, min(nl, nf + max(0, old - first)))
+        elif kind[0] in ("vel_target", "lfo_target"):
+            first, last = self.target_range(param)
+            order = [0] + list(range(first, last + 1))     # nothing, then the voice's own settings
+            i = order.index(v) if v in order else 0
+            v = order[max(0, min(len(order) - 1, i + (1 if clicks > 0 else -1)))]
+        else:
+            v = max(0, min(127, v + clicks))
+        self.set_param(param, v)
+        return v
+
+    def value_text(self, param):
+        kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
+        if kind[0] == "menu":
+            names = dp.MENUS[kind[1]]
+            return names[v] if v < len(names) else str(v)
+        if kind[0] == "pm":
+            return "%+d" % (v - kind[1]) if v != kind[1] else "0"
+        if kind[0] == "onoff":
+            return "ON" if v else "OFF"
+        if kind[0] == "voice":
+            return NAMES[max(0, min(5, v - 1))]
+        if kind[0] in ("vel_target", "lfo_target"):
+            target = dp.TARGETS[v] if v < len(dp.TARGETS) else 0
+            if not target:
+                return "OFF"
+            voice = next((i for i, (a, b) in enumerate(dp.VOICE_TARGETS) if a <= v <= b), None)
+            label = dp.LABELS.get(target, "FX %d" % (target - 237))
+            return label if voice is None else "%s %s" % (SHORT[voice], label)
+        return str(v)
+
+    def fraction(self, param):
+        """How far round the setting is, 0..1, for the screen's bars."""
+        kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
+        if kind[0] == "menu":
+            return v / max(1, len(dp.MENUS[kind[1]]) - 1)
+        if kind[0] == "voice":
+            return (v - 1) / 5
+        if kind[0] in ("vel_target", "lfo_target"):
+            return 1.0 if v else 0.0
+        return v / 127
 
     def set_bpm(self, bpm):
         with self._lock:

@@ -733,6 +733,8 @@ class Engine:
             self.rev_sends = [0.0] * TRACKS
             self.dly_sends = [0.0] * TRACKS
             self.fx = dict(effects.DEFAULTS) if effects else {}
+            if self.drums:
+                self.drums.init_kit()                   # a new song starts with the Init Kit
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -804,6 +806,11 @@ class Engine:
         if effects:
             self.fx = dict(effects.DEFAULTS)
             self.fx.update({k: v for k, v in (meta.get("fx") or {}).items() if k in effects.DEFAULTS})
+        if self.drums:
+            if meta.get("drum_kit"):
+                self.drums.load_kit(meta["drum_kit"])
+            else:
+                self.drums.init_kit()
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
         self._meta_regions = meta.get("regions")
@@ -837,6 +844,8 @@ class Engine:
                     "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions],
                     "reverb_sends": self.rev_sends, "delay_sends": self.dly_sends, "fx": dict(self.fx)}
+            if self.drums:
+                meta["drum_kit"] = self.drums.kit()
         if not changed:
             return False
 
@@ -973,6 +982,13 @@ class Engine:
             v = round(max(0.0, min(1.0, sends[track - 1] + delta)), 2)
             sends[track - 1] = v
             self.dirty.add(-1)
+        return v
+
+    def change_drum(self, param, clicks):
+        """Turn a drum synth setting (the LXR's parameter number) by some knob clicks. Returns the new value."""
+        v = self.drums.step(param, clicks)
+        with self.lock:
+            self.dirty.add(-1)                      # the kit is saved with the song
         return v
 
     def change_fx(self, key, delta):

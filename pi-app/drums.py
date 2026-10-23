@@ -11,6 +11,7 @@ import ctypes
 import glob
 import math
 import os
+import shutil
 import subprocess
 import threading
 
@@ -21,6 +22,7 @@ import drumparams as dp
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(HERE, "drums")
 LIB = os.path.join(DIR, "libdrums.so")
+LIVE_LIB = os.path.join(DIR, "libdrums_live.so")    # a second copy: its own engine, for playing by hand
 VOICES = 6
 NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "HI-HAT"]
 SHORT = ["DR1", "DR2", "DR3", "SN", "CY", "HH"]
@@ -41,16 +43,25 @@ def _build():
         return False, str(e)
 
 
-def _load():
+def _load(path=LIB):
     global PROBLEM
-    if not os.path.exists(LIB) or _newest_source() > os.path.getmtime(LIB):
+    if path == LIB and (not os.path.exists(LIB) or _newest_source() > os.path.getmtime(LIB)):
         ok, err = _build()
         if not ok and not os.path.exists(LIB):
             PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN pi-app/setup.sh"
             print("Drums: couldn't build drums/libdrums.so (%s). Run pi-app/setup.sh." % err[-500:])
             return None
+    if path != LIB:
+        # the same library under another name loads as a separate engine with its own settings and voices
+        try:
+            if not os.path.exists(path) or os.path.getmtime(path) < os.path.getmtime(LIB):
+                shutil.copyfile(LIB, path + ".tmp")
+                os.replace(path + ".tmp", path)
+        except OSError as e:
+            print("Drums: couldn't copy the library for a second engine: %s" % e)
+            return None
     try:
-        lib = ctypes.CDLL(LIB)
+        lib = ctypes.CDLL(path)
     except OSError as e:
         PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN pi-app/setup.sh"
         print("Drums: couldn't load %s: %s" % (LIB, e))
@@ -68,6 +79,9 @@ def _load():
 
 _lib = _load()
 AVAILABLE = _lib is not None
+# The sequencer plays _lib; your fingers play _live. Two engines, so the sequencer's hits can be recorded
+# exactly on the beat and yours exactly where you pressed (they reach the tape with different delays).
+_live = (_load(LIVE_LIB) if AVAILABLE else None) or _lib
 
 
 class Drums:
@@ -76,8 +90,11 @@ class Drums:
     def __init__(self):
         self._lock = threading.Lock()
         self._pending = []         # things to do at the start of the next render, in order
+        self._locked = [set() for _ in range(VOICES)]     # parameters the sequencer engine has locked now
         if AVAILABLE:
             _lib.drums_init()
+            if _live is not _lib:
+                _live.drums_init()
             self.param_count = _lib.drums_param_count()
         else:
             self.param_count = 0
@@ -129,6 +146,21 @@ class Drums:
             voice = self.get_param(param - 6) - 1      # the LFO's own voice setting sits 6 below its target
         return dp.VOICE_TARGETS[max(0, min(5, voice))]
 
+    @staticmethod
+    def lockable(param):
+        """Settings a step can lock: not the velocity and LFO destinations (they pick what's modulated)."""
+        return dp.KINDS.get(param, ("num",))[0] in ("num", "pm", "menu", "onoff")
+
+    @staticmethod
+    def stepped(param, v, clicks):
+        """A lockable setting's value v turned by some clicks."""
+        kind = dp.KINDS.get(param, ("num",))
+        if kind[0] == "menu":
+            return max(0, min(len(dp.MENUS[kind[1]]) - 1, v + (1 if clicks > 0 else -1)))
+        if kind[0] == "onoff":
+            return 1 if clicks > 0 else 0
+        return max(0, min(127, v + clicks))
+
     def step(self, param, clicks):
         """Turn a setting by some knob clicks. Returns the new value."""
         kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
@@ -153,8 +185,9 @@ class Drums:
         self.set_param(param, v)
         return v
 
-    def value_text(self, param):
-        kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
+    def value_text(self, param, v=None):
+        kind = dp.KINDS.get(param, ("num",))
+        v = self.get_param(param) if v is None else v
         if kind[0] == "menu":
             names = dp.MENUS[kind[1]]
             return names[v] if v < len(names) else str(v)
@@ -173,9 +206,10 @@ class Drums:
             return label if voice is None else "%s %s" % (SHORT[voice], label)
         return str(v)
 
-    def fraction(self, param):
+    def fraction(self, param, v=None):
         """How far round the setting is, 0..1, for the screen's bars."""
-        kind, v = dp.KINDS.get(param, ("num",)), self.get_param(param)
+        kind = dp.KINDS.get(param, ("num",))
+        v = self.get_param(param) if v is None else v
         if kind[0] == "menu":
             return v / max(1, len(dp.MENUS[kind[1]]) - 1)
         if kind[0] == "voice":
@@ -188,24 +222,54 @@ class Drums:
         with self._lock:
             self._pending.append(("bpm", int(round(bpm))))
 
-    def render(self, frames):
-        """The next frames of sound: (frames, 6) float32, one mono channel per voice (audio thread)."""
-        with self._lock:
-            todo, self._pending = self._pending, []
-        out = np.zeros((frames, VOICES), np.float32)
+    @property
+    def two_engines(self):
+        return _live is not _lib
+
+    def render(self, frames, events=(), with_live=True):
+        """The next frames of sound (audio thread): (sequencer, by hand), each (frames, 6) float32, one mono
+        channel per voice. events: the sequencer's hits in this block, [(offset, lane, velocity, locks)].
+        With only one engine (the copy failed), everything is in the first and the second is silent."""
+        todo = []
+        if with_live:                        # False: only the sequencer's engine runs
+            with self._lock:
+                todo, self._pending = self._pending, []
+        seq = np.zeros((frames, VOICES), np.float32)
+        live = np.zeros((frames, VOICES), np.float32)
         if not AVAILABLE:
-            return out
+            return seq, live
+        engines = (_lib, _live) if self.two_engines else (_lib,)
         for t in todo:
             if t[0] == "hit":
-                _lib.drums_trigger(t[1], t[2])
+                _live.drums_trigger(t[1], t[2])
             elif t[0] == "param":
-                _lib.drums_set_param(t[1], t[2])
-            elif t[0] == "init":
-                _lib.drums_load_init_kit()
+                for lib in engines:
+                    lib.drums_set_param(t[1], t[2])
             elif t[0] == "bpm":
-                _lib.drums_set_bpm(t[1])
-        _lib.drums_render(out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), frames)
-        return out
+                for lib in engines:
+                    lib.drums_set_bpm(t[1])
+        pos = 0
+        ptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        for offset, lane, vel, locks in events:
+            offset = max(pos, min(frames, offset))
+            if offset > pos:
+                _lib.drums_render(ptr(seq[pos:offset]), offset - pos)
+                pos = offset
+            self._apply_locks(min(lane, VOICES - 1), locks)
+            _lib.drums_trigger(lane, vel)
+        if pos < frames:
+            _lib.drums_render(ptr(seq[pos:]), frames - pos)
+        if self.two_engines and with_live:
+            _live.drums_render(ptr(live), frames)
+        return seq, live
+
+    def _apply_locks(self, voice, locks):
+        """Before a sequencer hit: put back the voice's settings the last step locked, then lock this step's."""
+        for p in self._locked[voice] - set(locks):
+            _lib.drums_set_param(p, self.values[p])
+        for p, v in locks.items():
+            _lib.drums_set_param(p, v)
+        self._locked[voice] = set(locks)
 
     def pans(self):
         """Each voice's left and right gain from the kit's pan settings: (6, 2)."""

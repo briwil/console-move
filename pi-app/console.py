@@ -31,6 +31,7 @@ import effects
 import focus
 import kitmenu
 import menu
+import sequencer
 import tape
 import ui
 
@@ -136,14 +137,37 @@ class Board:
         self.shift = False
         self.held = set()                  # hold keys pressed without SHIFT, waiting for their release
         self.pads = None                   # Transport.pad: plays the drum synth straight from this thread
+        self.seq_page = lambda: False      # True while the sequencer page turns the 4x4 keys into steps
+        self.shift_used = False            # SHIFT did something while held (so letting go isn't step 13)
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
             if 0 <= number < len(BOARD_KEYS):
                 name = BOARD_KEYS[number]
+                steps = self.seq_page()
                 if name == "SHIFT":
+                    # on the sequencer page SHIFT is also step 13: held, it holds the step (turn knobs to
+                    # lock settings to it); press another key with it and it's SHIFT instead
                     self.shift = bool(value)
+                    if value:
+                        self.shift_used = False
+                        if steps:
+                            self.q.put(("STEP", number, True))
+                    elif steps and not self.shift_used:
+                        self.q.put(("STEP", number, False))
                     return
+                if steps and self.shift and not self.shift_used:
+                    self.shift_used = True
+                    self.q.put(("STEP_CANCEL", 12))     # it was SHIFT after all: let go of step 13
+                if steps and number < 16:
+                    if self.shift:              # SHIFT + one of the 4x4 keys: that key's own job
+                        if value:
+                            self.q.put(name)
+                    else:
+                        self.q.put(("STEP", number, bool(value)))
+                    return
+                if self.shift:
+                    self.shift_used = True
                 if name in HOLD_KEYS and (not value or not self.shift):
                     if value:
                         self.held.add(name)
@@ -164,12 +188,17 @@ class Board:
                 self.q.put(name)
             elif 32 <= number < 32 + len(PUSHES) and value:
                 name = PUSHES[number - 32]
+                if self.shift and self.seq_page() and not self.shift_used:
+                    self.q.put(name)                    # step 13 held: a push takes a lock off
+                    return
                 if self.shift and name.startswith("MUTE"):
                     name = "SOLO" + name[4:]          # SHIFT + push a track knob: solo
                 self.q.put(name)
         elif kind == "cc" and 1 <= number <= 11:
             delta = value - 64
-            if delta:
+            if delta and self.shift and self.seq_page() and not self.shift_used:
+                self.q.put(("KNOB", number, delta, False))  # SHIFT held as step 13: the knob locks it
+            elif delta:
                 self.q.put(("KNOB", number, delta, self.shift))
 
 
@@ -197,6 +226,11 @@ class Transport:
         self.drum_tab = 0                         # which page of its settings (knob 9 turns them)
         self._drum_hits = [0.0] * 6               # when each voice was last played, to light it up
         self._knob_times = {}                     # knob -> when it last clicked, to speed up fast turns
+        self.seq_page = False                     # the MIDI key's second press: the sequencer
+        self.seq_lane = 0                         # the sequencer lane being edited, 0-6
+        self.seq_bank = 0                         # which 16 steps the 4x4 keys are (the big knob)
+        self.held_steps = []                      # steps held down (lane step numbers), in the order pressed
+        self._turned = set()                      # held steps that had a knob turned (so letting go doesn't toggle)
         screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
@@ -273,6 +307,13 @@ class Transport:
         if isinstance(name, tuple):
             if name[0] == "KNOB":
                 self.knob(*name[1:])
+            elif name[0] == "STEP":
+                self.step_key(name[1], name[2])
+            elif name[0] == "STEP_CANCEL":
+                i = self.seq_bank * 16 + name[1]
+                if i in self.held_steps:
+                    self.held_steps.remove(i)
+                    self._turned.discard(i)
             elif name[0] == "HOLD":
                 self.hold(name[1])
             elif name[0] == "RELEASE":
@@ -338,6 +379,8 @@ class Transport:
                 self.say("TRACK %d %s" % (n, "ARMED" if (n - 1) in e.arm_extra else "DISARMED"), 2)
         elif name == "FOCUS":
             self.focus.toggle(self.armed)
+        elif name.startswith("MUTE") and name[4:] and self.seq_page and self.held_steps:
+            self.unlock(int(name[4:]))            # push a knob while holding a step: take its lock off
         elif name.startswith("MUTE"):
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name.startswith("SOLO"):
@@ -361,9 +404,15 @@ class Transport:
     PAD_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
 
     def drums_key(self):
+        """The MIDI key: the drum page, then the sequencer, then back to the tape."""
         e = self.engine
+        if self.drum_page and not self.seq_page:
+            self.seq_page = True
+            self.seq_lane = min(self.seq_lane, sequencer.LANES - 1)
+            return
         if self.drum_page:
-            self.drum_page = False
+            self.drum_page = self.seq_page = False
+            self.held_steps, self._turned = [], set()
             return
         if not e or not e.drums:
             import drums
@@ -382,21 +431,104 @@ class Transport:
             return False
         e.hit(n - 1, 100)
         voice = min(n, 6) - 1                     # 7 (open hi-hat) is the hi-hat voice too
+        if self.seq_page and not self.held_steps:
+            self.seq_lane = n - 1                 # on the sequencer: that lane, too
         self.drum_voice = voice
         self._drum_hits[voice] = time.monotonic()
         return True
 
+    SEQ_PAGES = [("STEP", ["vel", "chance", "ratchet"]), ("LANE", ["length", "hits", "rotate", "rate"])]
+    SEQ_LABELS = {"vel": "VELOCITY", "chance": "CHANCE", "ratchet": "RATCHETS", "length": "LENGTH",
+                  "hits": "EUCLID", "rotate": "SHIFT", "rate": "RATE"}
+
     def drum_pages(self):
-        return drumparams.PAGES[self.drum_voice]
+        """The knob pages: the voice's sound pages, and on the sequencer STEP and LANE as well."""
+        pages = list(drumparams.PAGES[self.drum_voice])
+        return pages + self.SEQ_PAGES if self.seq_page else pages
+
+    def seq_value(self, what, step=None):
+        """A STEP or LANE setting as text (STEP ones for a step)."""
+        e, lane = self.engine, self.seq_lane
+        if what in ("vel", "chance", "ratchet"):
+            if step is None:
+                return "-"
+            st = e.seq.step(lane, step)
+            return str(st.vel) if what == "vel" else sequencer.CHANCES[st.chance] if what == "chance" else "x%d" % st.ratchet
+        ln = e.seq.lane(lane)
+        if what == "hits":
+            return "OFF" if not ln.hits else "%d OF %d" % (ln.hits, ln.length)
+        if what == "rate":
+            return sequencer.RATES[ln.rate][0]
+        return str(getattr(ln, what))
+
+    def seq_fraction(self, what, step=None):
+        e, lane = self.engine, self.seq_lane
+        ln = e.seq.lane(lane)
+        if what in ("vel", "chance", "ratchet"):
+            if step is None:
+                return 0.0
+            st = e.seq.step(lane, step)
+            return st.vel / 127 if what == "vel" else (1 - st.chance / (len(sequencer.CHANCES) - 1)) \
+                if what == "chance" else st.ratchet / sequencer.MAX_RATCHET
+        if what == "length":
+            return ln.length / sequencer.MAX_STEPS
+        if what == "hits":
+            return ln.hits / ln.length
+        if what == "rotate":
+            return ln.rotate / max(1, ln.length - 1)
+        return ln.rate / (len(sequencer.RATES) - 1)
+
+    def step_key(self, key, down):
+        """One of the 4x4 keys on the sequencer page: hold to lock settings, press and let go to toggle."""
+        e = self.engine
+        if not (self.seq_page and e):
+            return
+        i = self.seq_bank * 16 + key
+        if i >= e.seq.lane(self.seq_lane).length:
+            return                                # past the end of the lane: nothing there
+        if down:
+            if i not in self.held_steps:
+                self.held_steps.append(i)
+            return
+        if i in self.held_steps:
+            self.held_steps.remove(i)
+            if i in self._turned:
+                self._turned.discard(i)
+            else:
+                e.seq.toggle(self.seq_lane, i)
+                e.seq_changed()
+
+    def unlock(self, knob):
+        e = self.engine
+        page = self.drum_pages()[self.drum_tab][1] if self.drum_tab < len(self.drum_pages()) else []
+        if knob > len(page) or isinstance(page[knob - 1], str):
+            return
+        param = page[knob - 1]
+        for i in self.held_steps:
+            e.seq.step(self.seq_lane, i).locks.pop(param, None)
+            self._turned.add(i)
+        e.seq_changed()
+        self.say("%s UNLOCKED" % drumparams.LABELS[param], 2)
 
     def drum_knob(self, number, delta, shift):
-        """On the drum page: knobs 1-8 are the settings on the page, knob 9 turns the page."""
+        """On the drum pages: knobs 1-8 are the settings on the page, knob 9 turns the page. On the
+        sequencer, also knob 10 the pattern and the big knob the bank of 16 steps."""
         e = self.engine
         pages = self.drum_pages()
         if number == 9:
             self.drum_tab = max(0, min(len(pages) - 1, self.drum_tab + (1 if delta > 0 else -1)))
             return
-        params = pages[min(self.drum_tab, len(pages) - 1)][1]
+        if number == 10:
+            target = e.seq.queued if e.seq.queued is not None else e.seq.current
+            e.seq.choose_pattern(target + (1 if delta > 0 else -1), e.playing)
+            e.seq_changed()
+            return
+        if number == 11:
+            banks = (e.seq.lane(self.seq_lane).length - 1) // 16 + 1
+            self.seq_bank = max(0, min(banks - 1, self.seq_bank + (1 if delta > 0 else -1)))
+            return
+        self.drum_tab = min(self.drum_tab, len(pages) - 1)
+        page_name, params = pages[self.drum_tab]
         if number > len(params):
             return
         param = params[number - 1]
@@ -404,13 +536,47 @@ class Transport:
         fast = now - self._knob_times.get(number, 0) < 0.05
         self._knob_times[number] = now
         clicks = delta if shift else delta * (4 if fast else 1)    # turning quickly goes further; SHIFT: fine
+        lane_name = sequencer.LANE_NAMES[self.seq_lane]
+        if page_name == "STEP":
+            if not self.held_steps:
+                self.say("HOLD A STEP AND TURN TO SET ITS %s" % self.SEQ_LABELS[param], 3)
+                return
+            for i in self.held_steps:
+                e.seq.change_step(self.seq_lane, i, param, clicks)
+                self._turned.add(i)
+            e.seq_changed()
+            self.say("STEP %d  %s  %s" % (self.held_steps[0] + 1, self.SEQ_LABELS[param],
+                                          self.seq_value(param, self.held_steps[0])), 2)
+            return
+        if page_name == "LANE":
+            e.seq.change_lane(self.seq_lane, param, clicks if param == "length" else delta)
+            e.seq_changed()
+            banks = (e.seq.lane(self.seq_lane).length - 1) // 16 + 1
+            self.seq_bank = min(self.seq_bank, banks - 1)
+            self.say("%s  %s  %s" % (lane_name, self.SEQ_LABELS[param], self.seq_value(param)), 2)
+            return
+        if self.seq_page and self.held_steps:
+            if not e.drums.lockable(param):
+                self.say("%s CAN'T BE LOCKED TO A STEP" % drumparams.LABELS[param], 3)
+                return
+            for i in self.held_steps:
+                st = e.seq.step(self.seq_lane, i)
+                base = st.locks.get(param, e.drums.get_param(param))
+                e.seq.set_lock(self.seq_lane, i, param, e.drums.stepped(param, base, clicks))
+                self._turned.add(i)
+            e.seq_changed()
+            v = e.seq.step(self.seq_lane, self.held_steps[0]).locks[param]
+            self.say("STEP %d  %s  %s  (LOCKED)" % (self.held_steps[0] + 1, drumparams.LABELS[param],
+                                                     e.drums.value_text(param, v)), 2)
+            return
         e.change_drum(param, clicks)
         self.say("%s  %s  %s" % (drums_mod().NAMES[self.drum_voice], drumparams.LABELS[param],
                                  e.drums.value_text(param)), 2)
 
     def knob(self, number, delta, shift):
         t = self.tape
-        if self.drum_page and self.engine and self.engine.drums and number <= 9:
+        if self.drum_page and self.engine and self.engine.drums and (number <= 9 or
+                                                                     (self.seq_page and not (number == 10 and shift))):
             self.drum_knob(number, delta, shift)
         elif self.fx_page and self.engine and not (number == 10 and shift):
             self.fx_knob(number, delta)
@@ -485,7 +651,9 @@ class Transport:
         return "%d%%" % round(v * 100)
 
     def draw_page(self, surf, it=None):
-        if self.drum_page and self.engine and self.engine.drums:
+        if self.seq_page and self.engine and self.engine.drums:
+            self.draw_seq(surf)
+        elif self.drum_page and self.engine and self.engine.drums:
             self.draw_drums(surf)
         else:
             self.draw_fx(surf, it)
@@ -550,6 +718,125 @@ class Transport:
         for i, (pname, _) in enumerate(pages):
             colour = accent if i == self.drum_tab else grey
             surf.blit(mid.render(("> " if i == self.drum_tab else "  ") + pname, True, colour), (bx + 18, py + 24 + i * 26))
+
+    def draw_seq(self, surf):
+        """The sequencer page: what each knob does along the top, the settings (locked ones green while a
+        step is held), the lane and pattern on the right, and the lane's steps along the bottom."""
+        s, e = self.s, self.engine
+        d, seq = e.drums, e.seq
+        tiny, small, mid, big = (s.font("mono", 600, 12), s.font("mono", 600, 14), s.font("mono", 600, 17),
+                                 s.font("mono", 700, 24))
+        yellow, green, grey, white, dark = (255, 181, 71), (60, 203, 127), (125, 131, 140), (242, 243, 245), (40, 43, 50)
+        surf.set_clip(None)
+        pygame.draw.rect(surf, (12, 13, 16), (0, 36, 1280, 330))
+        pages = self.drum_pages()
+        self.drum_tab = min(self.drum_tab, len(pages) - 1)
+        page_name, params = pages[self.drum_tab]
+        held = self.held_steps[0] if self.held_steps else None
+        lane = seq.lane(self.seq_lane)
+        if held is not None and held >= lane.length:
+            held = None
+        step = seq.step(self.seq_lane, held) if held is not None else None
+
+        def label(p):
+            return self.SEQ_LABELS[p] if isinstance(p, str) else drumparams.LABELS[p]
+
+        # what each knob does, in order: 1-8, then 9, 10 and the big knob
+        names = [label(params[i]) if i < len(params) else "" for i in range(8)] + ["PAGE", "PATTERN", "BANK"]
+        x, w, gap = 20, 106, 6
+        for n, text in enumerate(names):
+            pygame.draw.rect(surf, (60, 64, 72) if text else (26, 28, 33), (x, 42, w, 22), 1, border_radius=4)
+            if text:
+                t = tiny.render(text, True, white if n < 8 else grey)
+                surf.blit(t, (x + (w - t.get_width()) // 2, 46))
+            x += w + gap
+        # the settings, one row per knob
+        top, row_h, bar_x, bar_w = 74, 26, 160, 420
+        for n in range(8):
+            y = top + n * row_h
+            num = tiny.render(str(n + 1), True, grey)
+            surf.blit(num, (24, y + 6))
+            if n >= len(params):
+                continue
+            p = params[n]
+            surf.blit(small.render(label(p), True, white), (44, y + 4))
+            if isinstance(p, str):
+                frac = self.seq_fraction(p, held)
+                text, colour = self.seq_value(p, held), yellow
+                if p in ("vel", "chance", "ratchet") and held is not None:
+                    colour = green
+            elif step is not None and p in step.locks:
+                frac, text, colour = d.fraction(p, step.locks[p]), d.value_text(p, step.locks[p]) + "  LOCK", green
+            else:
+                frac, text, colour = d.fraction(p), d.value_text(p), yellow
+            pygame.draw.rect(surf, dark, (bar_x, y + 5, bar_w, row_h - 10), border_radius=3)
+            if frac > 0:
+                pygame.draw.rect(surf, colour, (bar_x, y + 5, round(bar_w * min(1.0, frac)), row_h - 10), border_radius=3)
+            surf.blit(small.render(text, True, white), (bar_x + bar_w + 12, y + 4))
+        # the box on the right: lane, pattern, page
+        bx, by, bw, bh = 760, 74, 500, 8 * row_h - 4
+        pygame.draw.rect(surf, (20, 22, 26), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(surf, yellow, (bx, by, bw, bh), 2, border_radius=6)
+        surf.blit(big.render(sequencer.LANE_NAMES[self.seq_lane], True, yellow), (bx + 16, by + 10))
+        pat = "PATTERN %d" % (seq.current + 1)
+        if seq.queued is not None:
+            pat += "  > %d NEXT" % (seq.queued + 1)
+        t = mid.render(pat, True, white)
+        surf.blit(t, (bx + bw - 16 - t.get_width(), by + 14))
+        info = "%d STEPS  \u00b7  %s  \u00b7  PAGE: %s" % (lane.length, sequencer.RATES[lane.rate][0], page_name)
+        surf.blit(small.render(info, True, grey), (bx + 16, by + 48))
+        if held is not None:
+            locks = len(step.locks)
+            text = "STEP %d HELD%s" % (held + 1, "  \u00b7  %d LOCK%s" % (locks, "" if locks == 1 else "S") if locks else "")
+            surf.blit(mid.render(text, True, green), (bx + 16, by + 74))
+            hint = "TURN A KNOB TO LOCK IT  \u00b7  PUSH IT TO UNLOCK"
+        else:
+            hint = "HOLD A STEP AND TURN A KNOB TO LOCK A SETTING"
+        surf.blit(tiny.render(hint, True, grey), (bx + 16, by + 104))
+        # the 7 lanes: lit when they play, the one being edited outlined
+        now = time.monotonic()
+        cell = (bw - 32) // 7
+        for li in range(sequencer.LANES):
+            x0, y0 = bx + 16 + li * cell, by + 128
+            v = sequencer.LANE_VOICE[li]
+            t_seq = e.seq_hits[li] if e.seq_hits[li] <= now else 0.0
+            t_hit = max(self._drum_hits[v] if li < 6 else 0.0, t_seq)
+            glow = max(0.0, 1.0 - (now - t_hit) / 0.25)
+            base = (60, 64, 72)
+            colour = tuple(round(c + (255 - c) * glow) for c in base)
+            pygame.draw.rect(surf, colour, (x0, y0, cell - 6, 24), border_radius=4)
+            if li == self.seq_lane:
+                pygame.draw.rect(surf, yellow, (x0, y0, cell - 6, 24), 2, border_radius=4)
+            t = tiny.render(str(li + 1), True, (12, 13, 16) if glow > 0.3 else white)
+            surf.blit(t, (x0 + (cell - 6 - t.get_width()) // 2, y0 + 5))
+        filled = sum(1 for i in range(lane.length) if lane.steps[i].on)
+        surf.blit(tiny.render("%d OF %d STEPS ON" % (filled, lane.length), True, grey), (bx + 16, by + 162))
+        # the lane's steps: hollow = off, yellow = on, green = held; the bank the 4x4 keys reach is brighter
+        playing_at = None
+        if e.playing:
+            playing_at = seq.position(e._heard_frame(), e.frames_per_beat())[self.seq_lane]
+        bw16, sw, sh, y0 = 16 * 17 + 12, 15, 22, 300
+        for i in range(lane.length):
+            bank, k = divmod(i, 16)
+            x0 = 20 + bank * (bw16 + 24) + k * 17 + (k // 4) * 4
+            st = lane.steps[i]
+            in_bank = bank == self.seq_bank
+            outline = white if in_bank else (90, 95, 104)
+            if i in self.held_steps:
+                pygame.draw.rect(surf, green, (x0, y0, sw, sh), border_radius=3)
+            elif st.on:
+                pygame.draw.rect(surf, yellow if in_bank else (150, 110, 50), (x0, y0, sw, sh), border_radius=3)
+            else:
+                pygame.draw.rect(surf, outline, (x0, y0, sw, sh), 1, border_radius=3)
+            if st.locks:
+                pygame.draw.rect(surf, green if i not in self.held_steps else white, (x0 + 5, y0 + sh - 6, 5, 3))
+            if i == playing_at:
+                pygame.draw.rect(surf, white, (x0, y0 + sh + 4, sw, 3))
+        for bank in range((lane.length - 1) // 16 + 1):
+            x0 = 20 + bank * (bw16 + 24)
+            t = tiny.render("%d-%d" % (bank * 16 + 1, min(lane.length, bank * 16 + 16)), True,
+                            white if bank == self.seq_bank else grey)
+            surf.blit(t, (x0, y0 + sh + 10))
 
     def draw_fx(self, surf, it=None):
         """The FX page: each track's send as a bar across its lane, and the effect's settings on the right."""
@@ -936,6 +1223,11 @@ class Transport:
             hint = "DEMO: NO AUDIO ENGINE"
         elif self.drum_page and not (e.device and e.drums_input):
             hint = "DRUM SYNTH STARTING..."
+        elif self.seq_page:
+            mode = MODE_NAMES.get(e.input_mode, "")
+            where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
+                     if e.input_mode == "stereo" else self.armed_text(armed))
+            hint = "SEQUENCER  \u00b7  %s > %s  \u00b7  MIDI KEY: BACK TO THE TAPE" % (mode, where)
         elif self.drum_page:
             mode = MODE_NAMES.get(e.input_mode, "")
             where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
@@ -1027,6 +1319,7 @@ def main():
     transport = Transport(screen, engine, clock)
     if board:
         board.pads = transport.pad
+        board.seq_page = lambda: transport.seq_page
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     project_menu.kits = kitmenu.KitMenu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)

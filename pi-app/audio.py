@@ -52,6 +52,8 @@ except Exception as _e:                     # carry on without the drum synth
     print("Drum synth off:", _e)
     drums = None
 
+import sequencer
+
 TRACKS = 8
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
@@ -424,6 +426,8 @@ class Engine:
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
+        self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song)
+        self.seq_hits = [0.0] * sequencer.LANES  # when each lane's last sequencer hit is heard (for the screen)
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
         self.dirty = set()
@@ -735,6 +739,7 @@ class Engine:
             self.fx = dict(effects.DEFAULTS) if effects else {}
             if self.drums:
                 self.drums.init_kit()                   # a new song starts with the Init Kit
+            self.seq.from_json(None)                    # ... and empty patterns
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -806,6 +811,7 @@ class Engine:
         if effects:
             self.fx = dict(effects.DEFAULTS)
             self.fx.update({k: v for k, v in (meta.get("fx") or {}).items() if k in effects.DEFAULTS})
+        self.seq.from_json(meta.get("drum_seq"))
         if self.drums:
             if meta.get("drum_kit"):
                 self.drums.load_kit(meta["drum_kit"])
@@ -846,6 +852,7 @@ class Engine:
                     "reverb_sends": self.rev_sends, "delay_sends": self.dly_sends, "fx": dict(self.fx)}
             if self.drums:
                 meta["drum_kit"] = self.drums.kit()
+            meta["drum_seq"] = self.seq.to_json()
         if not changed:
             return False
 
@@ -983,6 +990,11 @@ class Engine:
             sends[track - 1] = v
             self.dirty.add(-1)
         return v
+
+    def seq_changed(self):
+        """The sequencer's patterns changed: save them with the song."""
+        with self.lock:
+            self.dirty.add(-1)
 
     def change_drum(self, param, clicks):
         """Turn a drum synth setting (the LXR's parameter number) by some knob clicks. Returns the new value."""
@@ -1690,6 +1702,8 @@ class Engine:
         due = time.monotonic()
         look = time.monotonic() + 2.0
         bpm = None
+        was_playing = False
+        self._seq_fifo = np.zeros((0, drums.VOICES), np.float32)
         try:
             while not self._stop:
                 self._update_route(None)
@@ -1707,11 +1721,31 @@ class Engine:
                 if self.bpm != bpm:
                     bpm = self.bpm
                     self.drums.set_bpm(bpm)     # the drum synth's tempo-synced LFOs follow the song
-                voices = self.drums.render(PERIOD)
-                kit = self.drums.stereo(voices)
-                # what gets recorded: each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
-                x = voices if self.input_mode == "all" else kit
-                out = self.process(x, monitor=kit * DRUMS_MONITOR)
+                events = []
+                if self.playing and not was_playing:
+                    # just started: the first read_ahead frames of tape go by before you hear anything, so
+                    # make the sequencer's hits for them now, straight into what gets recorded
+                    start = self.pos
+                    ahead = self.seq.events(start, self.read_ahead, self.frames_per_beat())
+                    self._seq_fifo = self.drums.render(self.read_ahead, ahead, with_live=False)[0]
+                if self.playing:
+                    was_playing = True
+                    # the sequencer plays in step with the tape you hear: read_ahead frames on from pos
+                    events = self.seq.events(self._heard_frame(), PERIOD, self.frames_per_beat())
+                elif was_playing:
+                    was_playing = False
+                    self.seq.stop()
+                if events:
+                    soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
+                    for offset, lane, _vel, _locks in events:
+                        self.seq_hits[lane] = soon + offset / self.rate
+                seq_voices, live_voices = self.drums.render(PERIOD, events)
+                # what you hear: both, now. What's recorded (at pos, where you pressed): your hits now, and
+                # the sequencer's from read_ahead frames ago (they were made that far ahead, to sound on time)
+                voices = live_voices + self._delay_sequencer(seq_voices)
+                # each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
+                x = voices if self.input_mode == "all" else self.drums.stereo(voices)
+                out = self.process(x, monitor=self.drums.stereo(seq_voices + live_voices) * DRUMS_MONITOR)
                 if port and not port.dead:
                     port.push(out)
                 if time.monotonic() > look:
@@ -1729,6 +1763,25 @@ class Engine:
             self.device = None
             with self.lock:
                 self.recording = False
+
+    def _heard_frame(self):
+        """The tape frame you're hearing as this block goes out (pos + read_ahead, round the loop)."""
+        t = self.pos + self.read_ahead
+        region = self.loop_region() if self.loop_on else None
+        if region and self.pos < region[1] and t >= region[1] and region[1] > region[0]:
+            t = region[0] + (t - region[1]) % (region[1] - region[0])
+        return t
+
+    def _delay_sequencer(self, block):
+        """block, read_ahead frames late: the sequencer's sound lined up with where it belongs on tape."""
+        fifo, want = self._seq_fifo, self.read_ahead
+        if len(fifo) < want:
+            fifo = np.concatenate([np.zeros((want - len(fifo), block.shape[1]), np.float32), fifo])
+        elif len(fifo) > want:
+            fifo = fifo[len(fifo) - want:]
+        fifo = np.concatenate([fifo, block])
+        out, self._seq_fifo = fifo[:len(block)], fifo[len(block):]
+        return out
 
     def process(self, x, monitor=None):
         """One block of input (frames, channels) -> one block of stereo output. Also records.

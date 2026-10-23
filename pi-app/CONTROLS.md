@@ -77,7 +77,7 @@ stereo mix) in the Exports folder.
 | AUDIO | Input: MULTI / STEREO / MONO (see Input modes below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | FX | Effects pages: REVERB, then DELAY, then back to the tape (see Effects below) | |
-| MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Press again to leave the page (see Drum synth below) | |
+| MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Again: the sequencer. Again: back to the tape (see Drum synth and Drum sequencer below) | |
 | IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
 | CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space. Hold to take several boxes (see below) | Undo |
@@ -235,7 +235,8 @@ the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
    you pressed the key.
 
 On the drum page the track keys are drum pads, so they don't select tracks;
-SHIFT+track still arms one. Press MIDI again to get the track keys back.
+SHIFT+track still arms one. Press MIDI (twice: it goes through the
+sequencer) to get the track keys back.
 
 **Shaping the sounds.** The drum page shows the settings of the voice you
 played last (its name is top right; key 7, the open hi-hat, picks the
@@ -268,7 +269,52 @@ menu instead of the project menu:
 
 Kits are kept in `~/console-data/kits/`, so any song can load them.
 
-What's next: a 16-step sequencer on the 4×4 keys.
+## Drum sequencer (MIDI key, second press)
+
+The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
+plays whenever the tape plays, locked to it (it starts with the tape's
+first bar), and it records like playing the keys does: MULTI, STEREO or
+MONO onto the armed tracks, exactly on the beat.
+
+**Lanes.** 7 lanes, one per sound: track keys 1–7 (Drum 1–3, Snare,
+Cymbal, Closed hat, Open hat). Pressing one plays it and picks that lane.
+
+**Steps.** The 4×4 keys are 16 steps of the lane, in rows (top left is step
+1, SHIFT is step 13). Press and let go to turn a step on or off. Lanes can
+be up to 64 steps: the **big knob** picks which 16 the keys reach (the
+bank); a key past the end of the lane does nothing.
+
+**SHIFT on this page** is step 13 as well:
+- Press and let go on its own: toggles step 13.
+- Hold it and turn knobs: locks settings to step 13 (see below).
+- Hold it and press another 4×4 key or a track key: that key's SHIFT job
+  (SHIFT+PLAY plays / stops, SHIFT+RECORD records, SHIFT+track arms…), and
+  step 13 is left alone. SHIFT versions of keys (overdub, set IN…) need the
+  tape page.
+
+**Knobs.** The row of boxes along the top says what each knob does, in
+order: knobs 1–8, then PAGE (knob 9), PATTERN (knob 10), BANK (big knob).
+Knob 9's pages are the lane's sound pages, then two more:
+- **STEP**: VELOCITY, CHANCE (100% down to 10%, or 1:2, 2:2, 1:3… = plays
+  on that pass round the lane out of every 2, 3 or 4) and RATCHETS (up to 4
+  quick hits in the step). Hold a step and turn.
+- **LANE**: LENGTH (1–64, each lane loops on its own), EUCLID (spreads that
+  many hits evenly over the lane; it rewrites the lane's on/off steps), SHIFT
+  (rotates the Euclidean hits) and RATE (1/16, 1/16 triplets, 1/8, 1/8
+  triplets, 1/32; per lane, so triplet hats can run over straight kicks).
+
+**Parameter locks.** With no step held, the sound knobs change the drum's
+normal sound. Hold a step (or several) and turn a sound knob: that setting
+changes for that step only (green on screen, "LOCK"). Locking a step that's
+off turns it on. Push the knob while holding the step to take its lock off.
+The velocity and LFO destinations can't be locked.
+
+**The steps along the bottom:** hollow = off, yellow = on, green = held, a
+small green mark = has locks, the white line = where it's playing.
+
+**Patterns.** 16 per song: knob 10. While playing, the next one takes over
+when the current one reaches its end (shown as "> 2 NEXT"); while stopped,
+straight away. Patterns and the kit are saved with the song.
 
 ## Effects: reverb and delay (the FX key)
 

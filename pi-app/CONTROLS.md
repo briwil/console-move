@@ -44,7 +44,7 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     with an output that's plugged in (the OP-XY, an audio interface…).
     Until you pick one, it plays on the input device if it has an output,
     otherwise on the headphones. If the one you picked isn't plugged in, it
-    plays on the other and says so here. SHIFT + knob 10 sets the headphone
+    plays on the other and says so here. SHIFT + knob 10 sets the headphone (or USB headphone adapter)
     volume (it shows the level while you turn it). With nothing plugged in
     at all, the tape still plays on the headphones; it just can't record.
   - **SOFTWARE UPDATE:** press PLAY to check GitHub for a new version. If

@@ -420,14 +420,20 @@ class Transport:
         sends = e.rev_sends if page == "reverb" else e.dly_sends
         small, mid, big = s.font("mono", 600, 14), s.font("mono", 600, 18), s.font("mono", 700, 26)
         bar_x, bar_w = 72, 720
+        # the layout's own positions: the zoomed track view moves the real items around
+        home = lambda n, part: self.focus.home.get((n, part)) or s.get("track%d_%s" % (n, part))
+        first, last = home(1, "lane"), home(8, "lane")
+        surf.set_clip(None)
+        pygame.draw.rect(surf, (12, 13, 16), (0, first["y"] - 4, 1280, last["y"] + last["h"] - first["y"] + 8))
         for n in range(1, 9):
-            lane, tab = s.get("track%d_lane" % n), s.get("track%d_tab" % n)
+            lane, tab = home(n, "lane"), home(n, "tab")
             if not lane:
                 continue
-            shade = pygame.Surface((lane["w"], lane["h"]), pygame.SRCALPHA)
-            shade.fill((12, 13, 16, 238))
-            surf.blit(shade, (lane["x"], lane["y"]))
             colour = ui.rgb(tab["c"]) if tab else (200, 200, 200)
+            if tab:
+                pygame.draw.rect(surf, colour, (tab["x"], tab["y"], tab["w"], tab["h"]), border_radius=6)
+                num = s.font("mono", 600, 16).render(str(n), True, (12, 13, 16))
+                surf.blit(num, (tab["x"] + (tab["w"] - num.get_width()) // 2, tab["y"] + (tab["h"] - num.get_height()) // 2))
             y, h = lane["y"] + 8, lane["h"] - 16
             pygame.draw.rect(surf, (40, 43, 50), (bar_x, y, bar_w, h), border_radius=3)
             w = round(bar_w * sends[n - 1])
@@ -436,7 +442,6 @@ class Transport:
             label = small.render("%d%%" % round(sends[n - 1] * 100), True, (242, 243, 245))
             surf.blit(label, (bar_x + bar_w + 12, lane["y"] + (lane["h"] - label.get_height()) // 2))
         # the settings box on the right
-        first, last = s.get("track1_lane"), s.get("track8_lane")
         bx, by = 880, first["y"]
         bw, bh = first["x"] + first["w"] - bx, last["y"] + last["h"] - by
         pygame.draw.rect(surf, (20, 22, 26), (bx, by, bw, bh), border_radius=6)
@@ -470,8 +475,11 @@ class Transport:
         if not e:
             return
         v = e.change_phones_volume(delta)
-        note = "" if e.route == "phones" else "  (OUTPUT IS %s: CHANGE IT IN SETTINGS)" % (e.output_label or "NOT SET")
-        self.say("HEADPHONES %d%%%s" % (round(v * 100), note), 2)
+        if e.port:
+            note = "" if e.route == "phones" else "  (%s)" % e.output_label
+        else:
+            note = "  (OUTPUT IS %s: USE ITS OWN VOLUME)" % (e.output_label or "NOT SET")
+        self.say("VOLUME %d%%%s" % (round(v * 100), note), 2)
 
     def edit_text(self):
         ts = self.engine.edit_tracks()

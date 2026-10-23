@@ -557,7 +557,7 @@ class Engine:
         self.settings["phones_volume"] = v
         self._phones_dirty = time.monotonic()
         port = self.port
-        if port and port.key == "phones":
+        if port:                                # the headphone jack, or a USB output that isn't the input device
             port.gain = v * v * self.PHONES_BOOST   # squared, so the knob feels even from quiet to loud
         return v
 
@@ -619,6 +619,7 @@ class Engine:
                 pb = info["playback"]
                 self.port = OutPort(route, "hw:CARD=%s,DEV=0" % info["id"], pb["channels"], pb["format"],
                                     pick_rate(pb["rates"]), self.rate, info["name"].upper())
+                self.port.gain = self.phones_volume ** 2 * self.PHONES_BOOST
         except Exception as e:
             text = "Couldn't open %s: %s" % ("the headphones" if route == "phones" else route, e)
             if text != getattr(self, "_open_error", None):     # say it once, not every 2 seconds

@@ -29,6 +29,7 @@ import pygame
 import drumparams
 import effects
 import focus
+import kitmenu
 import menu
 import tape
 import ui
@@ -1027,6 +1028,7 @@ def main():
     if board:
         board.pads = transport.pad
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
+    project_menu.kits = kitmenu.KitMenu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)
     fps = pygame.time.Clock()
 
@@ -1076,17 +1078,23 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
                     running = False
             elif project_menu.open:
                 project_menu.key(name)
+            elif project_menu.kits.open:
+                project_menu.kits.key(name)
+            elif name == "FILE" and transport.drum_page:
+                project_menu.kits.show()            # on the drum page, FILE is the drum kit menu
             elif name == "FILE":
                 project_menu.show()
             elif not (isinstance(name, tuple) and name[0] == "CHAR"):
                 transport.key(name)
-            TEXT_INPUT["on"] = project_menu.text_input
+            TEXT_INPUT["on"] = project_menu.text_input or project_menu.kits.text_input
         transport.tick(seconds)
         if project_menu.restart:
             running = False                         # a software update was installed: start again
 
         if project_menu.open:
             project_menu.draw(frame)
+        elif project_menu.kits.open:
+            project_menu.kits.draw(frame)
         else:
             screen.draw(frame)
         out = pygame.transform.rotate(frame, rotate) if rotate else frame

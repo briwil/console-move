@@ -254,6 +254,16 @@ Kit. VEL TO and LFO TO pick what velocity or the LFO moves (LFO VOICE picks
 which voice's settings it can reach). Knob 10 and the big knob work as
 usual.
 
+**Saving and loading kits.** On the drum page, FILE opens the drum kit
+menu instead of the project menu:
+- **SAVE Kit**: name it (like naming a song: big knob for the letter, ← / →
+  to move, CUT deletes, PLAY saves). It keeps every drum setting. Saving
+  under a name that's taken asks first; PLAY again replaces it.
+- **LOAD Kit**: the big knob picks a saved kit, PLAY loads it.
+- FILE goes back without changing anything.
+
+Kits are kept in `~/console-data/kits/`, so any song can load them.
+
 What's next: a 16-step sequencer on the 4×4 keys.
 
 ## Effects: reverb and delay (the FX key)

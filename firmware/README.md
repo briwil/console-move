@@ -60,12 +60,14 @@ program can read the controller at a time.
 
 ## Pin check (finding a bad solder joint on a knob)
 
-Plug the board in **while holding SW1** (the top-left key of the grid). Instead
-of acting as a controller, it reports both turning wires of every knob, and
-`~/console/pi-app/test-controls.sh` shows them live with a verdict per knob:
-OK, A or B DEAD (that wire's joint is broken), A+B JOINED (a solder bridge
-between the two), or STUCK LOW (shorted to ground). Each wire shows its pin
-(GP20 = pad 20 on the PGA2350). Unplug and replug to go back to normal.
+Run `~/console/pi-app/test-controls.sh` and press **P** (in the SSH window or on
+a keyboard on the Pi). The board stops acting as a controller and reports both
+turning wires of every knob, and the screen shows them live with a verdict per
+knob: OK, A or B DEAD (that wire's joint is broken), A+B JOINED (a solder
+bridge between the two), or STUCK LOW (shorted to ground). Each wire shows its
+pin (GP20 = pad 20 on the PGA2350). Press **P** again and the board restarts as
+a normal controller. (Holding SW1 for 5 seconds while plugging the board in
+also starts it.)
 
 ## If something's off
 

@@ -44,10 +44,23 @@ NOTE[(5, 2)] = 40                              # ENC9 push
 NOTE[(5, 3)] = 42                              # ENC10 on the board (last knob) push
 NOTE[(5, 4)] = 41                              # ENC11 on the board (10th knob) push
 
-# ---------------------------------------------------------------- pin check (hold SW1 while plugging in)
+# ---------------------------------------------------------------- pin check
 # Instead of acting as a controller, report every knob wire (GP14-GP35) as it changes, as MIDI CC on
 # channel 14: CC number = wire (0 = GP14 ... 21 = GP35), value 127 = high, 0 = low; plus all of them
-# every half second. The Pi's test screen (test-controls.sh) shows them. Unplug to go back to normal.
+# every half second. The Pi's test screen (test-controls.sh) shows them.
+# Start it from the test screen (P sends CC 127 = 127 on channel 14), or hold SW1 while plugging in.
+# P again (CC 127 = 0) restarts the board as a normal controller.
+PIN_CHECK_ON = bytes((0xB0 | 13, 127, 127))
+PIN_CHECK_OFF = bytes((0xB0 | 13, 127, 0))
+
+
+def heard(message):
+    """True if the Pi just sent this MIDI message."""
+    try:
+        data = usb_midi.ports[0].read(64)
+    except Exception:
+        return False
+    return bool(data) and message in data
 
 
 def pin_check():
@@ -74,10 +87,12 @@ def pin_check():
                     pass
         if full:
             every = now
+            if heard(PIN_CHECK_OFF):
+                microcontroller.reset()        # start again as a normal controller
         time.sleep(0.0005)
 
 
-time.sleep(0.1)                                # let the matrix scan once
+time.sleep(2.0)                                # let the matrix scan; time to hold SW1 after plugging in
 _event = keypad.Event()
 _held = False
 while matrix.events.get_into(_event):
@@ -145,7 +160,15 @@ def send(*data):
 
 print("Console controls ready")
 event = keypad.Event()
+check_at = 0.0
 while True:
+    now = time.monotonic()
+    if now >= check_at:                        # the test screen asking for the pin check
+        check_at = now + 0.2
+        if heard(PIN_CHECK_ON):
+            for enc in encoders:
+                enc.deinit() if hasattr(enc, "deinit") else (enc.a.deinit(), enc.b.deinit())
+            pin_check()
     for enc in polled:
         enc.poll()
     while matrix.events.get_into(event):

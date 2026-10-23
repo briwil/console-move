@@ -14,7 +14,65 @@ import pygame
 
 import midi
 import ui
-from console import BOARD_KEYS, PUSHES, start_terminal_keys
+from console import BOARD_KEYS, PUSHES
+
+PIN_CHECK_ON = bytes((0xB0 | 13, 127, 127))      # see firmware/code.py
+PIN_CHECK_OFF = bytes((0xB0 | 13, 127, 0))
+
+
+def terminal_chars(q):
+    """Letters typed in the SSH window, onto the queue."""
+    import sys
+    import threading
+    if not sys.stdin.isatty():
+        return None
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+
+    def reader():
+        while True:
+            try:
+                data = os.read(fd, 16).decode(errors="ignore")
+            except OSError:
+                return
+            if not data:
+                return
+            for ch in data:
+                q.put(ch.lower())
+
+    threading.Thread(target=reader, daemon=True).start()
+    return lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def tell_board(ctl, message):
+    """Send a MIDI message to the control board. False if it isn't connected."""
+    if ctl is None or not ctl.connected:
+        return False
+    try:
+        fd = os.open(ctl.connected, os.O_WRONLY | os.O_NONBLOCK)
+        try:
+            os.write(fd, message)
+        finally:
+            os.close(fd)
+        return True
+    except OSError as e:
+        print("Couldn't send to the board:", e)
+        return False
+
+
+def toggle_pin_check(st, ctl):
+    if st.pin_mode:
+        tell_board(ctl, PIN_CHECK_OFF)                 # the board restarts as a normal controller
+        st.clear()
+        st.last = "Pin check off: the board is restarting"
+    elif tell_board(ctl, PIN_CHECK_ON):
+        st.last = "Asked the board for the pin check (needs the new code.py on it)"
+    else:
+        st.last = "Board not connected"
+    st.last_time = time.monotonic()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 W, H = ui.WIDTH, ui.HEIGHT
@@ -176,7 +234,7 @@ def draw_pins(surf, st, ctl, fonts):
     f_title, f_key, f_sub, f_knob, f_tiny, f_status = fonts
     surf.fill(BG)
     surf.blit(f_title.render("PIN CHECK: KNOB WIRES", True, TEXT), (24, 14))
-    s = f_status.render("Turn each knob slowly, a few clicks each way.  Unplug the board to go back to normal.", True, DIM)
+    s = f_status.render("Turn each knob slowly, a few clicks each way.  P goes back to the normal test.", True, DIM)
     surf.blit(s, (24, 48))
     w = (W - 48) // 11
     for k in range(1, 12):
@@ -248,7 +306,7 @@ def draw(surf, st, ctl, fonts, now):
     age = now - st.last_time
     surf.blit(f_status.render("Last: " + st.last, True, AMBER if st.last_time and age < 1 else DIM),
               (24, y0 + 4 * (kh + gap) + 46))
-    hint = f_sub.render("Green = working.  Knobs: L/R = turned left/right, P = pushed.  R clears, Q quits.", True, DIM)
+    hint = f_sub.render("Green = working.  Knobs: L/R = turned left/right, P = pushed.  R clears, Q quits, P: pin check.", True, DIM)
     surf.blit(hint, (W - 24 - hint.get_width(), H - 26))
 
 
@@ -279,9 +337,9 @@ def main():
     frame = pygame.Surface((W, H))
     clock = pygame.time.Clock()
     print("Control board test: press every key, turn every knob both ways and push it.")
-    print("Here: Q quits, R clears the marks.")
+    print("Here: Q quits, R clears the marks, P switches the knob pin check on and off.")
     typed = queue.Queue()
-    restore = start_terminal_keys(typed)        # Q and R from the SSH window too
+    restore = terminal_chars(typed)             # Q, R and P from the SSH window too
     running = True
     while running:
         clock.tick(60)
@@ -293,12 +351,16 @@ def main():
                     running = False
                 elif ev.key == pygame.K_r:
                     st.clear()
+                elif ev.key == pygame.K_p:
+                    toggle_pin_check(st, ctl)
         while not typed.empty():
-            name = typed.get()
-            if name in ("QUIT", "FILE"):
+            ch = typed.get()
+            if ch in ("q", "\x1b"):
                 running = False
-            elif name == "RECORD":                  # r
+            elif ch == "r":
                 st.clear()
+            elif ch == "p":
+                toggle_pin_check(st, ctl)
         while not events.empty():
             status, d1, d2 = events.get()
             kind = status & 0xF0

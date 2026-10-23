@@ -46,6 +46,12 @@ except Exception as _e:                     # numpy or ctypes trouble: carry on 
     print("Effects off:", _e)
     effects = None
 
+try:
+    import drums
+except Exception as _e:                     # carry on without the drum synth
+    print("Drum synth off:", _e)
+    drums = None
+
 TRACKS = 8
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
@@ -57,6 +63,16 @@ USB_PERIOD = 2048
 USB_PERIODS = 4
 MIX_GAIN = 0.6
 UNDO_STEPS = 8
+DRUMS_ID = "DRUMS"       # the drum synth's "card id" as an input
+DRUMS_MONITOR = 0.8      # how loud you hear the drum synth as you play it (a track's volume at its default)
+
+
+def drum_device():
+    """The drum synth, as an input device (six channels: one per voice), or None if it isn't available."""
+    if not (drums and drums.AVAILABLE):
+        return None
+    return {"id": DRUMS_ID, "name": "Drum Synth", "virtual": True,
+            "capture": {"channels": drums.VOICES, "format": "FLOAT", "rates": [44100]}}
 
 
 DATA = os.path.realpath(os.path.expanduser(os.environ.get("CONSOLE_DATA", "~/console-data")))
@@ -407,6 +423,7 @@ class Engine:
         self.dly_sends = [0.0] * TRACKS         # ... and to the delay
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
+        self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
         self.dirty = set()
@@ -510,15 +527,43 @@ class Engine:
         return cached[1]
 
     def input_plugged(self, cid):
+        if cid == DRUMS_ID:
+            return bool(self.drums)
         return any(d["id"] == cid for d in self._inputs())
 
     def input_choices(self):
-        """[(card id, label)] for the SETTINGS page: every USB device with an input."""
+        """[(card id, label)] for the SETTINGS page: every USB device with an input, then the drum synth."""
         choices = [(d["id"], d["name"].upper()) for d in self._inputs()]
+        if self.drums:
+            choices.append((DRUMS_ID, "DRUM SYNTH"))
         key = self.input_choice
         if key and key not in [k for k, _ in choices]:
             choices.append((key, self.settings.get("device_name", key).upper()))
         return choices
+
+    def find_input(self):
+        """The input to use now: the chosen one if it's there, else the first USB device, else None."""
+        if self.input_choice == DRUMS_ID and self.drums:
+            return drum_device()
+        return find_device(None if self.input_choice == DRUMS_ID else self.input_choice)
+
+    @property
+    def drums_input(self):
+        """True while the drum synth is the input."""
+        return bool(self.device and self.device.get("virtual"))
+
+    def hit(self, lane, velocity=100):
+        """Play a drum synth voice (lane 0-5; 6 is the hi-hat open). Heard only while it's the input."""
+        if self.drums:
+            self.drums.hit(lane, velocity)
+
+    def _set_latency(self):
+        # an outside device: what you played reached us in_period (plus the measured extra) after you heard
+        # the tape. The drum synth plays the moment you press, in step with what you're hearing.
+        if self.drums_input:
+            self.latency = self.read_ahead
+        else:
+            self.latency = self.read_ahead + self.in_period + self.latency_extra
 
     def set_input(self, cid, label=None):
         self.prefer = None
@@ -606,7 +651,7 @@ class Engine:
             elif self.port:
                 self.port.TARGET = max(PERIOD * 3, 2 * self.in_period)
                 self.read_ahead = self.port.delay()
-            self.latency = self.read_ahead + self.in_period + self.latency_extra
+            self._set_latency()
             return route
         self._close_port()
         self.route, self.output_label = None, ""
@@ -640,7 +685,7 @@ class Engine:
         elif route == "device":
             self.output_label = dev["name"].upper()
             self.read_ahead = self.dev_buffer
-        self.latency = self.read_ahead + self.in_period + self.latency_extra
+        self._set_latency()
         self.route = route
         return route
 
@@ -1461,7 +1506,10 @@ class Engine:
     def _run(self):
         import alsaaudio
         while not self._stop:
-            dev = find_device(self.input_choice)
+            dev = self.find_input()
+            if dev and dev.get("virtual"):
+                self._drums_loop(dev)
+                continue
             if not dev:
                 self.device = None
                 if not self._play_without_input():
@@ -1540,7 +1588,7 @@ class Engine:
             while not self._stop:
                 if time.monotonic() >= self._input_due:
                     self._input_due = time.monotonic() + 2.0
-                    want = find_device(self.input_choice)
+                    want = self.find_input()
                     if want and want["id"] != dev["id"]:
                         log("Input: switching to %s" % want["name"])
                         with self.lock:
@@ -1605,14 +1653,74 @@ class Engine:
             self.status = "NO INPUT DEVICE  ·  PLAYING ON %s" % self.output_label
             if time.monotonic() > look:
                 look = time.monotonic() + 2.0
-                if find_device(self.input_choice):
+                if self.find_input():
                     return True                 # an input device turned up: go and open it
         return True
 
-    def process(self, x):
-        """One block of input (frames, channels) -> one block of stereo output. Also records."""
+    def _drums_loop(self, dev):
+        """The drum synth as the input: no device to read, so the output sets the pace (or the clock, if
+        there's nowhere to play). Runs until another input is chosen."""
+        self.device, self.in_period = dev, PERIOD
+        if self.input_mode is None:
+            self.input_mode = "all"
+        self.status = ""
+        self._route_due = 0.0
+        log("Input: drum synth")
+        if self._resume_recording:
+            with self.lock:
+                if self.playing:
+                    self.recording = True
+        self._resume_recording = False
+        due = time.monotonic()
+        look = time.monotonic() + 2.0
+        bpm = None
+        try:
+            while not self._stop:
+                self._update_route(None)
+                port = self.port
+                if port and not port.dead:
+                    if port.fill() > port.TARGET:
+                        time.sleep(0.003)       # the output sets the pace
+                        continue
+                else:
+                    now = time.monotonic()
+                    if now < due:
+                        time.sleep(min(0.005, due - now))
+                        continue
+                    due = max(due, now - 0.1) + PERIOD / self.rate
+                if self.bpm != bpm:
+                    bpm = self.bpm
+                    self.drums.set_bpm(bpm)     # the drum synth's tempo-synced LFOs follow the song
+                voices = self.drums.render(PERIOD)
+                kit = self.drums.stereo(voices)
+                # what gets recorded: each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
+                x = voices if self.input_mode == "all" else kit
+                out = self.process(x, monitor=kit * DRUMS_MONITOR)
+                if port and not port.dead:
+                    port.push(out)
+                if time.monotonic() > look:
+                    look = time.monotonic() + 2.0
+                    want = self.find_input()
+                    if not want or want["id"] != dev["id"]:
+                        with self.lock:
+                            self._resume_recording = self.recording
+                        log("Input: switching from the drum synth")
+                        return
+        except Exception as e:
+            log("Drum synth stopped: %s" % e, traceback.format_exc())
+            time.sleep(1)
+        finally:
+            self.device = None
+            with self.lock:
+                self.recording = False
+
+    def process(self, x, monitor=None):
+        """One block of input (frames, channels) -> one block of stereo output. Also records.
+        monitor: (frames, 2) to hear straight away along with the tape (the drum synth as you play it)."""
         n = len(x)
         mix = np.zeros((n, 2), np.float32)              # the tracks, before the limiter
+        if monitor is not None:
+            mix += monitor
         rev_in = np.zeros((n, 2), np.float32)           # what the tracks send to the reverb
         dly_in = np.zeros((n, 2), np.float32)           # ... and to the delay
         with self.lock:

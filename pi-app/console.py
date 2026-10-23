@@ -47,7 +47,7 @@ CHAR_ACTIONS = {
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "SOLO",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "(": "PHONES_DOWN", ")": "PHONES_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
-    "b": "BOUNCE", "B": "BOUNCE", "w": "FX", "W": "FX", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
+    "b": "BOUNCE", "B": "BOUNCE", "w": "FX", "W": "FX", "d": "DRUMS", "D": "DRUMS", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
@@ -114,7 +114,7 @@ def pygame_key(ev):
 # ---------------------------------------------------------------- control board (MIDI from the firmware)
 
 # key notes 0-23 = SW1-SW24, in keycap order
-BOARD_KEYS = ["INPUT", "MIDI", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
+BOARD_KEYS = ["INPUT", "DRUMS", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
               "LOOP", "IMPORT", "EXPORT", "RECORD", "SHIFT", "PLAY", "LEFT", "RIGHT"] + \
              ["TRACK%d" % n for n in range(1, 9)]
 BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
@@ -133,6 +133,7 @@ class Board:
         self.q = q
         self.shift = False
         self.held = set()                  # hold keys pressed without SHIFT, waiting for their release
+        self.pads = None                   # Transport.pad: plays the drum synth straight from this thread
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -151,6 +152,8 @@ class Board:
                     return
                 if not value:
                     return
+                if name.startswith("TRACK") and not self.shift and self.pads and self.pads(int(name[5:])):
+                    return                                # a drum pad: played already, nothing else to do
                 if self.shift:
                     if name.startswith("TRACK"):
                         name = "ARM" + name[5:]           # SHIFT+track: arm / disarm it as well
@@ -182,6 +185,7 @@ class Transport:
             screen.custom["track%d_num" % n] = self.draw_num
         self.focus = focus.Focus(screen, self.tape)
         self.fx_page = None                       # None, "reverb" or "delay": what the FX key shows
+        self.drum_page = False                    # the DRUMS key: track keys 1-7 play the drum synth
         screen.after["playhead"] = self.draw_fx
         self._playing = False
         self._recording = False
@@ -299,6 +303,10 @@ class Transport:
             self.export()
         elif name == "BOUNCE":
             self.bounce()
+        elif name == "DRUMS":
+            self.drums_key()
+        elif name.startswith("TRACK") and self.pad(int(name[5:])):
+            pass                                  # a keyboard number key on the drum page: played
         elif name.startswith("TRACK"):
             n = int(name[5:])
             if n == self.armed or self.focus.track:
@@ -331,11 +339,38 @@ class Transport:
             self.fx_page = {None: "reverb", "reverb": "delay", "delay": None}[self.fx_page]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)
-        elif name in ("MIDI", "IMPORT"):
+        elif name == "IMPORT":
             self.say("%s COMES IN A LATER VERSION" % name)
         else:
             self.edit(name)
         self.update_screen()
+
+    # ------------------------------------------------------------ the drum synth (the DRUMS key)
+
+    PAD_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
+
+    def drums_key(self):
+        e = self.engine
+        if self.drum_page:
+            self.drum_page = False
+            return
+        if not e or not e.drums:
+            import drums
+            self.say(getattr(drums, "PROBLEM", "") or "THE DRUM SYNTH ISN'T AVAILABLE", 4)
+            return
+        self.drum_page = True
+        if e.input_choice != "DRUMS":
+            e.set_input("DRUMS", "DRUM SYNTH")
+            self.say("INPUT: DRUM SYNTH  (SETTINGS > INPUT TO CHANGE BACK)", 4)
+
+    def pad(self, n):
+        """Track key n on the drum page: play voice n (7 is the hi-hat open). True if it played.
+        Called from the MIDI thread, so it only reads a few flags and queues the hit."""
+        e = self.engine
+        if not (self.drum_page and e and e.drums_input and 1 <= n <= 7):
+            return False
+        e.hit(n - 1, 100)
+        return True
 
     def knob(self, number, delta, shift):
         t = self.tape
@@ -794,6 +829,13 @@ class Transport:
             hint = self.message
         elif not e:
             hint = "DEMO: NO AUDIO ENGINE"
+        elif self.drum_page and not (e.device and e.drums_input):
+            hint = "DRUM SYNTH STARTING..."
+        elif self.drum_page:
+            mode = MODE_NAMES.get(e.input_mode, "")
+            where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
+                     if e.input_mode == "stereo" else self.armed_text(armed))
+            hint = "DRUMS: KEYS 1-7 PLAY  ·  %s > %s  ·  DRUMS KEY TO LEAVE" % (mode, where)
         elif self.fx_page:
             hint = "FX: %s  \u00b7  PRESS FX FOR %s" % (self.fx_page.upper(), "DELAY" if self.fx_page == "reverb" else "THE TRACKS")
         elif not e.device:
@@ -872,10 +914,14 @@ def main():
     try:
         import midi
         settings = engine.settings if engine else {}
-        _ctl, _clk, clock = midi.start(Board(keys), engine, settings.get("clock_device"))
+        board = Board(keys)
+        _ctl, _clk, clock = midi.start(board, engine, settings.get("clock_device"))
     except Exception as e:
+        board = None
         print("No MIDI input:", e)
     transport = Transport(screen, engine, clock)
+    if board:
+        board.pads = transport.pad
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)
     fps = pygame.time.Clock()

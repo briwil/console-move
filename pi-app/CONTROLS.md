@@ -34,7 +34,8 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     FLAC about half the size) or M4A (AAC 256 kbps, smallest, for sharing).
     The song's own track files are always WAV.
   - **INPUT:** which USB audio device Console records from (the OP-XY, a
-    RØDE, an audio interface…). Until you pick one, it uses the first one it
+    RØDE, an audio interface…), or DRUM SYNTH, the built-in drums (see Drum
+    synth below). Until you pick one, it uses the first one it
     finds. If the one you picked is unplugged, it records from another one
     and says so here, and switches back by itself when it's plugged in again.
     The tape runs at 44.1 kHz, so record from devices that can do 44.1 kHz
@@ -76,7 +77,8 @@ stereo mix) in the Exports folder.
 | AUDIO | Input: MULTI / STEREO / MONO (see Input modes below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | FX | Effects pages: REVERB, then DELAY, then back to the tape (see Effects below) | |
-| MIDI, IMPORT | Not yet (coming in a later version) | |
+| MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Press again to leave the page (see Drum synth below) | |
+| IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
 | CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space. Hold to take several boxes (see below) | Undo |
 | LIFT | Copy the box under the playhead onto the clipboard. Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
@@ -208,6 +210,36 @@ points and what's on the clipboard. Everything works the same in this view.
 Press the track's key again to go back to all 8; press a different track's
 key to zoom to that one instead.
 
+## Drum synth (the MIDI key)
+
+Console has a drum machine built in: the six drum voices of the Erica Synths
+LXR-02, running on the Pi from its open-source firmware. It's an input, like
+the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
+
+1. Select the track to record onto first (for MULTI, that's any track; see
+   below), then press the **MIDI** key (`D` on a keyboard). The bottom right
+   shows the drum page. The first time, this also sets SETTINGS > INPUT to
+   DRUM SYNTH; set it back there to record from the OP-XY again.
+2. Track keys **1–7** play the drums (no velocity yet, every hit is the same):
+
+   | Key | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+   |---|---|---|---|---|---|---|---|
+   | Voice | Drum 1 (kick) | Drum 2 | Drum 3 | Snare | Cymbal | Hi-hat closed | Hi-hat open |
+
+3. AUDIO picks how it records, as with any input:
+   - **MULTI**: each voice onto its own track, drum 1 onto track 1 … hi-hat
+     onto track 6. SHIFT+AUDIO arms them all.
+   - **STEREO**: the whole kit, panned, onto a pair (select 7, SHIFT+8).
+   - **MONO**: the whole kit onto the selected track.
+4. RECORD, play, RECORD again to stop, as usual. Hits land on the tape where
+   you pressed the key.
+
+On the drum page the track keys are drum pads, so they don't select tracks;
+SHIFT+track still arms one. Press MIDI again to get the track keys back.
+
+What's next: a page for shaping each voice's sound with the knobs, then a
+16-step sequencer on the 4×4 keys.
+
 ## Effects: reverb and delay (the FX key)
 
 Each track can send some of its sound to a **reverb** (ported from the one
@@ -273,6 +305,7 @@ On a keyboard, **W** does the same as FX.
 | 9 / 0 | Armed track volume down / up |
 | ( / ) | Headphone volume down / up |
 | W | FX: reverb page, delay page, back |
+| D | Drum synth page on / off (then 1–7 play the drums) |
 | , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |

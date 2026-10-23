@@ -791,6 +791,7 @@ class Engine:
         with self.lock:
             self.time_sig = [int(num), int(den)]
             self.dirty.add(-1)
+        self.seq.set_bar_beats(self.bar_beats())
 
     def set_bpm(self, bpm):
         """Change the tempo (only while stopped). The audio stays put; the bar lines move."""
@@ -826,6 +827,7 @@ class Engine:
         if effects:
             self.fx = dict(effects.DEFAULTS)
             self.fx.update({k: v for k, v in (meta.get("fx") or {}).items() if k in effects.DEFAULTS})
+        self.seq.bar_beats = self.bar_beats()          # missing patterns start at a bar of the song's time
         self.seq.from_json(meta.get("drum_seq"))
         if self.drums:
             if meta.get("drum_kit"):

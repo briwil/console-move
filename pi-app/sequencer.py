@@ -42,9 +42,27 @@ class Step:
         return not self.on and not self.locks and self.vel == DEFAULT_VELOCITY and not self.chance and self.ratchet == 1
 
 
+def bar_steps(steps_per_beat, bar_beats):
+    """Steps in one bar at this rate (bar_beats: quarter notes in a bar), or None if it isn't whole."""
+    n = steps_per_beat * bar_beats
+    return int(round(n)) if abs(n - round(n)) < 1e-6 and 1 <= round(n) <= MAX_STEPS else None
+
+
+def group_steps(steps_per_beat, time_sig):
+    """How many steps between the grey lines on the grid: one beat of the time signature at this rate
+    (a quarter in x/4, a dotted quarter in 6/8, 9/8, 12/8, an eighth in 5/8, 7/8); a bar, or a quarter
+    note, when a beat isn't a whole number of steps or is just one."""
+    num, den = time_sig
+    beat = 1.5 if (den == 8 and num % 3 == 0) else 4.0 / den
+    n = steps_per_beat * beat
+    if abs(n - round(n)) < 1e-6 and round(n) >= 2:
+        return int(round(n))
+    return bar_steps(steps_per_beat, num * 4.0 / den) or steps_per_beat
+
+
 class Lane:
-    def __init__(self):
-        self.length = 16
+    def __init__(self, length=16):
+        self.length = length
         self.rate = 0                        # index into RATES
         self.hits = 0                        # Euclidean fill: hits spread over the length (0: off)
         self.rotate = 0
@@ -55,8 +73,8 @@ class Lane:
 
 
 class Pattern:
-    def __init__(self):
-        self.lanes = [Lane() for _ in range(LANES)]
+    def __init__(self, length=16):
+        self.lanes = [Lane(length) for _ in range(LANES)]
 
     def empty(self):
         return not any(s.on or s.locks for lane in self.lanes for s in lane.steps)
@@ -84,7 +102,8 @@ def chance_passes(chance, loop_count):
 class Sequencer:
     def __init__(self):
         self.lock = threading.RLock()
-        self.patterns = [Pattern() for _ in range(PATTERNS)]
+        self.bar_beats = 4.0                 # quarter notes in a bar (the song's time signature)
+        self.patterns = [Pattern(self.new_length()) for _ in range(PATTERNS)]
         self.current = 0
         self.queued = None                   # the pattern to switch to at the end of this one
         self.anchor = 0.0                    # tape frame where the current pattern's step 0 falls
@@ -97,6 +116,23 @@ class Sequencer:
         return self.patterns[self.current]
 
     # ------------------------------------------------------------ editing (from the screen's thread)
+
+    def new_length(self):
+        """A new lane's length: one bar of the time signature at 1/16."""
+        return bar_steps(RATES[0][1], self.bar_beats) or 16
+
+    def set_bar_beats(self, bar_beats):
+        """The time signature changed: empty patterns start again at one bar of it."""
+        with self.lock:
+            old = self.bar_beats
+            self.bar_beats = bar_beats
+            if abs(old - bar_beats) < 1e-9:
+                return
+            for p in self.patterns:
+                if p.empty():
+                    for ln in p.lanes:
+                        ln.length = bar_steps(ln.steps_per_beat(), bar_beats) or ln.length
+                        ln.hits, ln.rotate = 0, 0
 
     def snapshot(self):
         """Keep the current pattern as it is, for undo (call before changing it)."""
@@ -173,7 +209,18 @@ class Sequencer:
                 if ln.hits:
                     self._fill(ln)
             elif what == "rate":
+                old = ln.steps_per_beat()
                 ln.rate = max(0, min(len(RATES) - 1, ln.rate + (1 if delta > 0 else -1)))
+                # a lane that's a whole number of bars stays that many bars long at its new rate
+                old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(ln.steps_per_beat(), self.bar_beats)
+                if old_bar and new_bar and ln.length % old_bar == 0:
+                    length = ln.length // old_bar * new_bar
+                    if length <= MAX_STEPS:
+                        ln.length = length
+                        ln.hits = min(ln.hits, ln.length)
+                        ln.rotate %= ln.length
+                        if ln.hits:
+                            self._fill(ln)
             elif what == "hits":
                 ln.hits = max(0, min(ln.length, ln.hits + (1 if delta > 0 else -1)))
                 self._fill(ln)
@@ -284,7 +331,7 @@ class Sequencer:
 
     def from_json(self, data):
         with self.lock:
-            self.patterns = [Pattern() for _ in range(PATTERNS)]
+            self.patterns = [Pattern(self.new_length()) for _ in range(PATTERNS)]
             self.current, self.queued, self.anchor = 0, None, 0.0
             if not isinstance(data, dict):
                 return

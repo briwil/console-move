@@ -317,12 +317,22 @@ the big knob do, with their values. **Push knob 1** for the next mode:
   (up to 4 quick hits) for the step under the cursor (it turns the step on),
   6 EUCLID (spreads that many hits over the lane, rewriting its on/off
   steps), 7 SHIFT (rotates them), 8 RATE (1/16, 1/16T, 1/8, 1/8T, 1/32).
+  Changing the rate keeps a lane that's a whole number of bars the same
+  number of bars: one bar is 16 steps at 1/16, 24 at 1/16T, 12 at 1/8T.
   Letting go of a key after turning a knob doesn't toggle its step.
 - **The drum's sound pages** (OSC + AMP, FILTER + MIX, LFO…, for the drum
   picked last): with no key held, knobs 2–9 change that drum's sound. Hold
   its drum key and turn: the setting is **locked** to the step under the
   cursor (a p-lock; the box shows it in green). The velocity and LFO
   destinations can't be locked.
+
+**Beats and bars.** Each lane has a grey line between its beats: every 4
+steps at 1/16, 3 at 1/8T, 6 at 1/16T, 2 at 1/8, 8 at 1/32 (in 4/4). They
+follow the time signature: in 6/8, 9/8 and 12/8 a beat is a dotted quarter
+(6 steps at 1/16), in 5/8 and 7/8 an eighth. A new pattern's lanes are one
+bar long (12 steps at 1/16 in 3/4); changing the time signature does that
+again for empty patterns. The step numbers along the bottom follow the
+picked lane's beats.
 
 **The steps:** outlined = off, filled = on, purple outline = has p-locks, a
 white outline = where each lane is playing (lanes of different lengths are

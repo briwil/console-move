@@ -244,15 +244,12 @@ class SeqPage:
         surf.blit(tiny.render(info, True, grey), (20, 84))
         # the grid
         first = self.first_column()
-        x0, pitch, group, cw = 72, 34, 4, 29
+        x0, pitch, cw = 72, 35, 28
         top, row_h, ch = 102, 35, 29
-        # groups of 4 steps (a beat at 1/16) with a gap and a line between them, by step number
-        col_x = lambda c: x0 + c * pitch + ((first + c) // 4 - first // 4) * group
+        col_x = lambda c: x0 + c * pitch
         grid_bottom = top + sequencer.LANES * row_h
-        for c in range(1, VISIBLE):
-            if (first + c) % 4 == 0:
-                gx = col_x(c) - 3 - group // 2
-                pygame.draw.line(surf, (50, 54, 62), (gx, top - 4), (gx, grid_bottom - 4), 1)
+        sig = tuple(e.time_sig)
+        groups = [sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in range(sequencer.LANES)]
         cx = col_x(self.cursor - first)
         pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, sequencer.LANES * row_h + 4), border_radius=5)
         playing = None
@@ -274,6 +271,11 @@ class SeqPage:
             if lane == self.lane:
                 pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)
             lane_steps = seq.lane(lane)
+            # a grey line between the lane's beats: every 4 steps at 1/16, 3 at 1/8T, by its time signature
+            for c in range(1, VISIBLE):
+                if (first + c) % groups[lane] == 0 and first + c < lane_steps.length:
+                    gx = col_x(c) - (pitch - cw + 1) // 2 - 1
+                    pygame.draw.line(surf, (88, 94, 104), (gx, y - 2), (gx, y + ch + 1), 2)
             for c in range(VISIBLE):
                 i = first + c
                 x = col_x(c)
@@ -290,7 +292,8 @@ class SeqPage:
                 if playing is not None and playing[lane] == i:
                     pygame.draw.rect(surf, white, (x - 2, y - 2, cw + 4, ch + 4), 2, border_radius=6)
         # step numbers along the bottom, every 4
+        g = groups[self.lane]                                   # numbered by the picked lane's beats
         for c in range(VISIBLE):
-            if (first + c) % 4 == 0:
+            if (first + c) % g == 0:
                 t = tiny.render(str(first + c + 1), True, grey)
                 surf.blit(t, (col_x(c), grid_bottom - 3))

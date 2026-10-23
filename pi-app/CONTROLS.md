@@ -300,9 +300,10 @@ a lane's end are dark.
   moves on to the end (and the same going back). Turn quickly to go faster.
 - **Track keys 1–7** are the drums: press and let go to put a step at the
   cursor, or take it off. Each plays its sound as you press it.
-- **While recording** (RECORD on, tape playing), pressing a drum key puts
-  the step where it's playing, on the nearest step, instead of at the
-  cursor.
+- **While playing** (recording or not), the blue cursor hides and the grid
+  follows the picked lane's playhead (the white outline). A drum key puts
+  the step where it's playing, on the nearest step; the knobs then work on
+  that step. Turning knob 1 shows the cursor again for a moment.
 - **Track key 8** undoes the last change (10 steps back), including COPY
   Pattern and CLEAR P-locks.
 - **Knob 10** picks the pattern (16 per song; while playing, the next one
@@ -311,10 +312,12 @@ a lane's end are dark.
 **Knob modes.** The row of boxes along the top shows what knobs 1–9, 10 and
 the big knob do, with their values. **Push knob 1** for the next mode:
 
-- **STEP**: hold a drum key and turn: knob 2 LENGTH (1–64, each lane loops
+- **STEP**: turn for the drum picked last, or hold drum keys to pick
+  which: knob 2 LENGTH (1–64, each lane loops
   on its own), 3 VELOCITY, 4 CHANCE (100% down to 10%, or 1:2, 2:2, 1:3… =
   plays on that pass round the lane out of every 2, 3 or 4) and 5 RATCHETS
-  (up to 4 quick hits) for the step under the cursor (it turns the step on),
+  (up to 4 quick hits) for the step under the cursor (holding its key turns
+  an empty step on; with no key held they only change a step that's on),
   6 EUCLID (spreads that many hits over the lane, rewriting its on/off
   steps), 7 SHIFT (rotates them), 8 RATE (1/16, 1/16T, 1/8, 1/8T, 1/32).
   Changing the rate keeps a lane that's a whole number of bars the same

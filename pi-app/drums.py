@@ -109,6 +109,8 @@ class Drums:
     def load_kit(self, values):
         """Settings saved by kit(); missing ones (from an older save) come from the Init Kit."""
         values = [int(v) for v in values[:self.param_count]]
+        if len(values) == dp.NOISE_DECAY and len(values) > 56:
+            values.append(values[56])                  # saved before the snare noise had its own decay
         values += self.init_values[len(values):]
         with self._lock:
             self.values = values

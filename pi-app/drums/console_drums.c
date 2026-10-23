@@ -9,9 +9,12 @@
  *   drums_render(out, frames)          the next frames, one mono channel per voice: out[frame * 6 + voice], -1..1
  *   drums_pan(lane)                    the voice's pan in the kit, 0 (left) .. 127 (right)
  *
+ * Parameters are the LXR's, plus Console's own after them: NOISE_DECAY (the snare noise's decay).
+ *
  * Also here: stand-ins for the parts of the LXR firmware that aren't brought over (its sequencer,
- * menu, front panel, faders and MIDI output). The sound engine itself is unchanged apart from one
- * line in Oscillator.c (see the note there).
+ * menu, front panel, faders and MIDI output). Changes to the LXR's own code are marked "Console
+ * change" there: Oscillator.c (overflow test in plain C), MidiParser.c (FINE spans a semitone each way)
+ * and Snare.c/.h (the noise has its own decay).
  *
  * This file: GPL-3.0, like the code it links with.
  */
@@ -79,7 +82,11 @@ extern const uint16_t console_modTargets[];
 extern const int console_numModTargets;
 
 static int16_t blockBuf[VOICES][BLOCK];
-static uint8_t noParameter;             /* what parameter 0 ("none") points at: the LXR leaves it pointing at address 0 */
+static uint8_t noParameter;
+/* Console's own settings, numbered after the LXR's */
+#define NOISE_DECAY END_OF_SOUND_PARAMETERS     /* the snare noise's decay (the tone's is PAR_VELOD4) */
+#define PARAM_COUNT (END_OF_SOUND_PARAMETERS + 1)
+static uint8_t consoleParameters[PARAM_COUNT - END_OF_SOUND_PARAMETERS];             /* what parameter 0 ("none") points at: the LXR leaves it pointing at address 0 */
 static int blockPos = BLOCK;            /* frames of blockBuf already handed out */
 
 static ModulationNode *lfoTarget(int voice)
@@ -94,9 +101,15 @@ static ModulationNode *lfoTarget(int voice)
 
 void drums_set_param(int index, int value)
 {
-	if (index < 0 || index >= END_OF_SOUND_PARAMETERS) return;
+	if (index < 0 || index >= PARAM_COUNT) return;
 	if (value < 0) value = 0;
 	if (value > 127) value = 127;
+	if (index >= END_OF_SOUND_PARAMETERS) {
+		consoleParameters[index - END_OF_SOUND_PARAMETERS] = (uint8_t)value;
+		if (index == NOISE_DECAY)
+			Snare_setNoiseDecay((uint8_t)value);
+		return;
+	}
 	if ((index >= PAR_VEL_DEST_1 && index < PAR_VEL_DEST_1 + 6) || (index >= PAR_TARGET_LFO1 && index < PAR_TARGET_LFO1 + 6)) {
 		/* a velocity or LFO destination: the kit stores an entry in the LXR's list of targets */
 		if (value >= console_numModTargets) value = 0;
@@ -124,22 +137,25 @@ void drums_set_param(int index, int value)
 
 int drums_get_param(int index)
 {
-	if (index < 0 || index >= END_OF_SOUND_PARAMETERS) return -1;
+	if (index < 0 || index >= PARAM_COUNT) return -1;
+	if (index >= END_OF_SOUND_PARAMETERS)
+		return consoleParameters[index - END_OF_SOUND_PARAMETERS];
 	return activeParameters[index];
 }
 
-int drums_param_count(void) { return END_OF_SOUND_PARAMETERS; }
+int drums_param_count(void) { return PARAM_COUNT; }
 
 /* load a kit: values[0..count-1] are the kit's parameters in the LXR's numbering */
 void drums_load_kit(const uint8_t *values, int count)
 {
-	for (int i = 0; i < count && i < END_OF_SOUND_PARAMETERS; i++)
+	for (int i = 0; i < count && i < PARAM_COUNT; i++)
 		drums_set_param(i, values[i]);
 }
 
 void drums_load_init_kit(void)
 {
 	drums_load_kit(initKit + 8, INIT_KIT_SIZE - 8);   /* the first 8 bytes are the kit's name */
+	drums_set_param(NOISE_DECAY, initKit[8 + PAR_VELOD4]);  /* the noise starts as long as the tone */
 }
 
 int drums_init(void)

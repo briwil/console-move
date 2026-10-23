@@ -66,6 +66,11 @@ typedef struct SnareStruct
 	SlopeEg2		oscVolEg;
 	float 		egValueOscVol;
 
+	// Console change: the noise has its own volume envelope (same attack, slope and repeats as the tone's,
+	// its own decay), so the noise and the tone can ring for different lengths
+	SlopeEg2		noiseVolEg;
+	float 		egValueNoiseVol;
+
 	Distortion distortion;
 	SnapEg snapEg;
 
@@ -94,4 +99,6 @@ void Snare_calcAsync();
 
 //-0.5 = left 0=both max 0.5=right*/
 void Snare_setPan(const uint8_t pan);
+void Snare_setNoiseDecay(uint8_t value);	// Console change
+
 #endif /* SNARE_H_ */

@@ -248,6 +248,10 @@ through the voice's pages:
 | Snare | OSC + NOISE, AMP + CLICK, PITCH + VELOCITY, FILTER + MIX, LFO |
 | Cymbal, hi-hat | OSC + AMP, VELOCITY + CLICK, OSC 2 + 3, FILTER + MIX, LFO |
 
+Two changes from the LXR-02: the snare's noise has its own decay (NOISE DCY,
+next to TONE DECAY on its AMP + CLICK page; the click follows the tone), and
+FINE tunes up to a whole semitone up or down (the LXR's goes half).
+
 Turn a knob quickly to move further; hold SHIFT for one step at a time.
 The kit is saved with the song, and a new song starts from the LXR's Init
 Kit. VEL TO and LFO TO pick what velocity or the LFO moves (LFO VOICE picks

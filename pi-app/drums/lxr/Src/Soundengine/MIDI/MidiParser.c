@@ -117,18 +117,8 @@ static uint8_t parserState = IGNORE;	// state of the parser state machine. Set t
 //takes a midi value from 0 to 127 and return +/- 50 cent detune factor
 float midiParser_calcDetune(uint8_t value)
 {
-	//linear interpolation between 1(no change) and semitone up/down)
-	float frac = (value/127.f -0.5f);
-	float cent = 1;
-	if(cent>=0)
-	{
-		cent += frac*(SEMITONE_UP - 1);
-	}
-	else
-	{
-		cent += frac*(SEMITONE_UP - 1);
-	}
-	return cent;
+	// Console change: a whole semitone down or up at the ends (the LXR's own went half a semitone)
+	return powf(2.f, (value/127.f - 0.5f) * 2.f / 12.f);
 }
 //-----------------------------------------------------------
 static void midiParser_nrpnHandler(uint16_t value)
@@ -591,6 +581,7 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue, uint8_t isFl
 				break;
 			case VELOA4:
 				slopeEg2_setAttack(&snareVoice.oscVolEg,value.itg,false);
+				slopeEg2_setAttack(&snareVoice.noiseVolEg,value.itg,false);	// Console: the noise's own envelope
 				break;
 
 			case VELOD4:
@@ -835,11 +826,13 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue, uint8_t isFl
 
 			case REPEAT1:
 				snareVoice.oscVolEg.repeat = value.itg;
+				snareVoice.noiseVolEg.repeat = value.itg;	// Console: the noise's own envelope
 				break;
 
 
 			case EG_SNARE1_SLOPE:
 				slopeEg2_setSlope(&snareVoice.oscVolEg,value.itg);
+				slopeEg2_setSlope(&snareVoice.noiseVolEg,value.itg);	// Console: the noise's own envelope
 				break;
 
 			case SNARE_DISTORTION:

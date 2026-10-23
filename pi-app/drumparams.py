@@ -492,3 +492,11 @@ TARGETS = [0, 114, 8, 9, 1, 228, 49, 50, 62, 70, 78, 74, 149, 143, 137, 82, 83, 
  120, 184, 126, 160, 178, 190, 93, 101, 113, 107, 238, 239, 240, 241]
 # each voice's own entries in TARGETS (first, last)
 VOICE_TARGETS = [[2, 39], [40, 77], [78, 115], [116, 152], [153, 190], [191, 228]]
+
+
+# ---- Console's own additions (not in the LXR)
+NOISE_DECAY = 247                    # the snare noise's decay; the snare's DECAY (56) is now the tone's
+LABELS[56] = "TONE DECAY"
+LABELS[NOISE_DECAY] = "NOISE DCY"
+KINDS[NOISE_DECAY] = ("num",)
+PAGES[3][1][1].insert(2, NOISE_DECAY)          # snare, AMP + CLICK: after TONE DECAY

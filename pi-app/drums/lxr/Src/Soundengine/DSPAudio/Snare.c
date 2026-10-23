@@ -65,6 +65,7 @@ void Snare_init()
 	snareVoice.egPitchModAmount = 0.5f;
 
 	slopeEg2_init(&snareVoice.oscVolEg);
+	slopeEg2_init(&snareVoice.noiseVolEg);
 
 
 
@@ -99,6 +100,7 @@ void Snare_trigger(const uint8_t vel, const uint8_t note)
 
 	DecayEg_trigger(&snareVoice.oscPitchEg);
 	slopeEg2_trigger(&snareVoice.oscVolEg);
+	slopeEg2_trigger(&snareVoice.noiseVolEg);
 	snareVoice.velo = vel/127.f;
 
 	osc_setBaseNote(&snareVoice.osc,note);
@@ -120,6 +122,7 @@ IN_ITCM_RAM void Snare_calcAsync()
 
 	//calc the osc  vol eg
 	snareVoice.egValueOscVol = slopeEg2_calc(&snareVoice.oscVolEg);
+	snareVoice.egValueNoiseVol = slopeEg2_calc(&snareVoice.noiseVolEg);
 
 	//turn off trigger signal if trigger gate mode is on and volume == 0
 	/*
@@ -180,7 +183,7 @@ void Snare_calcSyncBlock(int16_t* buf, const uint8_t size)
 	uint8_t j;
 	if(snareVoice.volumeMod)
 	{
-		snareVoice.combinedVolume = snareVoice.vol * snareVoice.velo * snareVoice.egValueOscVol ;
+		snareVoice.combinedVolume = snareVoice.vol * snareVoice.velo;
 		//const float vol = ;
 
 		for(j=0;j<size;j++)
@@ -189,10 +192,9 @@ void Snare_calcSyncBlock(int16_t* buf, const uint8_t size)
 #if 1
 			//float fmaf(float a, float b, float c);
 			//result = a × b + c
-			float tmp = fmaf(buf[j], snareVoice.mix, oscBuf[j]);
-			//add transient sample
-			//tmp	= __QADD16(transBuf[j],(int16_t)tmp);
-			tmp	+= transBuf[j];
+			// Console change: the noise follows its own envelope, the tone and transient the tone's
+			float tmp = buf[j] * snareVoice.mix * snareVoice.egValueNoiseVol
+					+ ((float)oscBuf[j] + transBuf[j]) * snareVoice.egValueOscVol;
 			buf[j] =   snareVoice.combinedVolume  * tmp * calcOnePole( &snareVoice.FaderVolumeFilter, adc_getFaderVolume(3));
 
 #else
@@ -207,17 +209,16 @@ void Snare_calcSyncBlock(int16_t* buf, const uint8_t size)
 	}
 	else
 	{
-		snareVoice.combinedVolume = snareVoice.vol * snareVoice.egValueOscVol;
+		snareVoice.combinedVolume = snareVoice.vol;
 		//const float vol = snareVoice.combinedVolume * ;
 
 		for(j=0;j<size;j++)
 		{
 
 #if 1
-			float tmp = fmaf(buf[j], snareVoice.mix, oscBuf[j]);
-			//add transient sample
-			//tmp	= __QADD16(transBuf[j],(int16_t)tmp);
-			tmp	+= transBuf[j];
+			// Console change: the noise follows its own envelope, the tone and transient the tone's
+			float tmp = buf[j] * snareVoice.mix * snareVoice.egValueNoiseVol
+					+ ((float)oscBuf[j] + transBuf[j]) * snareVoice.egValueOscVol;
 			buf[j] =  snareVoice.combinedVolume * tmp * calcOnePole( &snareVoice.FaderVolumeFilter, adc_getFaderVolume(3));
 #else
 			//add filter to buffer
@@ -231,3 +232,10 @@ void Snare_calcSyncBlock(int16_t* buf, const uint8_t size)
 	calcDistBlock(&snareVoice.distortion,buf,size);
 }
 //------------------------------------------------------------------------
+
+//------------------------------------------------------------------------
+// Console change: the noise's decay (the tone's is VELOD4)
+void Snare_setNoiseDecay(uint8_t value)
+{
+	slopeEg2_setDecay(&snareVoice.noiseVolEg, value, false);
+}

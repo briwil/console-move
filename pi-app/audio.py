@@ -2008,13 +2008,21 @@ class Engine:
             if b > a:
                 for t, ch in targets.items():
                     src = (x.mean(axis=1) if ch is None else x[:, ch])[a - w0:b - w0]
-                    self._save_for_undo(t, a, b)
-                    self._rec_region(t, a, b)
+                    ta = a
+                    own = self._rec_boxes.get(t)
+                    if own is not None and 0 < a - own[1] <= 64:
+                        # the tape was nudged a frame or two ahead (Link keeping time): fill the gap with
+                        # the first new sample, so the recording stays one piece
+                        ta = own[1]
+                        src = np.concatenate([np.full(a - ta, src[0] if len(src) else 0.0, np.float32), src])
+                    self._save_for_undo(t, ta, b)
+                    self._rec_region(t, ta, b)
+                    a_t = ta
                     if overdub:
-                        self.tracks[t][a:b] = saturate(self.tracks[t][a:b] + src)
+                        self.tracks[t][a_t:b] = saturate(self.tracks[t][a_t:b] + src)
                     else:
-                        self.tracks[t][a:b] = src
-                    self._update_levels(t, a, b, reset=True)
+                        self.tracks[t][a_t:b] = src
+                    self._update_levels(t, a_t, b, reset=True)
                     self.dirty.add(t)
 
     def _save_for_undo(self, t, a, b):

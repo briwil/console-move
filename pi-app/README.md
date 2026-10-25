@@ -21,7 +21,11 @@ The recorder that runs on the Raspberry Pi. **Version 0.10.**
   cut and drop them, several at once and between tracks, and undo (the last 8 changes).
 - Zoom into one track: press the armed track's key again, with tape reels
   turning underneath.
-- Starts on a project menu (NEW, SAVE and SETTINGS work; LOAD is next).
+- Starts on a project menu: NEW, LOAD (open, rename, delete), SAVE and SETTINGS
+  (sync and Ableton Link, tempo, time signature, export format, input, output, Wi-Fi, software update).
+- A built-in drum synth (the LXR-02's voices) with kits, a grid step sequencer with
+  p-locks, and send reverb and delay.
+- Each box has its own gain, normalize and fades (in the zoomed track view).
 - Reads the control board's keys and knobs (USB MIDI from `../firmware`).
 - Saves the song when you stop, to `~/console-data/projects/<song name>/`
   (`track1.wav`…`track8.wav`, 24-bit, plus `project.json` with the tempo,
@@ -137,6 +141,9 @@ If the audio connection hiccups while recording, recording carries on by
 itself once it reconnects (you lose about a second).
 
 ## Files
+
+How it all fits together is in [../PROJECT-NOTES.md](../PROJECT-NOTES.md).
+
 
 - `console.py` is the app: the screen, the keys and the transport (play,
   record, position).

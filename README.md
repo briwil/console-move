@@ -3,13 +3,16 @@
 A DIY 8-track recorder and arranger with tape-style recording. It runs on a Raspberry Pi 5 with a 7.9" 1280×400
 screen and a custom key-and-knob control board.
 
+**New here? Read [PROJECT-NOTES.md](PROJECT-NOTES.md) first.** It explains how everything fits together, what's
+been decided, how the Pi is set up and what's still open. The controls are in [pi-app/CONTROLS.md](pi-app/CONTROLS.md).
+
 ## What's in this repo
 
 | Folder | What it holds | Status |
 |---|---|---|
-| `pi-app/` | The recorder app that runs on the Pi (audio engine and screen UI) | Screen and controls working, no audio yet |
-| `firmware/` | Code for the PGA2350 on the control board (reads keys and knobs, sends them to the Pi over USB) | Not started |
-| `hardware/` | KiCad project for the control board, plus the files sent to JLCPCB | Ordered, rev 0.1 |
+| `pi-app/` | The recorder app that runs on the Pi (audio engine, drum synth, sequencer, screen UI) | Working: recording, editing, drums, sequencer, Link |
+| `firmware/` | Code for the PGA2350 on the control board (reads keys and knobs, sends them to the Pi over USB) | Working (CircuitPython) |
+| `hardware/` | KiCad project for the control board, plus the files sent to JLCPCB | Built, rev 0.1 |
 
 ## Hardware
 

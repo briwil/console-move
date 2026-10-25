@@ -1,0 +1,161 @@
+# Project notes (start here)
+
+This file is for picking the project up again, whether that's me (Brian) later, or a new
+helper (person or AI) who hasn't seen any of the earlier conversations. It covers what
+the project is, how the code fits together, what's been decided and why, how the Pi
+is set up, and what's still open. What each control does is in
+[pi-app/CONTROLS.md](pi-app/CONTROLS.md), and installing and running is in
+[pi-app/README.md](pi-app/README.md).
+
+## Working with Brian
+
+- Brian is a beginner at coding. Explain things plainly, give terminal commands **one at
+  a time**, and don't assume he owns a tool (soldering gear, meters and so on). Ask him.
+- Check with him before building things he didn't ask for.
+- The project is just for him, so licences don't matter. Still keep the name "Console":
+  no mention of the Thingstone Track8, which it's modelled on.
+- Changes are pushed straight to `main` on `briwil/console` (a private repo). The Pi
+  updates itself from GitHub: **SETTINGS → SOFTWARE UPDATE**, PLAY to check, PLAY again
+  to install.
+
+## What it is
+
+A DIY 8-track tape-style recorder and arranger, like an OP-1's tape crossed with a
+Track8:
+
+- **Computer:** Raspberry Pi 5 (8 GB), hostname `console` (`console.local`). It boots
+  straight into the app.
+- **Screen:** Waveshare 7.9" HDMI (400×1280 panel, used as 1280×400 landscape).
+- **Control board:** custom KiCad board (rev 0.1, made by JLCPCB) with a Pimoroni PGA2350
+  running CircuitPython. It has 24 Kailh Choc keys and 11 EC11 knobs with pushes, and
+  talks to the Pi as USB MIDI ("Console Controls", channel 16). See `firmware/` and `hardware/`.
+- **Audio:** any USB audio device. Mostly that's an OP-XY in 8-channel mode (records all 8
+  tracks at once). Headphones are on the screen's jack (HDMI audio).
+
+## Code map (`pi-app/`)
+
+| File | What it does |
+|---|---|
+| `console.py` | The app: main loop, key and knob routing (`Transport.key`, `Transport.knob`), status line, the drum page and the zoomed view's panel text. `Board` turns MIDI from the control board into key names. |
+| `audio.py` | The engine (`Engine`): ALSA in and out (pyalsaaudio), the 8 tracks, recording, playback, loop, boxes and editing, undo, save and load, export, bounce, and the output resampler (`OutPort`). |
+| `tape.py` | Draws the tape: lanes, waveforms (from `engine.levels`), boxes, ruler, grid and zoom. |
+| `focus.py` | The one-track zoomed view (press the selected track's key again), with the tape reels panel. |
+| `menu.py` + `layouts/menu.ui` | Project menu: NEW, LOAD (open, rename, delete), SAVE, SETTINGS (Link/sync, tempo, time signature, export format, input, output, Wi-Fi, software update). |
+| `wifi.py` | Wi-Fi scan, connect and forget, through NetworkManager's `nmcli` (run with `sudo -n`). |
+| `drums.py`, `drumparams.py`, `drums/` | The drum synth: Erica Synths LXR-02 firmware compiled for the Pi (`drums/build.sh` makes `libdrums.so` and `libdrums_live.so`). `drumparams.py` lists every page, knob, label and range. |
+| `kitmenu.py` | Drum kits: SAVE and LOAD (the FILE key on the drum page). |
+| `sequencer.py`, `seqpage.py` | The grid step sequencer (data and timing; and its screen page). |
+| `linksync.py` | Ableton Link (the `aalink` package). |
+| `midi.py` | MIDI in and out: the control board, and clock sync with the OP-XY. |
+| `effects.py`, `fx/fx.c` | Send reverb and delay (from Mutable Instruments code, compiled by `setup.sh`). |
+| `updater.py` | SOFTWARE UPDATE: `git pull` from GitHub. |
+| `ui.py`, `layouts/main.ui` | Draws screens made with `tools/screen-designer.html`. |
+| `web/` | The file page at http://console.local (download and upload songs, samples, exports). |
+| `setup.sh` | One-time install on the Pi: packages, aalink, builds the drums and effects. |
+| `splash/`, `*-boot.sh`, `console.service` | Boot logo, boot-to-app service, quiet boot. |
+
+Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`track8.wav`,
+24-bit, plus `project.json`), `exports/`, `kits/`, `settings.json` and `console.log`.
+
+## How the main parts work
+
+### Tape and boxes
+
+- Each track is **one long mono WAV**, as long as the tape (5 minutes by default).
+- Recordings show as **boxes** on top of the audio. A box is
+  `[start, end, colour, gain dB, fade in, fade out]` (frames), in `engine.regions[track]`,
+  saved in `project.json`. Older 3-number boxes still load.
+- SPLICE splits or joins boxes. LIFT copies, CUT cuts, DROP pastes, DROP_INSERT pushes
+  later audio along. Edits work on whole boxes. Undo keeps 8 steps of saved samples plus box lists.
+- **Box gain and fades are never written into the WAV.** Playback (`envelope()`), the
+  waveform (`_update_levels`), export, bounce and the clipboard (`shape_range()`) apply
+  them. They're only "baked" into the audio in two cases: when you overdub onto such a
+  box, and when you join two boxes with different gains.
+- Every box edge with nothing next to it gets a 1 ms fade (`GUARD`), and DROP fades its
+  seams (`_seam`), so edits don't click.
+- **Recording timing:** the engine plays `read_ahead` frames ahead and writes recordings at
+  `pos − (latency − read_ahead)`, so overdubs line up with what you heard.
+  `latency_frames` in `settings.json` adjusts it.
+- Stereo pairs: two neighbouring tracks, in `engine.pairs`, that edit and export together.
+
+### Drum synth
+
+- The LXR's six voices: DRUM 1–3, SNARE, CYMBAL, HI-HAT (closed and open), played by
+  track keys 1–7 on the drum page (the MIDI key).
+- **Two copies of the engine** run: one for the sequencer and one for playing by hand.
+  The sequencer's sound is delayed by `read_ahead` through a FIFO, so it records in time.
+- Parameters 248–259 are Console's own (the per-voice reverb and delay sends), on top of
+  the LXR's.
+- The snare has a separate noise decay (param 247). VEL>VOL is on in the Init kit.
+- Input modes: MULTI (each voice to its own track), STEREO (kit to a pair), MONO.
+
+### Sequencer (grid)
+
+- Seven lanes (one per drum key) and 32 steps visible. Knob 1 moves the cursor, which
+  scrolls at the 16th column. Hold a drum key to place steps and change them with the knobs.
+- Pushing knob 1 cycles the knob modes: STEP, then the sound pages. In a sound mode,
+  holding a step's key p-locks it (parameter locks, Elektron style).
+- Key 8 is undo (10 levels).
+- 16 patterns, with copy pattern and "clear locks + step settings". Each lane has its own
+  rate (triplets too). Length follows bars and the time signature.
+- While playing, the cursor is hidden and drum keys place steps live at the playhead.
+- It's locked to the tape, so recording the sequencer onto tracks lands exactly in time.
+
+### Sync
+
+- **MIDI:** follow the OP-XY's clock (recording waits for its play) or lead it.
+- **Ableton Link** (SETTINGS → SYNC → LINK): follows tempo, starts on the next bar, and
+  nudges the tape ±1 frame to stay in phase. A nudge during recording is filled in, so the
+  recording stays one box.
+
+### Menus and settings
+
+- Hold-keys (CUT, LIFT) reach the menus as plain keys.
+- Empty songs are removed automatically.
+- Songs can be renamed with LIFT on the LOAD list.
+- Text uses Roboto Condensed. `fonts/fonts.json` maps "sans" and "mono" to it; Inter and
+  Plex Mono are still there.
+
+## Pi setup (what's been done to Brian's Pi)
+
+- `setup.sh`, `boot-to-app.sh`, `splash-setup.sh` and `web-setup.sh` have been run, and
+  the hostname is `console`.
+- **Power button:** EEPROM settings `WAIT_FOR_POWER_BUTTON=1` and `POWER_OFF_ON_HALT=1`,
+  so the Pi stays off when power is plugged in and starts with the power button. The
+  button is wired to the J2 pads next to the J5 battery connector.
+- **Boot speed:** `NetworkManager-wait-online` is disabled. The next ideas were:
+  - setting `NET_INSTALL_AT_POWER_ON=0` in the EEPROM;
+  - adding `vc4` to the initramfs (`FRAMEBUFFER=y`, `auto_initramfs=1`,
+    `sudo update-initramfs -u`) so the splash shows sooner.
+
+  Those were given to Brian to try, and the results aren't recorded yet. Boot was about
+  10 s (kernel 1.7 s, userspace 5.2 s, plus firmware).
+- The GPIO header pins were **clipped** (not removed), to make room in the case.
+- The screen's ribbon is an FPV-style 20-pin, 0.5 mm pitch cable, folded at 45°.
+
+## Open items
+
+- **Battery:** choosing a UPS/battery board that fits where the Pi sits in the case
+  (Geekworm X1201 was the front-runner). Showing battery level in the app comes after.
+- **Control board:** problems were reported with knob 9's push and key SW16. They
+  haven't been diagnosed yet.
+- **Boot speed** results (see above).
+- Drum hits have no velocity from the keys yet (the board's keys aren't
+  velocity-sensitive; the sequencer has velocity per step).
+- IMPORT (samples) isn't built yet.
+
+## Testing without the Pi
+
+The code was developed in a Linux sandbox with stand-ins, so the app could run headless:
+
+- a small Pillow-based fake `pygame` that saves screens as PNG;
+- fake `alsaaudio` modules;
+- a fake `nmcli` script for the Wi-Fi.
+
+Those stand-ins aren't in this repo yet. Without them, test on the Pi itself:
+`sudo systemctl stop console`, then `pi-app/run.sh` over SSH. Messages go to
+`~/console-data/console.log`.
+
+## History
+
+`git log` has every change with a description (the commit messages are written to be read).

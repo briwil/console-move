@@ -20,3 +20,7 @@ Thumbs.db
 
 # Built on the Pi by setup.sh
 *.so
+
+# Simulator output (tools/sim)
+sim-data/
+sim-shots/

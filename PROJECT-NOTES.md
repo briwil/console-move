@@ -146,15 +146,16 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 
 ## Testing without the Pi
 
-The code was developed in a Linux sandbox with stand-ins, so the app could run headless:
+`tools/sim/` runs the app's real code on any computer, with stand-ins for pygame (it
+draws to PNG with Pillow), the audio device and `nmcli`. Every change so far was tested
+this way before going to the Pi:
+- drive it with keys and knobs from a script;
+- check the engine (audio, boxes, saved files);
+- look at screenshots.
 
-- a small Pillow-based fake `pygame` that saves screens as PNG;
-- fake `alsaaudio` modules;
-- a fake `nmcli` script for the Wi-Fi.
-
-Those stand-ins aren't in this repo yet. Without them, test on the Pi itself:
-`sudo systemctl stop console`, then `pi-app/run.sh` over SSH. Messages go to
-`~/console-data/console.log`.
+Start with `python3 tools/sim/example.py`, and see [tools/sim/README.md](tools/sim/README.md).
+On the Pi itself: `sudo systemctl stop console`, then `pi-app/run.sh` over SSH. Messages
+go to `~/console-data/console.log`.
 
 ## History
 

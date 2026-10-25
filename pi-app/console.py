@@ -24,6 +24,18 @@ import sys
 import threading
 import time
 
+
+def startup(what):
+    """How far into the boot each start-up step is (journalctl -b -u console shows them)."""
+    try:
+        with open("/proc/uptime") as f:
+            up = float(f.read().split()[0])
+    except (OSError, ValueError):
+        return
+    print("startup: %-28s %5.2f s after power-on" % (what, up), flush=True)
+
+
+startup("app starting")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")   # pygame mustn't open a sound device: the audio engine owns them
 import pygame
 
@@ -1097,6 +1109,7 @@ def start_engine(demo):
 
 
 def main():
+    startup("code loaded")
     ap = argparse.ArgumentParser(description="Console recorder")
     ap.add_argument("--window", action="store_true", help="open a window instead of full screen")
     ap.add_argument("--rotate", type=int, default=int(os.environ.get("CONSOLE_ROTATE", "270")))
@@ -1118,9 +1131,11 @@ def main():
                                                  ", turning the picture %d degrees" % rotate if rotate else ""))
     print("Keys: see pi-app/CONTROLS.md (Space play, R record, Q quit)")
 
+    startup("screen open")
     screen = ui.Screen.load(args.layout)
     frame = pygame.Surface((ui.WIDTH, ui.HEIGHT))
     engine = start_engine(args.demo)
+    startup("audio engine and song loaded")
     keys = queue.Queue()
     clock = None
     try:
@@ -1144,6 +1159,7 @@ def main():
     project_menu.kits = kitmenu.KitMenu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)
     fps = pygame.time.Clock()
+    startup("controls and menus ready")
 
     try:
         run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh)
@@ -1173,6 +1189,7 @@ def main():
 def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh):
     """The main loop: keys in, screen out, until Q."""
     running = True
+    first = True
     while running:
         seconds = fps.tick(FPS) / 1000
         for ev in pygame.event.get():
@@ -1223,6 +1240,9 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
             display.fill((0, 0, 0))
         display.blit(out, ((dw - out.get_width()) // 2, (dh - out.get_height()) // 2))
         pygame.display.flip()
+        if first:
+            first = False
+            startup("first picture on the screen")
 
 
 if __name__ == "__main__":

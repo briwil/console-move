@@ -3,27 +3,59 @@
   "name": "Drum page",
   "colours": {
    "background": "#000000",
-   "voice_name": "#F1C12F",
-   "tempo": "#00AEEF",
    "key_selected": "#F1C12F",
    "key": "#353535",
    "rules": "#686868",
    "grid": "#1C1434",
    "panel": "#000000",
-   "setting": "#8359E1",
+   "setting_bars_and_boxes": "#8359E1",
    "turning": "#CDE05A",
-   "page": "#595A5A",
-   "page_showing": "#EC2426",
-   "knob_9_hint": "#F1C12F",
    "recording_dots": "#EC2426"
   },
   "fonts": {
-   "voice_name": {"family": "outfit", "weight": 900, "size": 40, "tracking": -0.02},
-   "tempo": {"family": "outfit", "weight": 300, "size": 14, "tracking": 0},
-   "setting_name": {"family": "outfit", "weight": 900, "size": 18, "tracking": 0},
-   "box_text": {"family": "outfit", "weight": 500, "size": 22, "tracking": 0},
-   "pages": {"family": "outfit", "weight": 900, "size": 30, "tracking": -0.02},
-   "knob_9_hint": {"family": "outfit", "weight": 600, "size": 14, "tracking": 0}
+   "voice_name": {
+    "family": "outfit",
+    "weight": 900,
+    "size": 40,
+    "tracking": -0.02,
+    "colour": "#F1C12F"
+   },
+   "tempo": {
+    "family": "outfit",
+    "weight": 300,
+    "size": 14,
+    "tracking": 0,
+    "colour": "#00AEEF"
+   },
+   "setting_name": {
+    "family": "outfit",
+    "weight": 900,
+    "size": 18,
+    "tracking": 0,
+    "colour": "#8359E1"
+   },
+   "box_text": {
+    "family": "outfit",
+    "weight": 500,
+    "size": 22,
+    "tracking": 0,
+    "colour": "#8359E1"
+   },
+   "pages": {
+    "family": "outfit",
+    "weight": 900,
+    "size": 30,
+    "tracking": -0.02,
+    "colour": "#595A5A",
+    "colour_showing": "#EC2426"
+   },
+   "knob_9_hint": {
+    "family": "outfit",
+    "weight": 600,
+    "size": 14,
+    "tracking": 0,
+    "colour": "#F1C12F"
+   }
   },
   "shapes": {
    "bar_lines": 21,

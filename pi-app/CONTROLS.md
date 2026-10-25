@@ -364,7 +364,7 @@ the big knob do, with their values. **Push knob 1** for the next mode:
 
 - **STEP**: turn for the drum picked last, or hold drum keys to pick
   which: knob 2 LENGTH (1–64, each lane loops
-  on its own), 3 VELOCITY, 4 CHANCE (100% down to 10%, or 1:2, 2:2, 1:3… =
+  on its own), 3 VELOCITY, 4 CHANCE (100% down to 0% in tens, or 1:2, 2:2, 1:3… =
   plays on that pass round the lane out of every 2, 3 or 4) and 5 RATCHETS
   (up to 4 quick hits) for the step under the cursor (holding its key turns
   an empty step on; with no key held they only change a step that's on),

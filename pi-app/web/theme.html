@@ -178,6 +178,8 @@ function fontCard(sec, defs, cur) {
       fam.value = st.family; weights(); size.value = st.size; tr.value = st.tracking;
       sample.style.fontFamily = face(st.family, st.weight); sample.style.fontSize = Math.min(40, st.size) + "px";
       sample.style.letterSpacing = st.tracking + "em";
+      for (const [ck, sw] of swatches) sw.style.background = st[ck];
+      sample.style.color = st.colour || "";
       wrap.classList.toggle("changed", !same(st, d));
     };
     fam.onchange = () => { st.family = fam.value; show(); changed(); };
@@ -186,6 +188,16 @@ function fontCard(sec, defs, cur) {
     tr.onchange = () => { const v = +tr.value; if (v >= -0.2 && v <= 0.5) st.tracking = Math.round(v * 100) / 100; show(); changed(); };
     const lw = (t, el) => { const s = document.createElement("span"); s.textContent = t; ctl.append(s, el); };
     lw("font", fam); lw("weight", wt); lw("size", size); lw("spacing", tr);
+    // the text's colour(s): "colour", and for the pages also "colour_showing" (the page on screen)
+    const swatches = [];
+    for (const ck of ["colour", "colour_showing"]) {
+      if (!(ck in d)) continue;
+      const sw = document.createElement("button"); sw.className = "swatch";
+      sw.title = ck === "colour" ? "Colour" : "Colour of the page showing";
+      sw.onclick = () => openPicker(nice(k) + (ck === "colour" ? " colour" : ": page showing"), st[ck], v => { st[ck] = v; show(); changed(); });
+      swatches.push([ck, sw]);
+      lw(ck === "colour" ? "colour" : "showing", sw);
+    }
     const u = undoButton(() => { Object.assign(st, JSON.parse(JSON.stringify(d))); show(); changed(); });
     top.append(lab, u);
     wrap.append(top, ctl, sample);

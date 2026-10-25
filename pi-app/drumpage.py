@@ -68,6 +68,7 @@ class DrumPage:
             self._theme_version = theme.version()
             self._page_size = None
         col = {k: theme.rgb(v) for k, v in th["colours"].items()}
+        ink = lambda style, key="colour": theme.rgb(style.get(key, "#FFFFFF"))     # a text style's own colour
         fonts, shp = th["fonts"], th["shapes"]
         t, e = self.t, self.t.engine
         d = e.drums
@@ -81,9 +82,9 @@ class DrumPage:
 
         # top: the voice, the tempo and the 7 drum keys
         names = __import__("drums").NAMES
-        self.text(surf, names[voice], fonts["voice_name"], col["voice_name"], 22, 45)
+        self.text(surf, names[voice], fonts["voice_name"], ink(fonts["voice_name"]), 22, 45)
         sig = "%d/%d" % tuple(e.time_sig) if getattr(e, "time_sig", None) else "4/4"
-        self.text(surf, "%.1f BPM %s" % (e.bpm, sig), fonts["tempo"], col["tempo"], RIGHT, 21, align="right")
+        self.text(surf, "%.1f BPM %s" % (e.bpm, sig), fonts["tempo"], ink(fonts["tempo"]), RIGHT, 21, align="right")
         key = getattr(t, "drum_key", voice + 1)
         for k in range(7):
             v = min(k, 5)
@@ -108,17 +109,18 @@ class DrumPage:
         for i, param in enumerate(params):
             cx = round(px + (i + 0.5) * pw / n)
             editing = now - self.edited.get(i + 1, 0.0) < EDIT_SHOW
-            colour = col["turning"] if editing else col["setting"]
+            colour = col["turning"] if editing else col["setting_bars_and_boxes"]
             kind = drumparams.KINDS.get(param, ("num",))[0]
             if kind in TEXT_KINDS:
                 pygame.draw.rect(surf, colour, (cx - box // 2, MID_Y - box // 2, box, box), border,
                                  border_radius=shp["box_corner"])
-                self.text(surf, d.value_text(param), fonts["box_text"], colour, cx, MID_Y + 8, align="centre",
+                self.text(surf, d.value_text(param), fonts["box_text"],
+                          col["turning"] if editing else ink(fonts["box_text"]), cx, MID_Y + 8, align="centre",
                           fit=box - 2 * border - 4)
             else:
                 self.bar(surf, cx, d.fraction(param), colour, shp)
             label = d.value_text(param) if editing else drumparams.LABELS[param]
-            self.text(surf, label, fonts["setting_name"], colour, cx, 258, align="centre", fit=pw / n - 8)
+            self.text(surf, label, fonts["setting_name"], col["turning"] if editing else ink(fonts["setting_name"]), cx, 258, align="centre", fit=pw / n - 8)
 
         # the pages along the bottom, spread edge to edge
         style = fonts["pages"]
@@ -129,10 +131,10 @@ class DrumPage:
         gap = (RIGHT - LEFT - sum(widths)) / max(1, len(labels) - 1)
         x = LEFT
         for i, s in enumerate(labels):
-            self.text(surf, s, style, col["page_showing"] if i == t.drum_tab else col["page"], round(x), 361,
+            self.text(surf, s, style, ink(style, "colour_showing") if i == t.drum_tab else ink(style), round(x), 361,
                       size=size)
             x += widths[i] + gap
-        self.text(surf, "KNOB 9: PAGE", fonts["knob_9_hint"], col["knob_9_hint"], RIGHT, 386, align="right")
+        self.text(surf, "KNOB 9: PAGE", fonts["knob_9_hint"], ink(fonts["knob_9_hint"]), RIGHT, 386, align="right")
 
         # recording: three dots stepping left to right
         if t.recording:

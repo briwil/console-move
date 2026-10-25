@@ -22,7 +22,25 @@ LANE_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OP
 LANE_VOICE = [0, 1, 2, 3, 4, 5, 5]          # the drum synth voice each lane plays (its settings)
 RATES = [("1/16", 4), ("1/16T", 6), ("1/8", 2), ("1/8T", 3), ("1/32", 8)]      # (name, steps per beat)
 # chance: a percentage, or "A:B": plays on the A-th time round the lane out of every B
-CHANCES = ["100%", "90%", "75%", "50%", "25%", "10%", "1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4"]
+CHANCES = ["%d%%" % p for p in range(100, -1, -10)] + ["1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4"]
+# songs saved before October 2026 stored chance as a place in this older list
+OLD_CHANCES = ["100%", "90%", "75%", "50%", "25%", "10%", "1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4"]
+
+
+def chance_index(saved):
+    """A saved chance (its text now; a number in the old list before) -> its place in CHANCES."""
+    if isinstance(saved, (int, float)) and not isinstance(saved, bool):
+        saved = OLD_CHANCES[max(0, min(len(OLD_CHANCES) - 1, int(saved)))]
+    saved = str(saved)
+    if saved in CHANCES:
+        return CHANCES.index(saved)
+    if saved.endswith("%"):                          # 75% and 25% went: the nearest ten, rounding up
+        try:
+            p = min(100, max(0, int(-(-int(saved[:-1]) // 10) * 10)))
+            return CHANCES.index("%d%%" % p)
+        except ValueError:
+            pass
+    return 0
 MAX_RATCHET = 4
 UNDO_STEPS = 10
 DEFAULT_VELOCITY = 100
@@ -324,7 +342,7 @@ class Sequencer:
                     steps = {}
                     for i, s in enumerate(ln.steps):
                         if not s.blank():
-                            steps[str(i)] = [int(s.on), s.vel, s.chance, s.ratchet, {str(k): v for k, v in s.locks.items()}]
+                            steps[str(i)] = [int(s.on), s.vel, CHANCES[s.chance], s.ratchet, {str(k): v for k, v in s.locks.items()}]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
                 pats.append({"lanes": lanes})
             return {"current": self.current, "patterns": pats}
@@ -346,8 +364,7 @@ class Sequencer:
                             i = int(i)
                             if 0 <= i < MAX_STEPS:
                                 s = ln.steps[i]
-                                s.on, s.vel, s.chance, s.ratchet = bool(v[0]), int(v[1]), int(v[2]), int(v[3])
-                                s.chance = max(0, min(len(CHANCES) - 1, s.chance))
+                                s.on, s.vel, s.chance, s.ratchet = bool(v[0]), int(v[1]), chance_index(v[2]), int(v[3])
                                 s.ratchet = max(1, min(MAX_RATCHET, s.ratchet))
                                 s.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))

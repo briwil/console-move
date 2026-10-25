@@ -97,6 +97,8 @@ class SeqPage:
         if not e or not e.drums:
             return
         if down:
+            # stopped: pressing a different drum's key picks its lane; press it again for a step
+            self._switching = lane != self.lane and not e.playing
             self.lane = lane
             self.t.drum_voice = self.voice()
             self.mode = min(self.mode, len(self.pages()))
@@ -113,6 +115,10 @@ class SeqPage:
             return
         turned = self.held.pop(lane, None)
         if turned is None or turned:
+            return
+        if getattr(self, "_switching", False):
+            self._switching = False
+            self.t.say("%s  (PRESS AGAIN TO ADD A STEP)" % sequencer.LANE_NAMES[lane], 2)
             return
         length = self.seq.lane(lane).length
         if self.cursor >= length:

@@ -453,12 +453,12 @@ class Transport:
 
     def knob(self, number, delta, shift):
         t = self.tape
-        if self.seq_page and self.engine and self.engine.drums and number <= 10 and not (number == 10 and shift):
+        if self.fx_page and self.engine and not (number == 10 and shift):
+            self.fx_knob(number, delta)           # the FX pages go over everything, the drum pages too
+        elif self.seq_page and self.engine and self.engine.drums and number <= 10 and not (number == 10 and shift):
             self.seqp.knob(number, delta, shift)
         elif self.drum_page and self.engine and self.engine.drums and number <= 9:
             self.drum_knob(number, delta, shift)
-        elif self.fx_page and self.engine and not (number == 10 and shift):
-            self.fx_knob(number, delta)
         elif number <= 8:
             if shift:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
@@ -535,7 +535,9 @@ class Transport:
         return "%d%%" % round(v * 100)
 
     def draw_page(self, surf, it=None):
-        if self.seq_page and self.engine and self.engine.drums:
+        if self.fx_page:
+            self.draw_fx(surf, it)
+        elif self.seq_page and self.engine and self.engine.drums:
             self.seqp.draw(surf)
         elif self.drum_page and self.engine and self.engine.drums:
             self.draw_drums(surf)

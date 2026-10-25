@@ -27,6 +27,7 @@ VOICES = 6
 NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "HI-HAT"]
 SHORT = ["DR1", "DR2", "DR3", "SN", "CY", "HH"]
 OPEN_HAT = 6
+VEL_TO_VOLUME = range(137, 143)     # each voice's VEL>VOL setting
 PROBLEM = ""              # why the drum synth is off, if it is
 
 
@@ -104,7 +105,14 @@ class Drums:
         # at the start of its next block); and the LXR's Init Kit, to go back to
         self.values = ([_lib.drums_get_param(i) for i in range(self.engine_params)] + [0] * dp.EXTRA_PARAMS
                        if AVAILABLE else [])
+        # Console's starting kit: like the LXR's Init Kit, but with velocity turning the volume up and down
+        # on every drum (the LXR's has it off, so velocity would do nothing until you switched it on)
+        for p in VEL_TO_VOLUME:
+            if p < self.engine_params:
+                self.values[p] = 1
         self.init_values = list(self.values)
+        with self._lock:
+            self._pending.extend(("param", p, 1) for p in VEL_TO_VOLUME if p < self.engine_params)
 
     # These can be called from any thread: they take effect at the start of the next block of sound.
     def hit(self, lane, velocity=100):

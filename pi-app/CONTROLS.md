@@ -267,7 +267,9 @@ Two changes from the LXR-02: the snare's noise has its own decay (NOISE DCY,
 next to TONE DECAY on its AMP + CLICK page; the click follows the tone), and
 FINE tunes up to a whole semitone up or down (the LXR's goes half).
 
-**FX SENDS** (each drum's last page): REVERB and DELAY, how much of that
+**The FX key works on every page**, the drum pages too: it shows the tape
+tracks' sends and the reverb and delay settings, then press FX until it's
+off to get back. **FX SENDS** (each drum's last page): REVERB and DELAY, how much of that
 drum goes to Console's reverb and delay (set their sound on the FX key's
 pages). They work on the drums as you hear them live; the tape tracks have
 their own sends (the FX key). Recording in MULTI copies each drum's sends
@@ -306,7 +308,9 @@ a lane's end are dark.
   moves to the 16th column, then the steps scroll under it; near step 64 it
   moves on to the end (and the same going back). Turn quickly to go faster.
 - **Track keys 1–7** are the drums: press and let go to put a step at the
-  cursor, or take it off. Each plays its sound as you press it.
+  cursor, or take it off. Each plays its sound as you press it. While
+  stopped, pressing a different drum's key first just picks its lane;
+  press it again to add a step.
 - **While playing** (recording or not), the blue cursor hides and the grid
   follows the picked lane's playhead (the white outline). A drum key puts
   the step where it's playing, on the nearest step; the knobs then work on
@@ -350,8 +354,13 @@ at different places).
 
 **FILE on the drum or sequencer page** opens the DRUMS menu: SAVE Kit, LOAD
 Kit, **COPY Pattern** (the big knob picks where to; copying onto a pattern
-with steps asks first) and **CLEAR P-locks** (every lock in the current
-pattern; the steps stay on or off).
+with steps asks first) and **CLEAR Locks + Steps** (every lock in the
+current pattern, and every step's velocity, chance and ratchets back to
+100, 100% and none; the steps stay on or off).
+
+**Velocity** changes a drum's loudness only while its VEL>VOL setting is ON
+(PITCH + VELOCITY or VELOCITY + CLICK page). Console's starting kit has it
+on for every drum; kits and songs saved before have it off.
 
 ## Effects: reverb and delay (the FX key)
 

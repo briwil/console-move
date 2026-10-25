@@ -13,10 +13,11 @@ import os
 
 import audio
 import menu
+import sequencer
 
 KITS = os.path.join(audio.DATA, "kits")
 ITEMS = [("SAVE", "menu_new"), ("LOAD", "menu_save"), ("COPY", "menu_load"), ("CLEAR", "menu_settings")]
-TEXTS = {"SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern", "CLEAR": "CLEAR P-locks"}
+TEXTS = {"SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern", "CLEAR": "CLEAR Locks + Steps"}
 ROWS = 7                                   # saved kits shown at once (the layout's set_value1-7)
 
 
@@ -123,8 +124,8 @@ class KitMenu(menu.Menu):
             if self.copy_to == self.seq.current:
                 self.copy_to = (self.seq.current + 1) % 16
         elif what == "CLEAR":
-            if not self.lock_count()[0]:
-                self.say("THIS PATTERN HAS NO P-LOCKS")
+            if not self.lock_count()[1]:
+                self.say("THIS PATTERN HAS NO LOCKS OR CHANGED STEPS")
                 return
             self.mode, self.msg = "clear", ""
         else:
@@ -199,7 +200,9 @@ class KitMenu(menu.Menu):
         self.transport.say("PATTERN %d COPIED TO %d  (KNOB 10 TO GO THERE)" % (src + 1, dst + 1), 4)
 
     def lock_count(self):
-        steps = [s for ln in self.seq.pattern.lanes for s in ln.steps if s.locks]
+        """(locks, steps with locks or changed velocity / chance / ratchets) in the current pattern."""
+        steps = [s for ln in self.seq.pattern.lanes for s in ln.steps
+                 if s.locks or s.vel != sequencer.DEFAULT_VELOCITY or s.chance or s.ratchet != 1]
         return sum(len(s.locks) for s in steps), len(steps)
 
     def clear_locks(self):
@@ -208,9 +211,10 @@ class KitMenu(menu.Menu):
             for ln in self.seq.pattern.lanes:
                 for st in ln.steps:
                     st.locks.clear()
+                    st.vel, st.chance, st.ratchet = sequencer.DEFAULT_VELOCITY, 0, 1     # step settings too
         self.engine.seq_changed()
         self.close()
-        self.transport.say("P-LOCKS CLEARED FROM PATTERN %d" % (self.seq.current + 1), 3)
+        self.transport.say("LOCKS AND STEP SETTINGS CLEARED IN PATTERN %d" % (self.seq.current + 1), 3)
 
     # ------------------------------------------------------------ drawing
 
@@ -259,9 +263,9 @@ class KitMenu(menu.Menu):
             hint = "BIG KNOB: PICK A PATTERN     PLAY: COPY     FILE: BACK"
         elif self.mode == "clear":
             locks, steps = self.lock_count()
-            s.set("prompt", t="CLEAR EVERY P-LOCK IN PATTERN %d?" % (self.seq.current + 1), y=self.prompt_y)
+            s.set("prompt", t="CLEAR THE LOCKS AND STEP SETTINGS IN PATTERN %d?" % (self.seq.current + 1), y=self.prompt_y)
             s.set("name_text", t="%d LOCK%s ON %d STEP%s" % (locks, "" if locks == 1 else "S", steps, "" if steps == 1 else "S"))
-            hint = "PLAY: CLEAR THEM (THE STEPS STAY ON OR OFF)     FILE: BACK"
+            hint = "PLAY: CLEAR (VELOCITY 100, CHANCE 100%, NO RATCHETS; STEPS STAY ON OR OFF)   FILE: BACK"
         else:
             s.set("prompt", t="NAME THIS KIT", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")

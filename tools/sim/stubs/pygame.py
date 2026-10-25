@@ -39,15 +39,20 @@ class Surface:
             if w2<=0 or h2<=0: return
             o=Surface(None,img=o.img.crop((x2-x,y2-y,x2-x+w2,y2-y+h2))); p=(x2,y2)
         s.img.alpha_composite(o.img,(int(p[0]),int(p[1]))) if p[0]>=0 and p[1]>=0 else s.img.paste(o.img,(int(p[0]),int(p[1])),o.img)
-def _rect(surf,col,r,w=0,br=0,border_radius=None):
+def _rect(surf,col,r,w=0,br=0,border_radius=None,**corners):
     br=border_radius if border_radius is not None else br
+    kw={}
+    if corners:
+        get=lambda k: corners.get(k, br) or 0
+        cs=(get("border_top_left_radius"),get("border_top_right_radius"),get("border_bottom_right_radius"),get("border_bottom_left_radius"))
+        br=max(cs); kw={"corners":tuple(bool(c) for c in cs)}
     x,y,ww,h=r
     if surf.clip:
         cx,cy,cw,ch=surf.clip
         if y+h<=cy or y>=cy+ch or x+ww<=cx or x>=cx+cw: return
     if ww<=0 or h<=0: return
     c=tuple(col)
-    surf._d().rounded_rectangle([x,y,x+ww-1,y+h-1],radius=br,fill=c if w==0 else None,outline=None if w==0 else c,width=w or 1)
+    surf._d().rounded_rectangle([x,y,x+ww-1,y+h-1],radius=min(br,(h-1)//2,(ww-1)//2),fill=c if w==0 else None,outline=None if w==0 else c,width=w or 1,**kw)
 def _line(surf,col,a,b,w):
     if surf.clip:
         cx,cy,cw,ch=surf.clip

@@ -28,6 +28,8 @@ STEP_LABELS = {"length": "LENGTH", "vel": "VELOCITY", "chance": "CHANCE", "ratch
                "hits": "EUCLID", "rotate": "SHIFT", "rate": "RATE"}
 LANE_PARAMS = ("length", "hits", "rotate", "rate")
 SHORT = ["D1", "D2", "D3", "SN", "CY", "HHc", "HHo"]
+CHANCE_SHOW = 1.0                # seconds the steps show chance after the chance knob stops turning
+CHANCE_COLOUR = (242, 243, 245)
 GESTURE_GAP = 1.5                # seconds: knob turns closer together than this are one undo step
 
 
@@ -182,6 +184,8 @@ class SeqPage:
                     self.t.say("STEP %d OF %s IS OFF: HOLD ITS KEY TO SET IT" % (i + 1, SHORT[lane]), 2)
                     return
             e.seq_changed()
+            if param == "chance":
+                self._chance_until = time.monotonic() + CHANCE_SHOW   # the steps show chance for a moment
             lane = lanes[-1]
             self.t.say("%s  %s  %s" % (SHORT[lane], STEP_LABELS[param], self.step_value(param, lane)), 2)
             return
@@ -298,6 +302,7 @@ class SeqPage:
         if e.playing:
             playing = seq.position(e._heard_frame(), e.frames_per_beat())
         now = time.monotonic()
+        show_chance = now < getattr(self, "_chance_until", 0.0)
         for lane in range(sequencer.LANES):
             y = top + lane * row_h
             colour = ui.rgb(self.t.tab_colours.get(lane + 1) or "#7D838C")
@@ -326,7 +331,20 @@ class SeqPage:
                     pygame.draw.rect(surf, (32, 34, 40), (x, y, cw, ch), 1, border_radius=5)
                     continue
                 if st.on:
-                    pygame.draw.rect(surf, colour, (x, y, cw, ch), border_radius=5)
+                    # filled from the bottom by its velocity (or, just after turning the chance knob, its chance)
+                    c = sequencer.CHANCES[st.chance]
+                    if show_chance and ":" in c:
+                        t = tiny.render(c, True, CHANCE_COLOUR)
+                        surf.blit(t, (x + (cw - t.get_width()) // 2, y + (ch - t.get_height()) // 2))
+                    else:
+                        frac = int(c[:-1]) / 100 if show_chance else st.vel / 127
+                        h = max(2, round(ch * frac))
+                        pygame.draw.rect(surf, CHANCE_COLOUR if show_chance else colour, (x, y + ch - h, cw, h),
+                                         border_bottom_left_radius=5, border_bottom_right_radius=5,
+                                         border_top_left_radius=5 if h >= ch - 1 else 0,
+                                         border_top_right_radius=5 if h >= ch - 1 else 0)
+                    if not st.locks:
+                        pygame.draw.rect(surf, colour, (x, y, cw, ch), 2, border_radius=5)
                 if st.locks:
                     pygame.draw.rect(surf, purple, (x, y, cw, ch), 3, border_radius=5)
                 elif not st.on:

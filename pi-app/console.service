@@ -1,6 +1,7 @@
 [Unit]
 Description=Console recorder
-After=systemd-user-sessions.service sound.target
+# no waiting for the network (about 1.4 s at boot): Wi-Fi, Link and updates connect later by themselves
+After=sound.target
 Before=plymouth-quit.service plymouth-quit-wait.service
 Conflicts=getty@tty1.service
 

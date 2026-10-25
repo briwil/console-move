@@ -123,13 +123,14 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - **Power button:** EEPROM settings `WAIT_FOR_POWER_BUTTON=1` and `POWER_OFF_ON_HALT=1`,
   so the Pi stays off when power is plugged in and starts with the power button. The
   button is wired to the J2 pads next to the J5 battery connector.
-- **Boot speed:** `NetworkManager-wait-online` is disabled. The next ideas were:
-  - setting `NET_INSTALL_AT_POWER_ON=0` in the EEPROM;
-  - adding `vc4` to the initramfs (`FRAMEBUFFER=y`, `auto_initramfs=1`,
-    `sudo update-initramfs -u`) so the splash shows sooner.
-
-  Those were given to Brian to try, and the results aren't recorded yet. Boot was about
-  10 s (kernel 1.7 s, userspace 5.2 s, plus firmware).
+- **Boot speed:**
+  - `NetworkManager-wait-online` is disabled.
+  - `vc4` is in the initramfs (`FRAMEBUFFER=y`, `auto_initramfs=1`) so the logo shows sooner.
+  - On 25 Oct 2026, after those changes, boot took 1.7 s kernel + 4.9 s userspace, about
+    8 s from the logo to the app.
+  - Next: the app service no longer waits for the network, and cloud-init can be turned off
+    with `sudo touch /etc/cloud/cloud-init.disabled` (it takes about 1 s each boot and is
+    only needed the first time).
 - The GPIO header pins were **clipped** (not removed), to make room in the case.
 - The screen's ribbon is an FPV-style 20-pin, 0.5 mm pitch cable, folded at 45°.
 

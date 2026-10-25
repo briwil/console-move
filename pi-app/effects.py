@@ -39,13 +39,13 @@ def _load():
     if not os.path.exists(LIB) or stale:
         ok, err = _build()
         if not ok and not os.path.exists(LIB):
-            PROBLEM = "EFFECTS NEED BUILDING: RUN pi-app/setup.sh"
+            PROBLEM = "EFFECTS NEED BUILDING: RUN ~/console/pi-app/setup.sh"
             print("Effects: couldn't build fx/libconsolefx.so (%s). Run pi-app/setup.sh." % err)
             return None
     try:
         lib = ctypes.CDLL(LIB)
     except OSError as e:
-        PROBLEM = "EFFECTS NEED BUILDING: RUN pi-app/setup.sh"
+        PROBLEM = "EFFECTS NEED BUILDING: RUN ~/console/pi-app/setup.sh"
         print("Effects: couldn't load %s: %s" % (LIB, e))
         return None
     f, p, i = ctypes.c_float, ctypes.c_void_p, ctypes.c_int

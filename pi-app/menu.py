@@ -173,7 +173,7 @@ class Menu:
             e.set_sync_mode(modes[(modes.index(e.sync_mode) + (1 if delta > 0 else -1)) % len(modes)])
             import linksync
             if e.sync_mode == "link" and not linksync.AVAILABLE:
-                self.say("LINK NEEDS INSTALLING: RUN pi-app/setup.sh ONCE OVER SSH, THEN RESTART")
+                self.say("LINK NEEDS INSTALLING: RUN ~/console/pi-app/setup.sh ONCE OVER SSH, THEN RESTART")
             else:
                 self.say({"internal": "CONSOLE SENDS MIDI CLOCK, START AND STOP",
                           "external": "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP",
@@ -281,7 +281,7 @@ class Menu:
         if u.state == "error":
             return u.detail
         if u.state == "done" and u.needs_setup:
-            return "THIS UPDATE NEEDS pi-app/setup.sh RUN ONCE (OVER SSH), THEN PLAY"
+            return "THIS UPDATE NEEDS ~/console/pi-app/setup.sh RUN ONCE (OVER SSH), THEN PLAY"
         if u.state == "installing":
             return "DON'T TURN OFF THE CONSOLE"
         return ""

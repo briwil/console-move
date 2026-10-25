@@ -49,7 +49,7 @@ def _load(path=LIB):
     if path == LIB and (not os.path.exists(LIB) or _newest_source() > os.path.getmtime(LIB)):
         ok, err = _build()
         if not ok and not os.path.exists(LIB):
-            PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN pi-app/setup.sh"
+            PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN ~/console/pi-app/setup.sh"
             print("Drums: couldn't build drums/libdrums.so (%s). Run pi-app/setup.sh." % err[-500:])
             return None
     if path != LIB:
@@ -64,7 +64,7 @@ def _load(path=LIB):
     try:
         lib = ctypes.CDLL(path)
     except OSError as e:
-        PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN pi-app/setup.sh"
+        PROBLEM = "DRUM SYNTH NEEDS BUILDING: RUN ~/console/pi-app/setup.sh"
         print("Drums: couldn't load %s: %s" % (LIB, e))
         return None
     i, v = ctypes.c_int, None

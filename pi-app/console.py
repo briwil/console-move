@@ -224,6 +224,9 @@ class Transport:
         self.drum_voice = 0                       # the voice the knobs edit (the last one played), 0-5
         self.drum_tab = 0                         # which page of its settings (knob 9 turns them)
         self._drum_hits = [0.0] * 6               # when each voice was last played, to light it up
+        self.drum_key = 1                         # the drum key played last (7: the open hi-hat)
+        import drumpage
+        self.drumpage = drumpage.DrumPage(self)
         self._knob_times = {}                     # knob -> when it last clicked, to speed up fast turns
         self.seq_page = False                     # the MIDI key's second press: the sequencer
         self.seqp = seqpage.SeqPage(self)
@@ -438,6 +441,7 @@ class Transport:
         e.hit(n - 1, 100)
         voice = min(n, 6) - 1                     # 7 (open hi-hat) is the hi-hat voice too
         self.drum_voice = voice
+        self.drum_key = n
         self._drum_hits[voice] = time.monotonic()
         return True
 
@@ -457,6 +461,7 @@ class Transport:
             return
         param = params[number - 1]
         e.change_drum(param, self.knob_clicks(number, delta, shift))
+        self.drumpage.edited[number] = time.monotonic()        # lime, with its value, for a moment
         self.say("%s  %s  %s" % (drums_mod().NAMES[self.drum_voice], drumparams.LABELS[param],
                                  e.drums.value_text(param)), 2)
 
@@ -560,10 +565,18 @@ class Transport:
             self.draw_fx(surf, it)
         elif self.seq_page and self.engine and self.engine.drums:
             self.seqp.draw(surf)
-        elif self.drum_page and self.engine and self.engine.drums:
-            self.draw_drums(surf)
+        elif self.full_drum_page():
+            pass                                  # drawn over the whole screen at the end (draw_full_page)
         else:
             self.draw_fx(surf, it)
+
+    def full_drum_page(self):
+        return bool(self.drum_page and not self.fx_page and not self.seq_page and self.engine and self.engine.drums)
+
+    def draw_full_page(self, surf):
+        """Pages that take the whole screen, drawn after everything else."""
+        if self.full_drum_page():
+            self.drumpage.draw(surf)
 
     def draw_drums(self, surf):
         """The drum page: knob n's setting across track n's lane, and the voices and pages on the right."""
@@ -1232,6 +1245,7 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
             project_menu.kits.draw(frame)
         else:
             screen.draw(frame)
+            transport.draw_full_page(frame)
         out = pygame.transform.rotate(frame, rotate) if rotate else frame
         if out.get_size() != (dw, dh):
             scale = min(dw / out.get_width(), dh / out.get_height())

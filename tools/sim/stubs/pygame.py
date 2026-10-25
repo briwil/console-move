@@ -73,6 +73,7 @@ class Font:
         asc,desc=s.f.getmetrics(); return (int(s.f.getlength(t)), asc+desc)
     def get_height(s):
         asc,desc=s.f.getmetrics(); return asc+desc
+    def get_ascent(s): return s.f.getmetrics()[0]
     def render(s,t,aa,c):
         l,tp,r,b=s.f.getbbox(t); asc,desc=s.f.getmetrics()
         im=Image.new("RGBA",(max(1,r),asc+desc),(0,0,0,0)); ImageDraw.Draw(im).text((0,0),t,font=s.f,fill=tuple(c)); return Surface(None,img=im)

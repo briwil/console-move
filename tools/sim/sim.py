@@ -61,5 +61,6 @@ def shot(t, path, m=None):
         t.update_screen()
         t.sim_screen.draw(f)
         t.focus.draw_panel(f)
+        t.draw_full_page(f)
     f.img.convert("RGB").save(path)
     return path

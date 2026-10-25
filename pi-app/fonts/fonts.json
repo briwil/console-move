@@ -114,5 +114,16 @@
    "600": "RobotoCondensed-SemiBold.ttf",
    "700": "RobotoCondensed-Bold.ttf"
   }
+ },
+ "outfit": {
+  "name": "Outfit",
+  "files": {
+   "200": "Outfit-ExtraLight.ttf",
+   "300": "Outfit-Light.ttf",
+   "400": "Outfit-Regular.ttf",
+   "500": "Outfit-Medium.ttf",
+   "600": "Outfit-SemiBold.ttf",
+   "900": "Outfit-Black.ttf"
+  }
  }
 }

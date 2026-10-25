@@ -95,6 +95,12 @@ class Updater:
         files = changed.splitlines()
         self.needs_setup = "pi-app/setup.sh" in files
         self.splash_changed = any(f.startswith("pi-app/splash/") for f in files)
+        if any(f.startswith("pi-app/web/") or f in ("pi-app/theme.py", "pi-app/theme.json") for f in files):
+            try:                                    # the file page runs on its own: restart it on the new code
+                subprocess.run(["sudo", "-n", "systemctl", "try-restart", "console-web"], capture_output=True,
+                               timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                pass
         _, self.version, _ = git("log", "-1", "--format=%h  %cd", "--date=format:%b %d %Y", timeout=10)
         self.log("Updated to %s (%d changes)" % (self.version, self.count))
         self.state = "done"

@@ -20,6 +20,7 @@ import pygame
 
 import ui
 import updater
+import wifi
 
 ITEMS = [("NEW", "menu_new"), ("SAVE", "menu_save"), ("LOAD", "menu_load"), ("SETTINGS", "menu_settings")]
 ON, OFF = "#3CCB7F", "#5A606B"
@@ -27,8 +28,11 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "UPDATE"]
-LABELS = {"SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
+SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "WIFI", "UPDATE"]
+ROWS = 7                                     # setting rows on screen at once (the layout's set_label1-7)
+PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
+MAX_PASSWORD = 63
+LABELS = {"WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -46,6 +50,7 @@ class Menu:
         self.cursor = 0
         self.ys = {n: (self.s.get(n) or {}).get("y", 0) for _, n in ITEMS}
         bar = self.s.get("menu_bar")
+        self.bar_h = bar["h"] if bar else 0
         load = self.s.get("menu_load")
         self.bar_offset = (bar["y"] - load["y"]) if bar and load else -4
         self.bar_w = bar["w"] if bar else 920
@@ -56,6 +61,8 @@ class Menu:
         self.naming = "new"                   # what the name is for: "new" project or "save" an unnamed one
         self.updater = None                   # made the first time SETTINGS opens
         self.restart = False                  # True once an update is installed: the app restarts
+        self.wifi = wifi.Wifi()
+        self.letters = LETTERS                # what the big knob steps through while typing a name
         self.songs = []                       # the LOAD list
         self.pick = 0
         self.confirm = None                   # a delete or open waiting for its second press
@@ -88,6 +95,8 @@ class Menu:
             return
         if self.mode == "load":
             self.load_key(name)
+        elif self.mode == "wifi":
+            self.wifi_key(name)
         elif self.mode == "name":
             self.name_key(name)
         elif self.mode == "settings":
@@ -103,6 +112,11 @@ class Menu:
         self.refresh()
 
     def turn(self, delta):
+        if self.mode == "wifi":
+            if self.wifi.networks:
+                self.pick = max(0, min(len(self.wifi.networks) - 1, self.pick + delta))
+            self.msg, self.confirm = "", None
+            return
         if self.mode == "load":
             if self.songs:
                 self.pick = max(0, min(len(self.songs) - 1, self.pick + delta))
@@ -119,15 +133,16 @@ class Menu:
             return
         # naming: change the letter under the cursor
         if self.cursor >= len(self.name):
-            if len(self.name) >= MAX_NAME:
+            if len(self.name) >= (MAX_PASSWORD if self.naming == "wifi" else MAX_NAME):
                 return
             self.name.append("A")              # a new letter starts at A
             if delta > 0:
                 delta -= 1
             else:
                 delta += 1
-        i = LETTERS.find(self.name[self.cursor])
-        self.name[self.cursor] = LETTERS[(max(i, 0) + delta) % len(LETTERS)]
+        letters = self.letters
+        i = letters.find(self.name[self.cursor])
+        self.name[self.cursor] = letters[(max(i, 0) + delta) % len(letters)]
 
     def name_key(self, name):
         if name in ("LEFT", "BAR_LEFT"):
@@ -139,7 +154,8 @@ class Menu:
         elif name in CONFIRM:
             self.create()
         elif name == "FILE":
-            self.mode = "load" if self.naming == "rename" else "list"
+            self.mode = {"rename": "load", "wifi": "wifi"}.get(self.naming, "list")
+            self.letters = LETTERS
             self.msg = ""
 
     def settings_key(self, name):
@@ -154,13 +170,16 @@ class Menu:
         elif name in CONFIRM:
             if SETTINGS[self.row] == "UPDATE":
                 self.update_action()
+            elif SETTINGS[self.row] == "WIFI":
+                self.mode, self.msg, self.confirm, self.pick = "wifi", "", None, 0
+                self.wifi.scan()
             elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
 
     def change(self, delta, fine=False):
-        if SETTINGS[self.row] == "UPDATE":
+        if SETTINGS[self.row] in ("UPDATE", "WIFI"):
             self.say("PRESS PLAY")
             return
         e = self.engine
@@ -243,6 +262,9 @@ class Menu:
             return self.output_text()
         if what == "UPDATE":
             return self.update_text()
+        if what == "WIFI":
+            ssid = wifi.current()
+            return "%s  \u00b7  PLAY FOR NETWORKS" % (ssid if ssid else "NOT CONNECTED")
         return ""
 
     def update_action(self):
@@ -329,6 +351,9 @@ class Menu:
             self.mode, self.msg = "list", ""
         elif ch in ("\x7f", "\b"):
             self.delete(self.cursor - 1)
+        elif self.naming == "wifi" and ch.isprintable() and len(self.name) < MAX_PASSWORD:
+            self.name.insert(self.cursor, ch)
+            self.cursor += 1
         elif ch.isprintable() and ch not in '/\\:*?"<>|' and len(self.name) < MAX_NAME:
             self.name.insert(self.cursor, ch)
             self.cursor += 1
@@ -384,6 +409,43 @@ class Menu:
             self.mode, self.msg, self.confirm = "load", "", None
             self.pick = self.songs.index(e.song) if e.song in self.songs else 0
 
+    def wifi_key(self, name):
+        """The Wi-Fi list: big knob picks, PLAY connects (asking for the password if it's new),
+        CUT forgets a saved network (press twice), FILE goes back to the settings."""
+        w = self.wifi
+        if name in ("LEFT", "UP", "BAR_LEFT"):
+            self.turn(-1)
+        elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
+            self.turn(1)
+        elif name == "FILE":
+            self.mode, self.msg = "settings", ""
+        elif name == "COPY":                                # the LIFT key: look again
+            w.scan()
+        elif w.busy or not w.networks:
+            return
+        elif name == "CUT":
+            n = w.networks[self.pick]
+            if not n["saved"]:
+                self.say("%s ISN'T SAVED" % n["ssid"].upper())
+            elif self.confirm != ("forget", n["ssid"]):
+                self.confirm = ("forget", n["ssid"])
+                self.say("FORGET %s? CUT AGAIN TO FORGET IT" % n["ssid"].upper())
+            else:
+                self.confirm = None
+                w.forget(n["ssid"])
+                self.msg = ""
+        elif name in CONFIRM:
+            n = w.networks[self.pick]
+            if n["active"]:
+                self.say("ALREADY CONNECTED TO %s" % n["ssid"].upper())
+            elif n["saved"] or not n["secure"]:
+                w.connect(n["ssid"])
+                self.msg = ""
+            else:
+                self.joining = n["ssid"]
+                self.mode, self.naming, self.letters = "name", "wifi", PASSWORD_LETTERS
+                self.name, self.cursor, self.msg = [], 0, ""
+
     def load_key(self, name):
         """The LOAD list: big knob or arrows pick, PLAY opens, CUT deletes (press twice), FILE goes back."""
         e = self.engine
@@ -425,7 +487,15 @@ class Menu:
             self.close()
 
     def create(self):
-        """Save the unnamed song with the name typed in."""
+        """Save the unnamed song with the name typed in (or, for Wi-Fi, connect with the password)."""
+        if self.naming == "wifi":
+            password = "".join(self.name)
+            if len(password) < 8:
+                self.say("WI-FI PASSWORDS ARE AT LEAST 8 CHARACTERS")
+                return
+            self.wifi.connect(self.joining, password)
+            self.mode, self.letters, self.msg = "wifi", LETTERS, ""
+            return
         name = "".join(self.name).strip()
         e = self.engine
         if not name:
@@ -491,21 +561,25 @@ class Menu:
         if self.mode == "load":
             self.refresh_load()
             return
-        for i in range(1, len(SETTINGS) + 1):
+        if self.mode == "wifi":
+            self.refresh_wifi()
+            return
+        top = max(0, min(self.row - ROWS // 2, len(SETTINGS) - ROWS))     # the rows scroll when there are more
+        for i in range(1, ROWS + 1):
             s.set("set_value%d" % i, x=660, a="left")
-            what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
-            on = what is not None and i - 1 == self.row
+            k = top + i - 1
+            what = SETTINGS[k] if settings and k < len(SETTINGS) else None
+            on = what is not None and k == self.row
             s.set("set_label%d" % i, t=LABELS.get(what, ""), c=ON if on else OFF)
             s.set("set_value%d" % i, t=self.setting_text(what) if what else "",
                   c=ON if on else "#F2F3F5")
         bar = s.get("menu_bar")
         if bar:
             if settings:
-                row = s.get("set_label%d" % (self.row + 1))
-                s.set("menu_bar", y=self.bar_y("set_label%d" % (self.row + 1)), h=bar["h"], w=1280 + 180)
+                s.set("menu_bar", y=self.bar_y("set_label%d" % (self.row - top + 1)), h=self.bar_h, w=1280 + 180)
             else:
                 item = ITEMS[self.choice][1]
-                s.set("menu_bar", y=self.bar_y(item), h=bar["h"] if listing else 0, w=self.bar_w)
+                s.set("menu_bar", y=self.bar_y(item), h=self.bar_h if listing else 0, w=self.bar_w)
         if listing:
             s.set("prompt", t="")
             s.set("name_text", t="")
@@ -515,7 +589,8 @@ class Menu:
             s.set("name_text", t="")
             hint = "SETTINGS     BIG KNOB: PICK A ROW     ARROW KEYS: CHANGE IT     FILE: BACK TO THE MENU"
         else:
-            prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(self, "renaming", "").upper()}
+            prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(self, "renaming", "").upper(),
+                      "wifi": "PASSWORD FOR %s" % getattr(self, "joining", "").upper()}
             s.set("prompt", t=prompt.get(self.naming, "NAME THIS PROJECT"), y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
             hint = "BIG KNOB: LETTER   ARROW KEYS: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
@@ -524,6 +599,34 @@ class Menu:
             s.set("menu_msg", t=self.update_message())
         else:
             s.set("menu_msg", t=self.msg)
+
+    def refresh_wifi(self):
+        """The Wi-Fi list: signal on the left, name and state on the right."""
+        s, w = self.s, self.wifi
+        for label, item in ITEMS:
+            s.set(item, t="")
+        nets = w.networks
+        top = max(0, min(self.pick - ROWS // 2, len(nets) - ROWS))
+        for r in range(ROWS):
+            i = top + r
+            n = nets[i] if i < len(nets) else None
+            on = n is not None and i == self.pick
+            if n:
+                state = "   CONNECTED" if n["active"] else "   SAVED" if n["saved"] else "" if n["secure"] else "   OPEN"
+                s.set("set_label%d" % (r + 1), t="%d%%" % n["signal"], c=ON if on else OFF)
+                s.set("set_value%d" % (r + 1), t=n["ssid"] + state, c=ON if on else "#F2F3F5", x=660, a="left")
+            else:
+                s.set("set_label%d" % (r + 1), t="")
+                s.set("set_value%d" % (r + 1), t="", x=660, a="left")
+        bar = s.get("menu_bar")
+        if bar:
+            s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=self.bar_h if nets else 0,
+                  w=1280 + 180)
+        s.set("prompt", t="")
+        s.set("name_text", t="")
+        s.set("menu_hint", t="WI-FI    PLAY: CONNECT    LIFT: LOOK AGAIN    CUT: FORGET    FILE: BACK")
+        busy = {"SCANNING": "LOOKING FOR NETWORKS...", "CONNECTING": "CONNECTING..."}.get(w.busy)
+        s.set("menu_msg", t=self.msg or busy or w.message)
 
     def refresh_load(self):
         """The LOAD list: newest first, the open song marked, in the settings rows."""
@@ -542,7 +645,7 @@ class Menu:
                   c=ON if on else "#F2F3F5", x=660, a="left")
         bar = s.get("menu_bar")
         if bar and self.songs:
-            s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=bar["h"], w=1280 + 180)
+            s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=self.bar_h, w=1280 + 180)
         s.set("prompt", t="")
         s.set("name_text", t="")
         s.set("menu_hint", t="BIG KNOB: PICK    PLAY: OPEN    LIFT: RENAME    CUT: DELETE    FILE: BACK")
@@ -561,7 +664,7 @@ class Menu:
             middle = it["y"] + r.y + r.h / 2
         except Exception:
             middle = it["y"] + it["s"] * 0.6
-        return round(middle - bar["h"] / 2)
+        return round(middle - self.bar_h / 2)
 
     def draw_cursor(self, surf):
         """A block under the letter being changed, OP-1 style."""
@@ -581,6 +684,8 @@ class Menu:
         pygame.draw.rect(surf, ui.rgb(ON), (x0 + before, y, w, 4))
 
     def draw(self, surf):
+        if self.mode == "wifi":
+            self.refresh()                      # scanning and connecting finish by themselves
         if self.mode == "settings":
             self.refresh()                      # the OUTPUT and UPDATE rows change by themselves
             u = self.updater

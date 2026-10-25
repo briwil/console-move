@@ -62,6 +62,12 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     plays on the other and says so here. SHIFT + knob 10 sets the headphone (or USB headphone adapter)
     volume (it shows the level while you turn it). With nothing plugged in
     at all, the tape still plays on the headphones; it just can't record.
+  - **WI-FI:** shows the network the Pi is on. Press PLAY to see the networks
+    nearby (strongest first, with signal strength; CONNECTED, SAVED or OPEN
+    beside the name). Big knob or arrow keys pick one; PLAY connects. A saved or
+    open network connects straight away; a new one asks for its password: type
+    it with the big knob (letters, numbers and symbols) or a USB keyboard, then
+    PLAY. LIFT looks again, CUT twice forgets a saved network, FILE goes back.
   - **SOFTWARE UPDATE:** press PLAY to check GitHub for a new version. If
     there is one, it shows what's new; press PLAY again to install it. The
     app then restarts by itself (your song is saved first). It needs the

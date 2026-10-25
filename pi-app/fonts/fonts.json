@@ -1,20 +1,20 @@
 {
  "sans": {
-  "name": "Inter Tight",
+  "name": "Roboto Condensed",
   "files": {
-   "400": "InterTight-Regular.ttf",
-   "500": "InterTight-Medium.ttf",
-   "600": "InterTight-SemiBold.ttf",
-   "700": "InterTight-Bold.ttf"
+   "400": "RobotoCondensed-Regular.ttf",
+   "500": "RobotoCondensed-Medium.ttf",
+   "600": "RobotoCondensed-SemiBold.ttf",
+   "700": "RobotoCondensed-Bold.ttf"
   }
  },
  "mono": {
-  "name": "IBM Plex Mono",
+  "name": "Roboto Condensed",
   "files": {
-   "400": "IBMPlexMono-Regular.ttf",
-   "500": "IBMPlexMono-Medium.ttf",
-   "600": "IBMPlexMono-SemiBold.ttf",
-   "700": "IBMPlexMono-Bold.ttf"
+   "400": "RobotoCondensed-Regular.ttf",
+   "500": "RobotoCondensed-Medium.ttf",
+   "600": "RobotoCondensed-SemiBold.ttf",
+   "700": "RobotoCondensed-Bold.ttf"
   }
  },
  "plexsans": {
@@ -86,6 +86,33 @@
   "name": "DotGothic16",
   "files": {
    "400": "DotGothic16-Regular.ttf"
+  }
+ },
+ "inter": {
+  "name": "Inter Tight",
+  "files": {
+   "400": "InterTight-Regular.ttf",
+   "500": "InterTight-Medium.ttf",
+   "600": "InterTight-SemiBold.ttf",
+   "700": "InterTight-Bold.ttf"
+  }
+ },
+ "plexmono": {
+  "name": "IBM Plex Mono",
+  "files": {
+   "400": "IBMPlexMono-Regular.ttf",
+   "500": "IBMPlexMono-Medium.ttf",
+   "600": "IBMPlexMono-SemiBold.ttf",
+   "700": "IBMPlexMono-Bold.ttf"
+  }
+ },
+ "roboto": {
+  "name": "Roboto Condensed",
+  "files": {
+   "400": "RobotoCondensed-Regular.ttf",
+   "500": "RobotoCondensed-Medium.ttf",
+   "600": "RobotoCondensed-SemiBold.ttf",
+   "700": "RobotoCondensed-Bold.ttf"
   }
  }
 }

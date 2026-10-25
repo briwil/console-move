@@ -502,23 +502,23 @@ class Menu:
         if bar:
             if settings:
                 row = s.get("set_label%d" % (self.row + 1))
-                s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
+                s.set("menu_bar", y=self.bar_y("set_label%d" % (self.row + 1)), h=bar["h"], w=1280 + 180)
             else:
                 item = ITEMS[self.choice][1]
-                s.set("menu_bar", y=self.ys[item] + self.bar_offset, h=bar["h"] if listing else 0, w=self.bar_w)
+                s.set("menu_bar", y=self.bar_y(item), h=bar["h"] if listing else 0, w=self.bar_w)
         if listing:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = "TURN OR \u2190 \u2192 TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
+            hint = "BIG KNOB OR ARROW KEYS TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE SONG"
         elif settings:
             s.set("prompt", t="")                 # 7 rows fill the screen: the hint says where we are
             s.set("name_text", t="")
-            hint = "SETTINGS     BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
+            hint = "SETTINGS     BIG KNOB: PICK A ROW     ARROW KEYS: CHANGE IT     FILE: BACK TO THE MENU"
         else:
             prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(self, "renaming", "").upper()}
             s.set("prompt", t=prompt.get(self.naming, "NAME THIS PROJECT"), y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
-            hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
+            hint = "BIG KNOB: LETTER   ARROW KEYS: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
         s.set("menu_hint", t=hint)
         if settings and SETTINGS[self.row] == "UPDATE" and self.updater and not self.msg:
             s.set("menu_msg", t=self.update_message())
@@ -542,12 +542,26 @@ class Menu:
                   c=ON if on else "#F2F3F5", x=660, a="left")
         bar = s.get("menu_bar")
         if bar and self.songs:
-            row = s.get("set_label%d" % (self.pick - top + 1))
-            s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
+            s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=bar["h"], w=1280 + 180)
         s.set("prompt", t="")
         s.set("name_text", t="")
         s.set("menu_hint", t="BIG KNOB: PICK    PLAY: OPEN    LIFT: RENAME    CUT: DELETE    FILE: BACK")
         s.set("menu_msg", t=self.msg)
+
+    def bar_y(self, item):
+        """Where the highlight bar goes to sit centred on a line of text: on its capital letters
+        (descenders like the j in Project don't pull it down)."""
+        s = self.s
+        it, bar = s.get(item), s.get("menu_bar")
+        if not it or not bar:
+            return 0
+        try:
+            font = s.font(it["f"], it["wt"], it["s"])
+            r = font.render("H", True, (255, 255, 255)).get_bounding_rect()
+            middle = it["y"] + r.y + r.h / 2
+        except Exception:
+            middle = it["y"] + it["s"] * 0.6
+        return round(middle - bar["h"] / 2)
 
     def draw_cursor(self, surf):
         """A block under the letter being changed, OP-1 style."""

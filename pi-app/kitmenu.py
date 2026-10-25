@@ -241,15 +241,14 @@ class KitMenu(menu.Menu):
         bar = s.get("menu_bar")
         if bar:
             if loading:
-                row = s.get("set_value%d" % (self.pick - top + 1))
-                s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
+                s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=bar["h"], w=1280 + 180)
             else:
                 item = ITEMS[self.choice][1]
-                s.set("menu_bar", y=self.ys[item] + self.bar_offset, h=bar["h"] if listing else 0, w=self.bar_w)
+                s.set("menu_bar", y=self.bar_y(item), h=bar["h"] if listing else 0, w=self.bar_w)
         if listing:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = "TURN OR ← → TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE DRUMS"
+            hint = "BIG KNOB OR ARROW KEYS TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE DRUMS"
         elif loading:
             s.set("prompt", t="")
             s.set("name_text", t="")
@@ -269,7 +268,7 @@ class KitMenu(menu.Menu):
         else:
             s.set("prompt", t="NAME THIS KIT", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
-            hint = "BIG KNOB: LETTER   ← →: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
+            hint = "BIG KNOB: LETTER   ARROW KEYS: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
         s.set("menu_hint", t=hint)
         if self.msg or self.mode != "copy":
             s.set("menu_msg", t=self.msg)

@@ -101,6 +101,22 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - While playing, the cursor is hidden and drum keys place steps live at the playhead.
 - It's locked to the tape, so recording the sequencer onto tracks lands exactly in time.
 
+### Drum page and the theme
+
+- `drumpage.py` draws the drum page full screen, to Brian's Illustrator design (Oct 2026).
+  - Settings run left to right like the knobs.
+  - Numbers are line bars that peak at the value; choices are boxes with text.
+  - The setting being turned is lime, with its value in place of its name.
+  - The pages run along the bottom, and three red dots show while recording.
+- Its colours, fonts and sizes come from `theme.py`. The defaults are in `pi-app/theme.json`,
+  and Brian's edits in `~/console-data/theme.json`.
+- The theme editor is `web/theme.html`, served by `web/server.py` at `/theme`:
+  - edits save through `/api/theme`;
+  - the app checks the theme files twice a second;
+  - for the live picture, the page asks with `~/console-data/.screen-request`, and the app answers
+    by saving `.screen.png` (`screen_picture` in console.py).
+- To make Brian's downloaded theme the default, copy its values into `pi-app/theme.json`.
+
 ### Sync
 
 - **MIDI:** follow the OP-XY's clock (recording waits for its play) or lead it.

@@ -223,7 +223,7 @@ class Screen:
         return changed
 
     def font(self, family, weight, size):
-        weights = FONT_FILES[family]
+        weights = FONT_FILES.get(family) or FONT_FILES["sans"]
         wt = min(weights, key=lambda w: abs(w - weight))
         key = (family, wt, size)
         if key not in self._fonts:

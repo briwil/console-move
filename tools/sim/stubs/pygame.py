@@ -80,3 +80,4 @@ class Font:
 font=types.SimpleNamespace(Font=Font,init=lambda:None)
 transform=types.SimpleNamespace(rotate=lambda s,a: Surface(None,img=s.img.rotate(a,expand=True)),smoothscale=lambda s,size:Surface(None,img=s.img.resize(size)))
 def init(): pass
+image=types.SimpleNamespace(save=lambda surf,path: surf.img.convert("RGB").save(path))

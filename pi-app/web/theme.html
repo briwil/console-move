@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console theme</title>
+<style>
+  @font-face { font-family: "Inter Tight"; font-weight: 400; src: url(/fonts/InterTight-Regular.ttf); }
+  @font-face { font-family: "Inter Tight"; font-weight: 500; src: url(/fonts/InterTight-Medium.ttf); }
+  @font-face { font-family: "Inter Tight"; font-weight: 600; src: url(/fonts/InterTight-SemiBold.ttf); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url(/fonts/IBMPlexMono-Medium.ttf); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url(/fonts/IBMPlexMono-SemiBold.ttf); }
+  :root {
+    --bg: #0C0D10; --panel: #14161A; --lane: #17191E; --line: #262A31; --fg: #F2F3F5; --dim: #7D838C;
+    --blue: #4F8CFF; --green: #3CCB7F; --red: #FF5A4E;
+    --ui: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--ui); }
+  body { padding: 0 16px 48px; }
+  main { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px 0 0; }
+  h1 { font: 600 20px var(--mono); letter-spacing: .04em; margin: 0; }
+  h2 { font: 600 13px var(--mono); letter-spacing: .06em; color: var(--dim); margin: 0 0 8px; text-transform: uppercase; }
+  a.back { color: var(--fg); }
+  button, .button { font: 500 14px var(--ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+  .button { text-decoration: none; display: inline-block; }
+  button:hover, .button:hover { border-color: var(--dim); }
+  button.danger { color: var(--red); }
+  button.confirm { background: var(--red); border-color: var(--red); color: #fff; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .screen { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; }
+  .screen img { width: 100%; max-width: 1280px; aspect-ratio: 1280 / 400; display: block; background: #000; border: 1px solid var(--line); border-radius: 6px; image-rendering: auto; }
+  .status { font: 500 12px var(--mono); color: var(--dim); min-height: 1.4em; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto 28px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row label { font-size: 14px; }
+  .row .ctl { display: flex; gap: 6px; align-items: center; }
+  input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
+  input[type=text], input[type=number], select { font: 13px var(--mono); color: var(--fg); background: var(--lane); border: 1px solid var(--line); border-radius: 5px; padding: 5px 6px; }
+  input.hex { width: 86px; }
+  input[type=number] { width: 70px; }
+  .font { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .font:last-child { border-bottom: 0; }
+  .font .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .font .ctl { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+  .font .ctl span { font-size: 12px; color: var(--dim); }
+  .sample { font-size: 26px; line-height: 1.2; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .undo { width: 28px; height: 28px; padding: 0; font-size: 15px; line-height: 1; visibility: hidden; }
+  .changed .undo { visibility: visible; }
+  .hint { color: var(--dim); font-size: 13px; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>CONSOLE THEME</h1>
+    <div class="tools">
+      <a class="button" href="/">Files</a>
+      <button id="download">Download theme</button>
+      <label class="button">Load theme<input id="load" type="file" accept=".json,application/json" hidden></label>
+      <button id="reset" class="danger">Back to defaults</button>
+    </div>
+  </header>
+  <p class="hint">Changes save by themselves and show on Console's screen within a second. The picture below is what the screen shows now: put Console on the page you're changing (the drum page is the MIDI key). To make a theme the default for good, download it and send it over.</p>
+
+  <section class="screen">
+    <img id="shot" alt="Console's screen">
+    <div class="status" id="status">Asking Console for a picture of its screen…</div>
+  </section>
+
+  <div id="sections"></div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let defaults = {}, current = {}, fonts = {};
+const loadedFaces = new Set();
+
+const nice = k => k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()).replace(/\b9\b/, "9");
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const hexOk = v => /^#[0-9a-f]{6}$/i.test(v);
+
+function face(family, weight) {
+  // load a font from the console so the sample shows it
+  const f = fonts[family]; if (!f) return "sans-serif";
+  const w = f.weights.reduce((a, b) => Math.abs(b - weight) < Math.abs(a - weight) ? b : a);
+  const name = "c-" + family + "-" + w;
+  if (!loadedFaces.has(name)) {
+    loadedFaces.add(name);
+    const ff = new FontFace(name, "url(/fonts/" + f.files[String(w)] + ")");
+    ff.load().then(x => document.fonts.add(x)).catch(() => {});
+  }
+  return '"' + name + '"';
+}
+
+function build() {
+  const box = $("#sections"); box.innerHTML = "";
+  for (const [sec, sdef] of Object.entries(defaults)) {
+    const h = document.createElement("h2"); h.textContent = sdef.name || nice(sec); box.appendChild(h);
+    const grid = document.createElement("div"); grid.className = "grid"; box.appendChild(grid);
+    const cur = current[sec];
+    if (sdef.colours) grid.appendChild(colourCard(sec, sdef.colours, cur.colours));
+    if (sdef.fonts) grid.appendChild(fontCard(sec, sdef.fonts, cur.fonts));
+    if (sdef.shapes) grid.appendChild(shapeCard(sec, sdef.shapes, cur.shapes));
+  }
+}
+
+function card(title) {
+  const c = document.createElement("div"); c.className = "card";
+  const h = document.createElement("h2"); h.textContent = title; c.appendChild(h); return c;
+}
+function undoButton(onclick) {
+  const b = document.createElement("button"); b.className = "undo"; b.title = "Back to the default"; b.textContent = "↺";
+  b.onclick = onclick; return b;
+}
+
+function colourCard(sec, defs, cur) {
+  const c = card("Colours");
+  for (const k of Object.keys(defs)) {
+    const row = document.createElement("div"); row.className = "row";
+    const lab = document.createElement("label"); lab.textContent = nice(k);
+    const ctl = document.createElement("div"); ctl.className = "ctl";
+    const pick = document.createElement("input"); pick.type = "color";
+    const hex = document.createElement("input"); hex.type = "text"; hex.className = "hex"; hex.spellcheck = false;
+    const set = v => { pick.value = v.toLowerCase(); hex.value = v.toUpperCase(); row.classList.toggle("changed", v.toLowerCase() !== defs[k].toLowerCase()); };
+    set(cur[k]);
+    pick.oninput = () => { cur[k] = pick.value.toUpperCase(); set(cur[k]); changed(); };
+    hex.onchange = () => { let v = hex.value.trim(); if (!v.startsWith("#")) v = "#" + v; if (hexOk(v)) { cur[k] = v.toUpperCase(); set(cur[k]); changed(); } else set(cur[k]); };
+    ctl.append(pick, hex);
+    row.append(lab, ctl, undoButton(() => { cur[k] = defs[k]; set(cur[k]); changed(); }));
+    c.appendChild(row);
+  }
+  return c;
+}
+
+function fontCard(sec, defs, cur) {
+  const c = card("Fonts");
+  for (const k of Object.keys(defs)) {
+    const st = cur[k], d = defs[k];
+    const wrap = document.createElement("div"); wrap.className = "font";
+    const top = document.createElement("div"); top.className = "top";
+    const lab = document.createElement("label"); lab.textContent = nice(k);
+    const sample = document.createElement("div"); sample.className = "sample"; sample.textContent = k === "tempo" ? "120.0 BPM 4/4" : k === "pages" ? "OSC+AMP  PITCH+VEL" : k === "knob_9_hint" ? "KNOB 9: PAGE" : k === "box_text" ? "SINE" : k === "setting_name" ? "TUNE  DECAY" : "DRUM 1";
+    const ctl = document.createElement("div"); ctl.className = "ctl";
+    const fam = document.createElement("select");
+    for (const [id, f] of Object.entries(fonts)) { const o = document.createElement("option"); o.value = id; o.textContent = f.name; fam.appendChild(o); }
+    const wt = document.createElement("select");
+    const size = document.createElement("input"); size.type = "number"; size.min = 8; size.max = 80;
+    const tr = document.createElement("input"); tr.type = "number"; tr.step = 0.01; tr.min = -0.2; tr.max = 0.5;
+    const weights = () => {
+      wt.innerHTML = "";
+      for (const w of (fonts[st.family] || {weights: [400]}).weights) { const o = document.createElement("option"); o.value = w; o.textContent = w; wt.appendChild(o); }
+      if (![...wt.options].some(o => +o.value === st.weight)) st.weight = +wt.options[0].value;
+      wt.value = st.weight;
+    };
+    const show = () => {
+      fam.value = st.family; weights(); size.value = st.size; tr.value = st.tracking;
+      sample.style.fontFamily = face(st.family, st.weight); sample.style.fontSize = Math.min(40, st.size) + "px";
+      sample.style.letterSpacing = st.tracking + "em";
+      wrap.classList.toggle("changed", !same(st, d));
+    };
+    fam.onchange = () => { st.family = fam.value; show(); changed(); };
+    wt.onchange = () => { st.weight = +wt.value; show(); changed(); };
+    size.onchange = () => { const v = Math.round(+size.value); if (v >= 8 && v <= 80) st.size = v; show(); changed(); };
+    tr.onchange = () => { const v = +tr.value; if (v >= -0.2 && v <= 0.5) st.tracking = Math.round(v * 100) / 100; show(); changed(); };
+    const lw = (t, el) => { const s = document.createElement("span"); s.textContent = t; ctl.append(s, el); };
+    lw("font", fam); lw("weight", wt); lw("size", size); lw("spacing", tr);
+    const u = undoButton(() => { Object.assign(st, JSON.parse(JSON.stringify(d))); show(); changed(); });
+    top.append(lab, u);
+    wrap.append(top, ctl, sample);
+    c.appendChild(wrap);
+    show();
+  }
+  return c;
+}
+
+function shapeCard(sec, defs, cur) {
+  const c = card("Shapes and sizes");
+  for (const k of Object.keys(defs)) {
+    const row = document.createElement("div"); row.className = "row";
+    const lab = document.createElement("label"); lab.textContent = nice(k);
+    const ctl = document.createElement("div"); ctl.className = "ctl";
+    const n = document.createElement("input"); n.type = "number"; n.step = Number.isInteger(defs[k]) ? 1 : 0.1; n.min = 0;
+    const set = v => { n.value = v; row.classList.toggle("changed", v !== defs[k]); };
+    set(cur[k]);
+    n.onchange = () => { let v = +n.value; if (!(v >= 0) || v > 400) return set(cur[k]); if (Number.isInteger(defs[k])) v = Math.round(v); cur[k] = v; set(v); changed(); };
+    ctl.append(n);
+    row.append(lab, ctl, undoButton(() => { cur[k] = defs[k]; set(cur[k]); changed(); }));
+    c.appendChild(row);
+  }
+  return c;
+}
+
+// ---- saving, and the picture of the screen
+
+let saveTimer = null;
+function changed() {
+  clearTimeout(saveTimer);
+  status("Saving…");
+  saveTimer = setTimeout(save, 250);
+}
+async function save() {
+  try {
+    const r = await fetch("/api/theme", {method: "POST", body: JSON.stringify(current)});
+    if (!r.ok) throw new Error((await r.json()).error);
+    status("Saved. Updating the picture…");
+    setTimeout(picture, 700);
+  } catch (e) { status("Couldn't save: " + e.message); }
+}
+function status(t) { $("#status").textContent = t; }
+
+let lastTaken = 0;
+async function picture(tries = 12) {
+  try {
+    await fetch("/api/screen", {method: "POST"});
+    for (let i = 0; i < tries; i++) {
+      await new Promise(r => setTimeout(r, 250));
+      const r = await fetch("/api/screen", {cache: "no-store"});
+      if (!r.ok) continue;
+      const taken = +(r.headers.get("X-Taken") || 0);
+      if (taken > lastTaken) {
+        lastTaken = taken;
+        const url = URL.createObjectURL(await r.blob());
+        const old = $("#shot").src; $("#shot").src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+        status("Screen as of " + new Date(taken * 1000).toLocaleTimeString() + ". Tap the picture to update it.");
+        return;
+      }
+    }
+    status("Console didn't send a picture. Is the app running?");
+  } catch (e) { status("Couldn't reach Console: " + e.message); }
+}
+$("#shot").onclick = () => { status("Updating the picture…"); picture(); };
+
+$("#reset").onclick = async (ev) => {
+  const b = ev.currentTarget;
+  if (!b.classList.contains("confirm")) {
+    b.classList.add("confirm"); b.textContent = "Sure? Click again";
+    setTimeout(() => { b.classList.remove("confirm"); b.textContent = "Back to defaults"; }, 3000);
+    return;
+  }
+  b.classList.remove("confirm"); b.textContent = "Back to defaults";
+  await fetch("/api/theme/reset", {method: "POST"});
+  current = JSON.parse(JSON.stringify(defaults)); build();
+  status("Back to the defaults. Updating the picture…"); setTimeout(picture, 700);
+};
+$("#download").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(current, null, 1)], {type: "application/json"}));
+  a.download = "theme.json"; a.click();
+};
+$("#load").onchange = async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    const r = await fetch("/api/theme", {method: "POST", body: await f.text()});
+    if (!r.ok) throw new Error((await r.json()).error);
+    current = (await r.json()).current; build();
+    status("Loaded " + f.name + ". Updating the picture…"); setTimeout(picture, 700);
+  } catch (e) { status("Couldn't load that file: " + e.message); }
+  ev.target.value = "";
+};
+
+(async function start() {
+  try {
+    const r = await (await fetch("/api/theme", {cache: "no-store"})).json();
+    defaults = r.defaults; current = r.current; fonts = r.fonts;
+    build(); picture();
+  } catch (e) { status("Couldn't load the theme: " + e.message); }
+})();
+</script>
+</body>
+</html>

@@ -126,6 +126,18 @@ If `console.local` doesn't open (some Windows PCs and Android phones don't
 support `.local` names), use the Pi's address instead, such as
 `http://192.168.86.54`.
 
+## Screen theme (console.local/theme)
+
+The file page has a **Screen theme** button (or go to **http://console.local/theme**, or
+**http://console/theme** through Tailscale). It lists the colours, fonts and sizes of the
+screens that use the theme (the drum page so far), with a live picture of Console's screen.
+Changes save by themselves and show on the screen within a second.
+
+- The defaults are `pi-app/theme.json`. Your changes are kept in `~/console-data/theme.json`,
+  so updates never overwrite them. **Back to defaults** removes your changes.
+- **Download theme** saves your theme as a file. Send it over to make it the new default in the code.
+- Fonts can be any in `fonts/fonts.json` (Outfit, Roboto Condensed, Inter, Plex, Space Grotesk…).
+
 ## If the picture is upside down
 
 Without the desktop, the app turns the picture itself, by 270° by default.

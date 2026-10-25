@@ -1199,10 +1199,31 @@ def main():
         sys.exit(updater.RESTART_CODE)          # run.sh (or the boot service) starts the app again
 
 
+def screen_picture(frame, state):
+    """The theme page (http://console.local/theme) asks for a picture of the screen by making
+    ~/console-data/.screen-request; save the frame as .screen.png for it."""
+    now = time.monotonic()
+    if now - state["checked"] < 0.2:
+        return
+    state["checked"] = now
+    import theme
+    req = os.path.join(theme.DATA, ".screen-request")
+    if not os.path.exists(req):
+        return
+    try:
+        os.remove(req)
+        tmp = os.path.join(theme.DATA, ".screen-part.png")
+        pygame.image.save(frame, tmp)
+        os.replace(tmp, os.path.join(theme.DATA, ".screen.png"))
+    except Exception as e:
+        print("Couldn't save a picture of the screen:", e)
+
+
 def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate, dw, dh):
     """The main loop: keys in, screen out, until Q."""
     running = True
     first = True
+    picture = {"checked": 0.0}
     while running:
         seconds = fps.tick(FPS) / 1000
         for ev in pygame.event.get():
@@ -1254,6 +1275,7 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
             display.fill((0, 0, 0))
         display.blit(out, ((dw - out.get_width()) // 2, (dh - out.get_height()) // 2))
         pygame.display.flip()
+        screen_picture(frame, picture)
         if first:
             first = False
             startup("first picture on the screen")

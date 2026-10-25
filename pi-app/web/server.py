@@ -23,6 +23,8 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, ".."))
+import theme  # noqa: E402  (pi-app/theme.py: the screen's colours, fonts and sizes)
 FONT_DIR = os.path.join(HERE, "..", "fonts")
 DATA = os.path.realpath(os.path.expanduser(os.environ.get("CONSOLE_DATA", "~/console-data")))
 TOP_FOLDERS = ["projects", "samples", "exports"]
@@ -98,6 +100,24 @@ class Handler(BaseHTTPRequestHandler):
         path, q = self.query()
         if path in ("/", "/index.html"):
             return self.send_file(os.path.join(HERE, "index.html"), False)
+        if path in ("/theme", "/theme.html"):
+            return self.send_file(os.path.join(HERE, "theme.html"), False)
+        if path == "/api/theme":
+            return self.send_json({"defaults": theme.defaults(), "current": theme.merge(theme.defaults(), theme._read(theme.USER)),
+                                   "fonts": self.font_list()})
+        if path == "/api/screen":
+            full = os.path.join(DATA, ".screen.png")
+            if not os.path.isfile(full):
+                return self.fail(404, "No picture of the screen yet")
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(os.path.getsize(full)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Taken", str(os.path.getmtime(full)))
+            self.end_headers()
+            with open(full, "rb") as f:
+                shutil.copyfileobj(f, self.wfile, CHUNK)
+            return
         if path.startswith("/fonts/"):
             name = os.path.basename(path)
             full = os.path.join(FONT_DIR, name)
@@ -114,6 +134,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/zip":
             return self.send_zip(q.get("path", ""))
         self.fail(404, "Not found")
+
+    @staticmethod
+    def font_list():
+        try:
+            with open(os.path.join(FONT_DIR, "fonts.json")) as f:
+                fonts = json.load(f)
+        except (OSError, ValueError):
+            return {}
+        return {k: {"name": v["name"], "weights": sorted(int(w) for w in v["files"]),
+                    "files": v["files"]} for k, v in fonts.items()}
 
     def list_folder(self, rel):
         full = safe_path(rel)
@@ -171,6 +201,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.mkdir(q.get("path", ""), q.get("name", ""))
         if path == "/api/delete":
             return self.delete(q.get("path", ""))
+        if path == "/api/theme":
+            try:
+                changes = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            except ValueError:
+                return self.fail(400, "That isn't a theme file")
+            return self.send_json({"current": theme.save(changes)})
+        if path == "/api/theme/reset":
+            theme.reset()
+            return self.send_json({"current": theme.defaults()})
+        if path == "/api/screen":
+            # ask the app for a picture of its screen (it looks for this file a few times a second)
+            open(os.path.join(DATA, ".screen-request"), "w").close()
+            return self.send_json({"asked": True})
         self.fail(404, "Not found")
 
     def clean_name(self, name):

@@ -71,6 +71,8 @@
   .up .pc { font: 500 12px var(--mono); color: var(--dim); text-align: right; }
   .msg { color: var(--red); min-height: 1.2em; font-size: 13px; }
   .hint { color: var(--dim); font-size: 13px; margin: 0; }
+  .themelink { font: 500 14px var(--ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; text-decoration: none; }
+  .themelink:hover { border-color: var(--dim); }
   @media (max-width: 640px) {
     .row { grid-template-columns: 24px minmax(0, 1fr) auto; }
     .row .num { display: none; }
@@ -84,6 +86,7 @@
     <div class="logo">CONSOLE<span class="bars" aria-hidden="true">
       <i style="background:#4F8CFF"></i><i style="background:#3CCB7F"></i><i style="background:#F2C230"></i><i style="background:#FF5A4E"></i><i style="background:#B07CFF"></i><i style="background:#2EC8D8"></i><i style="background:#FF8A3D"></i><i style="background:#E86FB0"></i></span></div>
     <div class="space" id="space"></div>
+    <a class="themelink" href="/theme">Screen theme</a>
   </header>
 
   <nav class="tabs" id="tabs" aria-label="Storage folders"></nav>

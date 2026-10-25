@@ -128,9 +128,14 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   - `vc4` is in the initramfs (`FRAMEBUFFER=y`, `auto_initramfs=1`) so the logo shows sooner.
   - On 25 Oct 2026, after those changes, boot took 1.7 s kernel + 4.9 s userspace, about
     8 s from the logo to the app.
-  - Next: the app service no longer waits for the network, and cloud-init can be turned off
-    with `sudo touch /etc/cloud/cloud-init.disabled` (it takes about 1 s each boot and is
-    only needed the first time).
+  - Done on 25 Oct 2026:
+    - The app service doesn't wait for the network.
+    - cloud-init is disabled (`/etc/cloud/cloud-init.disabled`).
+    - The app now starts 3.1 s after the kernel and its first picture is up at 7.1 s. The app
+      logs `startup:` lines with the times: `journalctl -b -u console | grep startup`.
+  - Tried and undone: having the app stop the animation later (just before it opens the
+    screen, with `Type=notify`). Brian found the gap before the app longer, and the
+    animation then also showed at shutdown.
 - The GPIO header pins were **clipped** (not removed), to make room in the case.
 - The screen's ribbon is an FPV-style 20-pin, 0.5 mm pitch cable, folded at 45°.
 
@@ -140,7 +145,6 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   (Geekworm X1201 was the front-runner). Showing battery level in the app comes after.
 - **Control board:** problems were reported with knob 9's push and key SW16. They
   haven't been diagnosed yet.
-- **Boot speed** results (see above).
 - Drum hits have no velocity from the keys yet (the board's keys aren't
   velocity-sensitive; the sequencer has velocity per step).
 - IMPORT (samples) isn't built yet.

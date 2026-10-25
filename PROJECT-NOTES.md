@@ -128,14 +128,9 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   - `vc4` is in the initramfs (`FRAMEBUFFER=y`, `auto_initramfs=1`) so the logo shows sooner.
   - On 25 Oct 2026, after those changes, boot took 1.7 s kernel + 4.9 s userspace, about
     8 s from the logo to the app.
-  - Done on 25 Oct 2026:
-    - The app service doesn't wait for the network.
-    - cloud-init is disabled (`/etc/cloud/cloud-init.disabled`).
-    - The app now starts 3.1 s after the kernel and its first picture is up at 7.1 s. The app
-      logs `startup:` lines with the times: `journalctl -b -u console | grep startup`.
-  - The app stops the animation itself, right before it opens the screen
-    (`take_screen_from_splash` in console.py; `Type=notify` in console.service), so the
-    animation keeps moving while Python loads.
+  - Next: the app service no longer waits for the network, and cloud-init can be turned off
+    with `sudo touch /etc/cloud/cloud-init.disabled` (it takes about 1 s each boot and is
+    only needed the first time).
 - The GPIO header pins were **clipped** (not removed), to make room in the case.
 - The screen's ribbon is an FPV-style 20-pin, 0.5 mm pitch cable, folded at 45°.
 

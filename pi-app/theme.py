@@ -81,13 +81,28 @@ def rgb(hex_colour, fallback=(255, 0, 255)):
         return fallback
 
 
+def differences(base, full):
+    """Only the values in full that differ from base, so new defaults still come through for the rest."""
+    out = {}
+    for k, v in full.items():
+        if isinstance(v, dict):
+            d = differences(base.get(k, {}), v)
+            if d:
+                out[k] = d
+        elif base.get(k) != v:
+            out[k] = v
+    return out
+
+
 def save(changes):
-    """Keep changes (only what's in the defaults) in ~/console-data/theme.json."""
-    clean = merge(defaults(), changes)
+    """Keep the changes (only settings the defaults have, and only where they differ from them) in
+    ~/console-data/theme.json. Returns the whole theme."""
+    base = defaults()
+    clean = merge(base, changes)
     os.makedirs(DATA, exist_ok=True)
     tmp = USER + ".part"
     with open(tmp, "w") as f:
-        json.dump(clean, f, indent=1)
+        json.dump(differences(base, clean), f, indent=1)
     os.replace(tmp, USER)
     return clean
 

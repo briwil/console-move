@@ -1108,6 +1108,31 @@ def start_engine(demo):
     return engine
 
 
+def take_screen_from_splash():
+    """At boot the start-up animation (Plymouth) plays while the app loads. Right before the app opens the
+    screen, stop it (keeping its last frame up, so there's no flash of text), then tell systemd the app has
+    started, which lets the rest of the boot go on."""
+    if not os.environ.get("CONSOLE_SERVICE"):
+        return
+    import subprocess
+    for cmd in (["sudo", "-n", "plymouth", "quit", "--retain-splash"], ["plymouth", "quit", "--retain-splash"]):
+        try:
+            if subprocess.run(cmd, capture_output=True, timeout=5).returncode == 0:
+                break
+        except (OSError, subprocess.SubprocessError):
+            pass
+    startup("animation stopped")
+    where = os.environ.get("NOTIFY_SOCKET")
+    if where:
+        import socket
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+                s.connect("\0" + where[1:] if where.startswith("@") else where)
+                s.sendall(b"READY=1")
+        except OSError as e:
+            print("Couldn't tell systemd the app started:", e)
+
+
 def main():
     startup("code loaded")
     ap = argparse.ArgumentParser(description="Console recorder")
@@ -1117,6 +1142,7 @@ def main():
     ap.add_argument("--demo", action="store_true", help="no audio: show made-up waveforms")
     args = ap.parse_args()
 
+    take_screen_from_splash()
     pygame.display.init()                   # not pygame.init(): that would grab the Pi's default sound device
     pygame.font.init()
     if args.window:

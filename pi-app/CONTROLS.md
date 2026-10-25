@@ -267,6 +267,13 @@ Two changes from the LXR-02: the snare's noise has its own decay (NOISE DCY,
 next to TONE DECAY on its AMP + CLICK page; the click follows the tone), and
 FINE tunes up to a whole semitone up or down (the LXR's goes half).
 
+**FX SENDS** (each drum's last page): REVERB and DELAY, how much of that
+drum goes to Console's reverb and delay (set their sound on the FX key's
+pages). They work on the drums as you hear them live; the tape tracks have
+their own sends (the FX key). Recording in MULTI copies each drum's sends
+onto its track, so it plays back with the same reverb and delay. In STEREO
+and MONO the kit is one recording: set that track's sends with the FX key.
+
 Turn a knob quickly to move further; hold SHIFT for one step at a time.
 The kit is saved with the song, and a new song starts from the LXR's Init
 Kit. VEL TO and LFO TO pick what velocity or the LFO moves (LFO VOICE picks

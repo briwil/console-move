@@ -1104,6 +1104,14 @@ class Engine:
             self._rec_undo.append(("pairs", None, before_pairs))
             self._rec_undo += [("pan", t, before_pans[t]) for t in range(TRACKS) if self.pans[t] != before_pans[t]]
             self.dirty.add(-1)
+        if self.drums_input and self.drums and self.input_mode == "all":
+            # each drum recorded onto its own track: give the track that drum's sends, so it plays back
+            # with the reverb and delay you heard
+            rev_g, dly_g = self.drums.sends()
+            for t in self.targets():
+                if t < len(rev_g):
+                    self.rev_sends[t], self.dly_sends[t] = round(float(rev_g[t]), 2), round(float(dly_g[t]), 2)
+            self.dirty.add(-1)
         self.recording = True
         self.playing = True
         self._rec_saved = {}
@@ -1762,7 +1770,12 @@ class Engine:
                 voices = live_voices + self._delay_sequencer(seq_voices)
                 # each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
                 x = voices if self.input_mode == "all" else self.drums.stereo(voices)
-                out = self.process(x, monitor=self.drums.stereo(seq_voices + live_voices) * DRUMS_MONITOR)
+                heard = seq_voices + live_voices
+                pans = self.drums.pans() * DRUMS_MONITOR
+                rev_g, dly_g = self.drums.sends()            # each drum's sends to the reverb and delay
+                out = self.process(x, monitor=heard @ pans,
+                                   monitor_rev=(heard * rev_g) @ pans if rev_g.any() else None,
+                                   monitor_dly=(heard * dly_g) @ pans if dly_g.any() else None)
                 if port and not port.dead:
                     port.push(out)
                 if time.monotonic() > look:
@@ -1800,7 +1813,7 @@ class Engine:
         out, self._seq_fifo = fifo[:len(block)], fifo[len(block):]
         return out
 
-    def process(self, x, monitor=None):
+    def process(self, x, monitor=None, monitor_rev=None, monitor_dly=None):
         """One block of input (frames, channels) -> one block of stereo output. Also records.
         monitor: (frames, 2) to hear straight away along with the tape (the drum synth as you play it)."""
         n = len(x)
@@ -1809,6 +1822,10 @@ class Engine:
             mix += monitor
         rev_in = np.zeros((n, 2), np.float32)           # what the tracks send to the reverb
         dly_in = np.zeros((n, 2), np.float32)           # ... and to the delay
+        if monitor_rev is not None:
+            rev_in += monitor_rev                       # the drum synth's own sends
+        if monitor_dly is not None:
+            dly_in += monitor_dly
         with self.lock:
             peaks = np.abs(x).max(axis=0) if n else np.zeros(1)
             self.in_peaks[:] = 0

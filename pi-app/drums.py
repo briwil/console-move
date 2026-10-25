@@ -95,12 +95,15 @@ class Drums:
             _lib.drums_init()
             if _live is not _lib:
                 _live.drums_init()
-            self.param_count = _lib.drums_param_count()
+            self.engine_params = _lib.drums_param_count()
         else:
-            self.param_count = 0
+            self.engine_params = 0
+        # after the engine's settings come Console's own: each voice's reverb and delay sends
+        self.param_count = self.engine_params + (dp.EXTRA_PARAMS if AVAILABLE else 0)
         # what each setting is now, kept here so the screen can read it any time (the engine catches up
         # at the start of its next block); and the LXR's Init Kit, to go back to
-        self.values = [_lib.drums_get_param(i) for i in range(self.param_count)] if AVAILABLE else []
+        self.values = ([_lib.drums_get_param(i) for i in range(self.engine_params)] + [0] * dp.EXTRA_PARAMS
+                       if AVAILABLE else [])
         self.init_values = list(self.values)
 
     # These can be called from any thread: they take effect at the start of the next block of sound.
@@ -114,7 +117,8 @@ class Drums:
         value = max(0, min(127, int(value)))
         with self._lock:
             self.values[index] = value
-            self._pending.append(("param", index, value))
+            if index < self.engine_params:
+                self._pending.append(("param", index, value))
 
     def get_param(self, index):
         return self.values[index] if 0 <= index < self.param_count else 0
@@ -131,7 +135,7 @@ class Drums:
         values += self.init_values[len(values):]
         with self._lock:
             self.values = values
-            self._pending.extend(("param", i, v) for i, v in enumerate(values))
+            self._pending.extend(("param", i, v) for i, v in enumerate(values) if i < self.engine_params)
 
     def init_kit(self):
         self.load_kit(self.init_values)
@@ -195,6 +199,8 @@ class Drums:
             return "%+d" % (v - kind[1]) if v != kind[1] else "0"
         if kind[0] == "onoff":
             return "ON" if v else "OFF"
+        if kind[0] == "send":
+            return "%d%%" % round(v / 127 * 100)
         if kind[0] == "voice":
             return NAMES[max(0, min(5, v - 1))]
         if kind[0] in ("vel_target", "lfo_target"):
@@ -217,6 +223,14 @@ class Drums:
         if kind[0] in ("vel_target", "lfo_target"):
             return 1.0 if v else 0.0
         return v / 127
+
+    def sends(self):
+        """Each voice's reverb and delay sends, 0..1: two arrays of 6."""
+        if not AVAILABLE:
+            return np.zeros(VOICES, np.float32), np.zeros(VOICES, np.float32)
+        rev = np.array([self.values[p] for p in dp.REVERB_SEND], np.float32) / 127
+        dly = np.array([self.values[p] for p in dp.DELAY_SEND], np.float32) / 127
+        return rev, dly
 
     def set_bpm(self, bpm):
         with self._lock:

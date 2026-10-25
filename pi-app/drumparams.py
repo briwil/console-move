@@ -500,3 +500,14 @@ LABELS[56] = "TONE DECAY"
 LABELS[NOISE_DECAY] = "NOISE DCY"
 KINDS[NOISE_DECAY] = ("num",)
 PAGES[3][1][1].insert(2, NOISE_DECAY)          # snare, AMP + CLICK: after TONE DECAY
+
+# the drum synth's sends to Console's reverb and delay, one pair per voice (Console's own; not engine settings)
+SEND_BASE = 248
+REVERB_SEND = [SEND_BASE + 2 * v for v in range(6)]
+DELAY_SEND = [SEND_BASE + 2 * v + 1 for v in range(6)]
+EXTRA_PARAMS = 12                    # these come after the engine's own settings
+for _v in range(6):
+    LABELS[REVERB_SEND[_v]] = "REVERB"
+    LABELS[DELAY_SEND[_v]] = "DELAY"
+    KINDS[REVERB_SEND[_v]] = KINDS[DELAY_SEND[_v]] = ("send",)
+    PAGES[_v].append(("FX SENDS", [REVERB_SEND[_v], DELAY_SEND[_v]]))

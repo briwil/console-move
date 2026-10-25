@@ -1159,6 +1159,11 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
                     print("Q ignored: Console is running as the boot app. Stop it with: sudo systemctl stop console")
                 else:
                     running = False
+            elif (project_menu.open or project_menu.kits.open) and isinstance(name, tuple) \
+                    and name[0] in ("HOLD", "RELEASE"):
+                # CUT and LIFT come from the board as keys you can hold; in the menus they're plain presses
+                if name[0] == "HOLD":
+                    (project_menu if project_menu.open else project_menu.kits).key(name[1])
             elif project_menu.open:
                 project_menu.key(name)
             elif project_menu.kits.open:

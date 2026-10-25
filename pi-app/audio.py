@@ -856,6 +856,19 @@ class Engine:
             self.dirty = set()
         self.remember("last_song", name)
 
+    def rename_song(self, old, new):
+        """Rename a song's folder (the open one too: it's saved first)."""
+        src = os.path.join(DATA, "projects", old)
+        dst = os.path.join(DATA, "projects", new)
+        if old == self.song:
+            self.save(wait=True)
+            with self.save_lock, self.lock:
+                os.rename(src, dst)
+                self.song = new
+            self.remember("last_song", new)
+        else:
+            os.rename(src, dst)
+
     def delete_song(self, name):
         if name == self.song:
             return False

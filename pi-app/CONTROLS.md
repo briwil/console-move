@@ -79,8 +79,9 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
       once, then a reboot.
 - **LOAD:** your songs, newest first, with when each was last changed. The
   big knob picks one, PLAY opens it (the song you're leaving is saved
-  first). CUT deletes the picked song (press it twice; the open song can't
-  be deleted). FILE goes back.
+  first). LIFT renames the picked song (naming works as for NEW; the open
+  song can be renamed too). CUT deletes the picked song (press it twice; the
+  open song can't be deleted). FILE goes back.
 
 A song with nothing in it (no audio, no sequencer steps, the drum kit as a
 new song has it) is removed when you leave it, so empty songs from NEW

@@ -139,7 +139,7 @@ class Menu:
         elif name in CONFIRM:
             self.create()
         elif name == "FILE":
-            self.mode = "list"
+            self.mode = "load" if self.naming == "rename" else "list"
             self.msg = ""
 
     def settings_key(self, name):
@@ -393,6 +393,12 @@ class Menu:
             self.turn(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
+        elif name == "COPY" and self.songs:               # the LIFT key: rename the picked song
+            self.renaming = self.songs[self.pick]
+            self.mode, self.naming = "name", "rename"
+            self.name = list(self.renaming)
+            self.cursor = len(self.name)
+            self.msg, self.confirm = "", None
         elif name == "CUT" and self.songs:
             song = self.songs[self.pick]
             if song == e.song:
@@ -428,8 +434,24 @@ class Menu:
         if name.startswith("."):
             self.say("A NAME CAN'T START WITH A DOT")
             return
-        if e.song_exists(name):
+        if self.naming == "rename" and name == self.renaming:
+            self.mode = "load"                            # same name: nothing to do
+            return
+        if e.song_exists(name) and not (self.naming == "rename" and name.lower() == self.renaming.lower()):
             self.say("THERE'S ALREADY A PROJECT CALLED %s" % name.upper())
+            return
+        if self.naming == "rename":
+            try:
+                e.rename_song(self.renaming, name)
+            except OSError as err:
+                self.say("COULDN'T RENAME: %s" % str(err).upper())
+                return
+            if e.song == name:
+                self.transport.s.set("song", t=name)
+            self.songs = e.song_names()
+            self.pick = self.songs.index(name) if name in self.songs else 0
+            self.mode = "load"
+            self.say("RENAMED TO %s" % name.upper())
             return
         if self.naming == "new":
             self.transport.new_song(name)
@@ -493,7 +515,8 @@ class Menu:
             s.set("name_text", t="")
             hint = "SETTINGS     BIG KNOB: PICK A ROW     \u2190 \u2192: CHANGE IT     FILE: BACK TO THE MENU"
         else:
-            s.set("prompt", t="NAME THE NEW PROJECT" if self.naming == "new" else "NAME THIS PROJECT", y=self.prompt_y)
+            prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(self, "renaming", "").upper()}
+            s.set("prompt", t=prompt.get(self.naming, "NAME THIS PROJECT"), y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
             hint = "BIG KNOB: LETTER   \u2190 \u2192: MOVE   CUT: DELETE   PLAY: OK   FILE: CANCEL"
         s.set("menu_hint", t=hint)
@@ -523,7 +546,7 @@ class Menu:
             s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
         s.set("prompt", t="")
         s.set("name_text", t="")
-        s.set("menu_hint", t="LOAD     BIG KNOB: PICK     PLAY: OPEN     CUT: DELETE     FILE: BACK")
+        s.set("menu_hint", t="BIG KNOB: PICK    PLAY: OPEN    LIFT: RENAME    CUT: DELETE    FILE: BACK")
         s.set("menu_msg", t=self.msg)
 
     def draw_cursor(self, surf):

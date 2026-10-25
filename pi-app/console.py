@@ -300,6 +300,10 @@ class Transport:
                 self.knob(*name[1:])
             elif name[0] == "LANE":
                 self.seqp.lane_key(*name[1:])
+            elif name[0] == "HOLD":
+                self.hold(name[1])
+            elif name[0] == "RELEASE":
+                self.release(name[1])
             self.update_screen()
             return
         t, e = self.tape, self.engine

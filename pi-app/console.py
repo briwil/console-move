@@ -805,6 +805,13 @@ class Transport:
         self.s.set("song", t=name)
         self.say("NEW PROJECT: %s" % name.upper(), 5)
 
+    def open_song(self, name):
+        self.focus.track = None
+        self.engine.open_song(name)
+        self.tape.pos = self.engine.beats()
+        self.s.set("song", t=name)
+        self.say("OPENED %s" % name.upper(), 4)
+
     def export(self):
         if not self.engine:
             self.say("NOTHING TO EXPORT IN DEMO MODE")

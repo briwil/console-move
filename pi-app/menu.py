@@ -56,6 +56,9 @@ class Menu:
         self.naming = "new"                   # what the name is for: "new" project or "save" an unnamed one
         self.updater = None                   # made the first time SETTINGS opens
         self.restart = False                  # True once an update is installed: the app restarts
+        self.songs = []                       # the LOAD list
+        self.pick = 0
+        self.confirm = None                   # a delete or open waiting for its second press
         self._done_at = None
         self.refresh()
 
@@ -83,7 +86,9 @@ class Menu:
                 self.char(name[1])
             self.refresh()
             return
-        if self.mode == "name":
+        if self.mode == "load":
+            self.load_key(name)
+        elif self.mode == "name":
             self.name_key(name)
         elif self.mode == "settings":
             self.settings_key(name)
@@ -98,6 +103,11 @@ class Menu:
         self.refresh()
 
     def turn(self, delta):
+        if self.mode == "load":
+            if self.songs:
+                self.pick = max(0, min(len(self.songs) - 1, self.pick + delta))
+            self.msg, self.confirm = "", None
+            return
         if self.mode == "settings":
             self.row = max(0, min(len(SETTINGS) - 1, self.row + delta))
             self.msg = ""
@@ -362,8 +372,51 @@ class Menu:
             self.mode, self.row, self.msg = "settings", 0, ""
             if self.updater is None:
                 self.updater = updater.Updater()
-        else:
-            self.say("%s COMES NEXT" % what)
+        elif what == "LOAD":
+            if not e:
+                self.say("PROJECTS NEED THE AUDIO ENGINE")
+                return
+            e.save(wait=True)
+            self.songs = e.song_names()
+            if not self.songs:
+                self.say("NO SAVED SONGS YET")
+                return
+            self.mode, self.msg, self.confirm = "load", "", None
+            self.pick = self.songs.index(e.song) if e.song in self.songs else 0
+
+    def load_key(self, name):
+        """The LOAD list: big knob or arrows pick, PLAY opens, CUT deletes (press twice), FILE goes back."""
+        e = self.engine
+        if name in ("LEFT", "UP", "BAR_LEFT"):
+            self.turn(-1)
+        elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
+            self.turn(1)
+        elif name == "FILE":
+            self.mode, self.msg = "list", ""
+        elif name == "CUT" and self.songs:
+            song = self.songs[self.pick]
+            if song == e.song:
+                self.say("THAT'S THE SONG THAT'S OPEN: OPEN ANOTHER ONE FIRST")
+            elif self.confirm != ("delete", song):
+                self.confirm = ("delete", song)
+                self.say("DELETE %s FOR GOOD? CUT AGAIN TO DELETE IT" % song.upper())
+            else:
+                e.delete_song(song)
+                self.songs = e.song_names()
+                self.pick = min(self.pick, max(0, len(self.songs) - 1))
+                self.confirm = None
+                self.say("DELETED %s" % song.upper())
+        elif name in CONFIRM and self.songs:
+            song = self.songs[self.pick]
+            if song == e.song:
+                self.close()
+                return
+            if e.song is None and e.has_audio() and self.confirm != ("open", song):
+                self.confirm = ("open", song)
+                self.say("THIS SONG ISN'T SAVED. PLAY AGAIN THROWS IT AWAY, OR SAVE IT FIRST")
+                return
+            self.transport.open_song(song)
+            self.close()
 
     def create(self):
         """Save the unnamed song with the name typed in."""
@@ -413,7 +466,11 @@ class Menu:
             s.set(item, t=text if listing else "", c=ON if on else OFF, s=SIZE_ON if on else SIZE_OFF,
                   y=self.ys[item] - (2 if on else 0))
         settings = self.mode == "settings"
+        if self.mode == "load":
+            self.refresh_load()
+            return
         for i in range(1, len(SETTINGS) + 1):
+            s.set("set_value%d" % i, x=660, a="left")
             what = SETTINGS[i - 1] if settings and i <= len(SETTINGS) else None
             on = what is not None and i - 1 == self.row
             s.set("set_label%d" % i, t=LABELS.get(what, ""), c=ON if on else OFF)
@@ -444,6 +501,30 @@ class Menu:
             s.set("menu_msg", t=self.update_message())
         else:
             s.set("menu_msg", t=self.msg)
+
+    def refresh_load(self):
+        """The LOAD list: newest first, the open song marked, in the settings rows."""
+        s, e = self.s, self.engine
+        for label, item in ITEMS:
+            s.set(item, t="")
+        rows = len(SETTINGS)
+        top = max(0, min(self.pick - rows // 2, len(self.songs) - rows))
+        for r in range(rows):
+            i = top + r
+            name = self.songs[i] if i < len(self.songs) else ""
+            on = i == self.pick
+            when = time.strftime("%b %d  %H:%M", time.localtime(e.song_time(name))).upper() if name else ""
+            s.set("set_label%d" % (r + 1), t=when, c=ON if on else OFF)
+            s.set("set_value%d" % (r + 1), t=name + ("   (OPEN NOW)" if name and name == e.song else ""),
+                  c=ON if on else "#F2F3F5", x=660, a="left")
+        bar = s.get("menu_bar")
+        if bar and self.songs:
+            row = s.get("set_label%d" % (self.pick - top + 1))
+            s.set("menu_bar", y=row["y"] + self.bar_offset + 2, h=bar["h"], w=1280 + 180)
+        s.set("prompt", t="")
+        s.set("name_text", t="")
+        s.set("menu_hint", t="LOAD     BIG KNOB: PICK     PLAY: OPEN     CUT: DELETE     FILE: BACK")
+        s.set("menu_msg", t=self.msg)
 
     def draw_cursor(self, surf):
         """A block under the letter being changed, OP-1 style."""

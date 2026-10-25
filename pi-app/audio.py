@@ -52,6 +52,7 @@ except Exception as _e:                     # carry on without the drum synth
     print("Drum synth off:", _e)
     drums = None
 
+import drumparams
 import sequencer
 
 TRACKS = 8
@@ -469,6 +470,12 @@ class Engine:
         self._resume_recording = False
         self._set_beats_len()
         self.load()
+        try:
+            gone = self.clean_empty_songs()          # empty songs left from before (NEW used to keep them)
+            if gone:
+                print("Removed %d empty song%s" % (gone, "" if gone == 1 else "s"))
+        except Exception as e:
+            print("Couldn't tidy up empty songs:", e)
 
     # ------------------------------------------------------------ settings and project files
 
@@ -726,6 +733,18 @@ class Engine:
         it's saved with a name.) The clipboard stays, so a piece can be carried over to the new song."""
         was_untitled = self.song is None
         self.save(wait=True)
+        self._drop_if_empty()
+        self._reset()
+        with self.lock:
+            self.song = name
+            self.dirty = {-1}
+        if name is None or was_untitled:              # an unnamed song is thrown away (the menu warned first)
+            shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)
+        self.save(wait=True)
+        self.remember("last_song", name)
+
+    def _reset(self):
+        """Everything back to an empty song (the tempo and time signature stay)."""
         with self.lock:
             self.playing = self.recording = self.rec_ready = False
             for x in self.tracks:
@@ -748,12 +767,100 @@ class Engine:
             self.arm_extra = set()
             self.sel_anchor = None
             self.pos = 0
+
+    # ---- empty songs, and opening and deleting songs (the LOAD menu)
+
+    def is_empty(self):
+        """Nothing in this song: no audio, no sequencer steps, and the drum kit as a new song has it."""
+        if self.has_audio() or not all(p.empty() for p in self.seq.patterns):
+            return False
+        return not self.drums or self.drums.kit() == self.drums.init_values
+
+    def _drop_if_empty(self):
+        """Leaving a named song with nothing in it: remove its folder, so empty songs don't pile up."""
+        if self.song is not None and self.is_empty():
+            shutil.rmtree(os.path.join(DATA, "projects", self.song), ignore_errors=True)
+
+    def song_is_empty_on_disk(self, name):
+        folder = os.path.join(DATA, "projects", name)
+        for t in range(TRACKS):
+            path = os.path.join(folder, "track%d.wav" % (t + 1))
+            if os.path.exists(path):
+                try:
+                    x, _ = read_wav(path)
+                except Exception:
+                    return False                    # can't tell: keep it
+                if len(x) and np.abs(x).max() > 1e-6:
+                    return False
+        try:
+            with open(os.path.join(folder, "project.json")) as f:
+                meta = json.load(f)
+        except OSError:
+            meta = {}
+        except ValueError:
+            return False
+        seq = sequencer.Sequencer()
+        seq.from_json(meta.get("drum_seq"))
+        if not all(p.empty() for p in seq.patterns):
+            return False
+        kit = meta.get("drum_kit")
+        if kit and self.drums:
+            probe = drums.Drums.__new__(drums.Drums)       # compare without touching the running engine
+            probe.param_count, probe.init_values = self.drums.param_count, self.drums.init_values
+            probe.engine_params = self.drums.engine_params
+            values = [int(v) for v in kit[:probe.param_count]]
+            if len(values) == drumparams.NOISE_DECAY:
+                values.append(values[56])
+            values += probe.init_values[len(values):]
+            if values != probe.init_values:
+                return False
+        return True
+
+    def clean_empty_songs(self):
+        """Remove every song folder with nothing in it (except the one open now). Returns how many."""
+        removed = 0
+        for name in self.song_names():
+            if name != self.song and self.song_is_empty_on_disk(name):
+                shutil.rmtree(os.path.join(DATA, "projects", name), ignore_errors=True)
+                removed += 1
+        return removed
+
+    def song_names(self):
+        """The songs in projects/, newest first: [name]."""
+        folder = os.path.join(DATA, "projects")
+        try:
+            names = [n for n in os.listdir(folder) if os.path.isdir(os.path.join(folder, n)) and not n.startswith(".")]
+        except OSError:
+            return []
+        return sorted(names, key=lambda n: os.path.getmtime(os.path.join(folder, n)), reverse=True)
+
+    def song_time(self, name):
+        try:
+            return os.path.getmtime(os.path.join(DATA, "projects", name))
+        except OSError:
+            return 0
+
+    def open_song(self, name):
+        """Save (or drop, if empty) the current song and open another one from projects/."""
+        if self.song is not None:
+            self.save(wait=True)
+            self._drop_if_empty()
+        else:
+            shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)   # the menu warned first
+        self._reset()
+        with self.lock:
             self.song = name
-            self.dirty = {-1}
-        if name is None or was_untitled:              # an unnamed song is thrown away (the menu warned first)
-            shutil.rmtree(os.path.join(DATA, "unsaved"), ignore_errors=True)
-        self.save(wait=True)
+            self.undo_stack = []
+        self.load()
+        with self.lock:
+            self.dirty = set()
         self.remember("last_song", name)
+
+    def delete_song(self, name):
+        if name == self.song:
+            return False
+        shutil.rmtree(os.path.join(DATA, "projects", name), ignore_errors=True)
+        return True
 
     def save_as(self, name):
         """Give the unnamed song a name: it moves from unsaved/ into projects/<name>/."""

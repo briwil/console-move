@@ -77,7 +77,14 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
       once over SSH, then press PLAY to restart.
     - A new start-up animation needs `~/console/pi-app/splash-setup.sh` run
       once, then a reboot.
-- **LOAD:** coming next.
+- **LOAD:** your songs, newest first, with when each was last changed. The
+  big knob picks one, PLAY opens it (the song you're leaving is saved
+  first). CUT deletes the picked song (press it twice; the open song can't
+  be deleted). FILE goes back.
+
+A song with nothing in it (no audio, no sequencer steps, the drum kit as a
+new song has it) is removed when you leave it, so empty songs from NEW
+don't pile up, and NEW's next "Song N" name is the lowest free one.
 
 Console opens whichever project you used last. Every change is written to
 the song's files (`projects/<song>/track1.wav`…) a moment after you make it,

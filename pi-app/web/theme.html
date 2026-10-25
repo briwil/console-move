@@ -37,7 +37,9 @@
   .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .screen { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; }
   .screen img { width: 100%; max-width: 1280px; aspect-ratio: 1280 / 400; display: block; background: #000; border: 1px solid var(--line); border-radius: 6px; image-rendering: auto; }
-  .status { font: 500 12px var(--mono); color: var(--dim); min-height: 1.4em; margin-top: 6px; }
+  .status { font: 500 12px var(--mono); color: var(--dim); min-height: 1.4em; }
+  .shotbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+  .live { font: 500 12px var(--mono); color: var(--dim); display: flex; gap: 6px; align-items: center; cursor: pointer; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) auto 28px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
@@ -92,7 +94,8 @@
 
   <section class="screen">
     <img id="shot" alt="Console's screen">
-    <div class="status" id="status">Asking Console for a picture of its screen…</div>
+    <div class="shotbar"><div class="status" id="status">Asking Console for a picture of its screen…</div>
+      <label class="live"><input type="checkbox" id="live" checked> Live (every 3 s)</label></div>
   </section>
 
   <div id="sections"></div>
@@ -324,7 +327,13 @@ async function save() {
 function status(t) { $("#status").textContent = t; }
 
 let lastTaken = 0;
+let busy = false;
 async function picture(tries = 12) {
+  if (busy) return;
+  busy = true;
+  try { await takePicture(tries); } finally { busy = false; }
+}
+async function takePicture(tries) {
   try {
     await fetch("/api/screen", {method: "POST"});
     for (let i = 0; i < tries; i++) {
@@ -336,7 +345,7 @@ async function picture(tries = 12) {
         lastTaken = taken;
         const url = URL.createObjectURL(await r.blob());
         const old = $("#shot").src; $("#shot").src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
-        status("Screen as of " + new Date(taken * 1000).toLocaleTimeString() + ". Tap the picture to update it.");
+        status("Screen as of " + new Date(taken * 1000).toLocaleTimeString() + ($("#live").checked ? "" : ". Tap the picture to update it."));
         return;
       }
     }
@@ -344,6 +353,10 @@ async function picture(tries = 12) {
   } catch (e) { status("Couldn't reach Console: " + e.message); }
 }
 $("#shot").onclick = () => { status("Updating the picture…"); picture(); };
+// live: a new picture every 3 seconds while this page is on screen (and the box is ticked)
+try { $("#live").checked = localStorage.getItem("console-live") !== "0"; } catch (e) {}
+$("#live").onchange = () => { try { localStorage.setItem("console-live", $("#live").checked ? "1" : "0"); } catch (e) {} if ($("#live").checked) picture(); };
+setInterval(() => { if ($("#live").checked && !document.hidden) picture(8); }, 3000);
 
 $("#reset").onclick = async (ev) => {
   const b = ev.currentTarget;

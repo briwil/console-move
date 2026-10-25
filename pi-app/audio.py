@@ -257,6 +257,103 @@ FFMPEG_CODEC = {
 }
 
 
+# ---- each box's own gain and fades: kept with the box, never written into the audio, so they can
+# always be changed back. A box is [start, end, colour, gain dB, fade in, fade out] (frames).
+
+GUARD = 48              # frames (1 ms): a tiny fade at box edges with nothing next to them, so they never click
+FADE_STEPS = [0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0, 1.5, 2.0,
+              3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0]          # seconds, for the fade knobs
+GAIN_MIN, GAIN_MAX = -40.0, 24.0
+NORMALIZE_DB = -1.0     # NORMALIZE puts a box's loudest peak here
+
+
+def box(a, b, colour, gain=0.0, fade_in=0, fade_out=0):
+    return [int(a), int(b), int(colour), float(gain), int(fade_in), int(fade_out)]
+
+
+def box_settings(r):
+    """(gain dB, fade in, fade out) of a box (older 3-number boxes have none)."""
+    return (r[3], r[4], r[5]) if len(r) >= 6 else (0.0, 0, 0)
+
+
+def box_shape(rs, i, guard=True):
+    """(gain, fade in frames, fade out frames) for box i of a track's boxes rs. guard: add the click
+    guard at an edge with no box right next to it."""
+    r = rs[i]
+    db, fi, fo = box_settings(r)
+    if guard:
+        if not (i > 0 and rs[i - 1][1] >= r[0]):
+            fi = max(fi, GUARD)
+        if not (i + 1 < len(rs) and rs[i + 1][0] <= r[1]):
+            fo = max(fo, GUARD)
+    n = r[1] - r[0]
+    if fi + fo > n > 0:
+        s = n / (fi + fo)
+        fi, fo = int(fi * s), int(fo * s)
+    return 10 ** (db / 20), fi, fo
+
+
+def fade_curve(u):
+    """0 -> 1, an S-curve (it starts and ends gently)."""
+    return (0.5 - 0.5 * np.cos(np.pi * np.clip(u, 0.0, 1.0))).astype(np.float32)
+
+
+def shape_range(rs, x, a, guard=True, inplace=False):
+    """x is the audio of frames a.. on a track whose boxes are rs: returns it with the boxes' gains and
+    fades (x itself if nothing changes it)."""
+    b = a + len(x)
+    y = x if inplace else None
+    for i, r in enumerate(rs):
+        if r[0] >= b:
+            break
+        if r[1] <= a:
+            continue
+        g, fi, fo = box_shape(rs, i, guard)
+        if g == 1.0 and not fi and not fo:
+            continue
+        if y is None:
+            y = x.copy()
+        lo, hi = max(r[0], a), min(r[1], b)
+        if g != 1.0:
+            y[lo - a:hi - a] *= g
+        if fi:
+            z1 = min(hi, r[0] + fi)
+            if z1 > lo:
+                y[lo - a:z1 - a] *= fade_curve((np.arange(lo, z1) - r[0]) / fi)
+        if fo:
+            z0 = max(lo, r[1] - fo)
+            if hi > z0:
+                y[z0 - a:hi - a] *= fade_curve((r[1] - np.arange(z0, hi)) / fo)
+    return x if y is None else y
+
+
+def envelope(rs, idx):
+    """The boxes' gains and fades for the frames idx (any order, as the loop wraps), or None for all 1."""
+    if not rs or not len(idx):
+        return None
+    lo, hi = int(idx.min()), int(idx.max()) + 1
+    env = None
+    for i, r in enumerate(rs):
+        if r[0] >= hi:
+            break
+        if r[1] <= lo:
+            continue
+        g, fi, fo = box_shape(rs, i)
+        if g == 1.0 and (not fi or r[0] + fi <= lo) and (not fo or r[1] - fo >= hi):
+            continue
+        if env is None:
+            env = np.ones(len(idx), np.float32)
+        m = (idx >= r[0]) & (idx < r[1])
+        f = idx[m]
+        e = np.full(len(f), g, np.float32)
+        if fi:
+            e *= fade_curve((f - r[0]) / fi)
+        if fo:
+            e *= fade_curve((r[1] - f) / fo)
+        env[m] = e
+    return env
+
+
 def write_audio(path, x, rate, fmt="wav"):
     """Write audio (mono, or (frames, 2) stereo) to path + "." + fmt. WAV directly; the others through ffmpeg."""
     wav = path + ".wav"
@@ -960,6 +1057,7 @@ class Engine:
         self._meta_splices = meta.get("splices")       # from version 0.6-0.7, turned into boxes below
         if meta.get("loop"):
             self.loop_on, self.loop_a, self.loop_b = bool(meta["loop"][0]), int(meta["loop"][1]), int(meta["loop"][2])
+        self.regions = [[] for _ in range(TRACKS)]       # (the boxes come after the audio, below)
         for t in range(TRACKS):
             path = os.path.join(self.project_dir, "track%d.wav" % (t + 1))
             if not os.path.exists(path):
@@ -975,6 +1073,10 @@ class Engine:
             self.tracks[t][:n] = x[:n]
             self._update_levels(t, 0, n, reset=True)
         self._regions_from_meta()
+        for t in range(TRACKS):
+            for r in self.regions[t]:
+                if box_settings(r) != (0.0, 0, 0):
+                    self._update_levels(t, r[0], r[1], reset=True)     # the waveform shows its gain and fades
 
     def save(self, wait=False):
         """Save changed tracks in the background. Returns False if there was nothing to save."""
@@ -1026,13 +1128,16 @@ class Engine:
     def export(self):
         """Write stems (every track with audio, all the same length) and a stereo mix. Returns the folder name.
 
-        Stems are the tracks as recorded. The mix uses the track volumes, pans and mutes, and includes the
+        Stems are the tracks as recorded, with each box's gain and fades. The mix uses the track volumes, pans and mutes, and includes the
         reverb and delay (with their tails); those two are also written as stereo "return" stems, so the
         dry stems plus the returns rebuild the mix."""
         with self.lock:
             tracks = [x.copy() for x in self.tracks]
+            boxes = [[list(r) for r in rs] for rs in self.regions]
             vols, mutes, pans, pairs = list(self.volumes), set(self.mutes), list(self.pans), set(self.pairs)
             rev_sends, dly_sends, fx = list(self.rev_sends), list(self.dly_sends), dict(self.fx)
+        for t in range(TRACKS):
+            shape_range(boxes[t], tracks[t], 0, inplace=True)       # each box's gain and fades
         ends = [self._extent(x) for x in tracks]
         end = max(ends)
         if end == 0:
@@ -1338,8 +1443,9 @@ class Engine:
         saved = self._meta_regions
         for t in range(TRACKS):
             if saved and t < len(saved):
-                self.regions[t] = sorted([int(r[0]), int(r[1]), int(r[2]) % len(REGION_COLOURS)] for r in saved[t]
-                                         if int(r[1]) > int(r[0]))
+                self.regions[t] = sorted(box(r[0], r[1], int(r[2]) % len(REGION_COLOURS),
+                                             *([float(r[3]), int(r[4]), int(r[5])] if len(r) >= 6 else []))
+                                         for r in saved[t] if int(r[1]) > int(r[0]))
                 continue
             end = self.track_end(t)
             if not end:
@@ -1350,7 +1456,7 @@ class Engine:
             for x0, x1 in zip(edges, edges[1:]):
                 x0, x1 = max(x0, first), x1
                 if x1 > x0 and np.any(np.abs(self.tracks[t][x0:x1]) > 1e-6):
-                    self.regions[t].append([x0, x1, self._new_colour(t, x0)])
+                    self.regions[t].append(box(x0, x1, self._new_colour(t, x0)))
 
     def _new_colour(self, t, f, avoid=()):
         """A random colour for a new box, different from its neighbours."""
@@ -1374,10 +1480,11 @@ class Engine:
             if r[1] <= a or r[0] >= b:
                 out.append(r)
                 continue
+            both = r[0] < a and r[1] > b                     # split in two: each half keeps its outer fade
             if r[0] < a:
-                out.append([r[0], a, r[2]])
+                out.append([r[0], a] + list(r[2:5]) + [0 if both else r[5]])
             if r[1] > b:
-                out.append([b, r[1], r[2]])
+                out.append([b, r[1]] + list(r[2:4]) + [0 if both else r[4], r[5]])
         self.regions[t] = sorted(out)
 
     def _add_region(self, t, a, b, colour=None):
@@ -1385,7 +1492,7 @@ class Engine:
         if b <= a:
             return None
         self._carve(t, a, b)
-        r = [a, b, self._new_colour(t, a) if colour is None else colour]
+        r = box(a, b, self._new_colour(t, a) if colour is None else colour)
         self.regions[t] = sorted(self.regions[t] + [r])
         return r
 
@@ -1402,6 +1509,10 @@ class Engine:
             own = None
         if self.rec_mode == "overdub":
             touching = [r for r in self.regions[t] if r[0] <= b and r[1] >= a]
+            for r in touching:
+                # recording onto a box with gain or fades: put them into its audio first, so the new
+                # recording isn't changed by them
+                self._bake(t, r, self._rec_undo if self._rec_undo is not None else [])
             if touching:
                 lo, hi = min([a] + [r[0] for r in touching]), max([b] + [r[1] for r in touching])
                 keep = own if any(r is own for r in touching) else touching[0]
@@ -1491,21 +1602,119 @@ class Engine:
                     pair = join_at(t)
                     if pair:
                         self._regions_changed(t, entries)
+                        if pair[0][3] != pair[1][3] or pair[0][5] or pair[1][4]:
+                            self._bake(t, pair[0], entries)        # different gains, or fades at the join: keep the sound
+                            self._bake(t, pair[1], entries)
                         pair[0][1] = pair[1][1]
+                        pair[0][5] = pair[1][5]
                         self.regions[t].remove(pair[1])
                         done = True
                 else:
                     r = self.region_at(t, f)
                     if r and r[0] + tol < f < r[1] - tol:
                         self._regions_changed(t, entries)
-                        right = [f, r[1], self._new_colour(t, f, avoid=(r[2],))]
-                        r[1] = f
+                        right = box(f, r[1], self._new_colour(t, f, avoid=(r[2],)), r[3], 0, r[5])
+                        r[1], r[5] = f, 0
                         self.regions[t] = sorted(self.regions[t] + [right])
                         done = True
             self._push_undo(entries)
             if not done:
                 return None
             return "removed" if joining else "added"
+
+    def _seam(self, t, f):
+        """Where dropped audio meets what was there: a 1 ms fade out and in, so the jump doesn't click."""
+        x = self.tracks[t]
+        a, b = max(0, f - GUARD), min(self.frames, f + GUARD)
+        if f > a:
+            x[a:f] *= fade_curve((f - np.arange(a, f)) / GUARD)
+        if b > f:
+            x[f:b] *= fade_curve((np.arange(f, b) - f + 1) / GUARD)
+
+    def _bake(self, t, r, entries):
+        """Put box r's gain and fades into its audio (for undo, in entries) and set them back to none."""
+        if len(r) < 6 or box_settings(r) == (0.0, 0, 0):
+            return
+        a, b = r[0], r[1]
+        entries.append((t, a, self.tracks[t][a:b].copy()))
+        self.tracks[t][a:b] = np.clip(shape_range([r], self.tracks[t][a:b], a, guard=False), -1.0, 1.0)
+        r[3], r[4], r[5] = 0.0, 0, 0
+        self._changed(t, a, b)
+
+    # ---- a box's gain, normalize and fades (the knobs in the zoomed track view)
+
+    def boxes_here(self):
+        """[(track, box)] under the playhead, on the selected track (both tracks of a stereo pair)."""
+        f = int(self.pos)
+        return [(t, r) for t in self.edit_tracks() for r in self.regions[t] if r[0] <= f < r[1]]
+
+    def box_info(self):
+        """{"gain" dB, "in" s, "out" s, "length" s} of the box under the playhead, or None."""
+        with self.lock:
+            here = self.boxes_here()
+            if not here:
+                return None
+            r = here[0][1]
+            g, fi, fo = box_settings(r)
+            return {"gain": g, "in": fi / self.rate, "out": fo / self.rate, "length": (r[1] - r[0]) / self.rate}
+
+    def _box_undo(self, here, kind):
+        """Knob turns on the same box, one after another, are one undo step."""
+        key = (kind, tuple((t, r[0], r[1]) for t, r in here))
+        now = time.monotonic()
+        last = getattr(self, "_box_edit", None)
+        if not (last and last[0] == key and now - last[1] < 3.0 and self.undo_stack and last[2] is self.undo_stack[-1]):
+            entries = []
+            for t in sorted({t for t, _ in here}):
+                self._regions_changed(t, entries)
+            self._push_undo(entries)
+            self._box_edit = [key, now, entries]
+        else:
+            last[1] = now
+
+    def change_box(self, what, delta=0):
+        """what: "gain" (delta in dB), "in" / "out" (delta in fade steps), "normalize", or "reset_gain",
+        "reset_in", "reset_out". Returns box_info(), "SILENT" (nothing to normalize), or None (no box)."""
+        with self.lock:
+            here = self.boxes_here()
+            if not here:
+                return None
+            for _, r in here:
+                if len(r) < 6:
+                    r[3:] = [0.0, 0, 0]
+            r0 = here[0][1]
+            if what == "normalize":
+                peak = max(float(np.abs(self.tracks[t][r[0]:r[1]]).max()) for t, r in here)
+                if peak < 1e-5:
+                    return "SILENT"
+                self._box_undo(here, "normalize-%f" % time.monotonic())
+                g = round(float(min(GAIN_MAX, max(GAIN_MIN, NORMALIZE_DB - 20 * np.log10(peak)))), 1)
+                for _, r in here:
+                    r[3] = g
+            elif what in ("gain", "reset_gain"):
+                self._box_undo(here, "gain")
+                g = 0.0 if what == "reset_gain" else round(float(min(GAIN_MAX, max(GAIN_MIN, r0[3] + delta))), 1)
+                for _, r in here:
+                    r[3] = g
+            else:
+                side = 4 if what.endswith("in") else 5
+                self._box_undo(here, "fade%d" % side)
+                if what.startswith("reset"):
+                    v = 0.0
+                else:
+                    cur = r0[side]
+                    steps = [int(round(s * self.rate)) for s in FADE_STEPS]
+                    i = max([k for k, s in enumerate(steps) if s <= cur] or [0])
+                    if delta < 0 and steps[i] < cur:
+                        i += 1                                  # between steps (fitted to a short box)
+                    v = FADE_STEPS[max(0, min(len(FADE_STEPS) - 1, i + delta))]
+                for _, r in here:
+                    other = r[9 - side]
+                    r[side] = max(0, min(int(round(v * self.rate)), r[1] - r[0] - other))
+            for t, r in here:
+                self._update_levels(t, r[0], r[1], reset=True)
+            self.dirty.add(-1)
+        return self.box_info()
 
     def copy(self):
         """Copy the selected box(es) to the clipboard as one piece. Returns its length in beats, or None."""
@@ -1515,7 +1724,7 @@ class Engine:
             if not sel:
                 return None
             ts, a, b = sel
-            self.clip = [self.tracks[t][a:b].copy() for t in ts]
+            self.clip = [shape_range(self.regions[t], self.tracks[t][a:b], a).copy() for t in ts]
             self.last_edit = (a, b)
             return (b - a) / self.frames_per_beat()
 
@@ -1528,7 +1737,7 @@ class Engine:
             if not sel:
                 return None
             ts, a, b = sel
-            self.clip = [self.tracks[t][a:b].copy() for t in ts]
+            self.clip = [shape_range(self.regions[t], self.tracks[t][a:b], a).copy() for t in ts]
             self.last_edit = (a, b)
             entries = []
             for t in ts:
@@ -1563,7 +1772,9 @@ class Engine:
             colour = None
             for t, x in zip(ts, self.clip):
                 self._regions_changed(t, entries)
+                a0 = max(0, a - GUARD)
                 if insert:
+                    entries.append((t, a0, self.tracks[t][a0:a].copy()))
                     entries.append((t, a, self.tracks[t][a:].copy()))
                     tail = self.tracks[t][a:self.frames - n].copy()
                     self.tracks[t][a + n:] = tail
@@ -1573,16 +1784,22 @@ class Engine:
                         if r[1] <= a:
                             moved.append(r)
                         elif r[0] >= a:
-                            moved.append([r[0] + n, r[1] + n, r[2]])
+                            moved.append([r[0] + n, r[1] + n] + list(r[2:]))
                         else:                               # a box across the playhead splits around the new one
-                            moved.append([r[0], a, r[2]])
-                            moved.append([a + n, r[1] + n, r[2]])
-                    self.regions[t] = sorted([r[0], min(r[1], self.frames), r[2]] for r in moved if r[0] < self.frames)
-                    self._changed(t, a, self.frames)
+                            moved.append([r[0], a] + list(r[2:5]) + [0])
+                            moved.append([a + n, r[1] + n] + list(r[2:4]) + [0, r[5]])
+                    self.regions[t] = sorted([r[0], min(r[1], self.frames)] + list(r[2:])
+                                             for r in moved if r[0] < self.frames)
+                    self._seam(t, a)
+                    self._seam(t, a + n)
+                    self._changed(t, a0, self.frames)
                 else:
-                    entries.append((t, a, self.tracks[t][a:a + n].copy()))
+                    b1 = min(self.frames, a + n + GUARD)
+                    entries.append((t, a0, self.tracks[t][a0:b1].copy()))
                     self.tracks[t][a:a + n] = x[:n]
-                    self._changed(t, a, a + n)
+                    self._seam(t, a)
+                    self._seam(t, a + n)
+                    self._changed(t, a0, b1)
                 box = self._add_region(t, a, a + n, colour)
                 colour = box[2] if box else colour             # both sides of a stereo piece share a colour
             if len(ts) == 2 and ts[0] not in self.pairs:
@@ -1614,7 +1831,7 @@ class Engine:
             mix = np.zeros(end, np.float32)
             spans = []
             for t in ts:
-                mix += self.tracks[t][:end] * self.volumes[t]
+                mix += shape_range(self.regions[t], self.tracks[t][:end], 0) * self.volumes[t]
                 spans += [(r[0], r[1]) for r in self.regions[t]]
             for t in ts:
                 self.tracks[t][:end] = 0
@@ -1649,7 +1866,11 @@ class Engine:
                 return False
             for item in reversed(self.undo_stack.pop()):
                 if item[0] == "regions":
-                    self.regions[item[1]] = item[2]
+                    t = item[1]
+                    spans = [(r[0], r[1]) for r in self.regions[t]] + [(r[0], r[1]) for r in item[2]]
+                    self.regions[t] = item[2]
+                    for a, b in spans:                  # gains and fades change how the waveform looks
+                        self._update_levels(t, a, b, reset=True)
                     self.dirty.add(-1)
                     continue
                 if item[0] in ("volume", "pan", "pairs"):
@@ -2004,6 +2225,9 @@ class Engine:
         for t in range(TRACKS):
             if (overdub or t not in targets) and self.audible(t):
                 sig = self.tracks[t][idx] * self.volumes[t]
+                env = envelope(self.regions[t], idx)
+                if env is not None:
+                    sig *= env                               # each box's gain and fades
                 gl, gr = pan_gains(self.pans[t])
                 stereo = np.stack([sig * gl, sig * gr], axis=1)
                 mix += stereo
@@ -2070,7 +2294,7 @@ class Engine:
             lv[i0:i1] = 0
             # widen to whole level values, so the edges keep the audio just outside a-b
             a, b = int(i0 * fpb), min(self.frames, int(np.ceil(i1 * fpb)))
-        seg = np.abs(self.tracks[t][a:b])
+        seg = np.abs(shape_range(self.regions[t], self.tracks[t][a:b], a))
         bins = np.minimum((np.arange(a, b) // fpb).astype(np.int64), len(lv) - 1)
         starts = np.concatenate(([0], np.flatnonzero(np.diff(bins)) + 1))
         idx = bins[starts]

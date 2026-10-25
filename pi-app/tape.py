@@ -214,7 +214,7 @@ class Tape:
             return []
         fpb = e.frames_per_beat()
         out = []
-        for a, b, c in e.regions[track - 1]:
+        for a, b, c in (r[:3] for r in e.regions[track - 1]):
             xa, xb = self.x_of(a / fpb), self.x_of(b / fpb)
             if xb >= x0 and xa <= x1:
                 out.append((round(xa), round(xb), ui.rgb(REGION_COLOURS[c % len(REGION_COLOURS)])))

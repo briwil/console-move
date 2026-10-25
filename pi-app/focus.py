@@ -160,8 +160,11 @@ class Focus:
         tx = centres[1] + r_max + 40
         big = self.s.font("mono", 600, 22)
         small = self.s.font("mono", 500, 15)
-        surf.blit(big.render("TRACK %d" % self.shown, True, colour), (tx, y + 12))
+        title = big.render("TRACK %d" % self.shown, True, colour)
+        surf.blit(title, (tx, y + 12))
         lines = self.info.get("lines", [])
+        if len(lines) > 4:                       # the box under the playhead: knobs 1-3 change it
+            surf.blit(small.render(lines[4], True, (242, 243, 245)), (tx + title.get_width() + 24, y + 18))
         for i, text in enumerate(lines[:4]):
             col = (242, 243, 245) if i == 0 else (125, 131, 140)
             x = tx if i < 2 else tx + 330            # two columns of two lines

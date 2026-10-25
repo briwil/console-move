@@ -238,6 +238,31 @@ points and what's on the clipboard. Everything works the same in this view.
 Press the track's key again to go back to all 8; press a different track's
 key to zoom to that one instead.
 
+### Gain, normalize and fades (in the zoomed view)
+
+Here knobs 1–3 work on the box under the playhead (both sides of a stereo
+pair). What they're set to shows next to the track name, and the waveform
+shows it too.
+
+| Knob | Turn | Push |
+|---|---|---|
+| 1 | Gain, ½ dB a click (−40 to +24 dB) | Normalize: the box's loudest peak to −1 dB (SHIFT+push: gain back to 0 dB) |
+| 2 | Fade in (5 ms up to 30 s) | Fade in off |
+| 3 | Fade out | Fade out off |
+
+- Nothing is written into the recording: the gain and fades stay with the
+  box, so you can always change them back. UNDO (SHIFT+CUT) takes back a
+  normalize, or a run of knob turns on one box.
+- You hear them when it plays, and EXPORT, BOUNCE and COPY/CUT (the
+  clipboard) include them.
+- SPLICE splits a box's gain onto both halves (the fade in stays on the left,
+  the fade out on the right). Joining two boxes with different gains keeps
+  how they sound.
+- Overdubbing onto a box with gain or fades puts them into its audio first,
+  so the new part isn't turned up or faded too.
+- Every box edge with nothing right next to it gets a tiny 1 ms fade, and so
+  do the joins where DROP puts something down, so edits don't click.
+
 ## Drum synth (the MIDI key)
 
 Console has a drum machine built in: the six drum voices of the Erica Synths

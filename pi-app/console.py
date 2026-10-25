@@ -372,6 +372,10 @@ class Transport:
             self.seqp.undo()
         elif name == "MUTE1" and self.seq_page:
             self.seqp.cycle_mode()                # push knob 1 on the sequencer: the next knob mode
+        elif name in ("MUTE1", "MUTE2", "MUTE3", "SOLO1", "SOLO2", "SOLO3") and self.focus.active and e \
+                and not self.drum_page and not self.fx_page:
+            # the zoomed view: push knob 1 normalizes the box (SHIFT: gain back to 0 dB); 2 and 3: no fade
+            self.box_edit({"MUTE1": "normalize", "SOLO1": "reset_gain"}.get(name, "reset_" + ("in" if name[-1] == "2" else "out")))
         elif name.startswith("MUTE"):
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name.startswith("SOLO"):
@@ -459,6 +463,11 @@ class Transport:
             self.seqp.knob(number, delta, shift)
         elif self.drum_page and self.engine and self.engine.drums and number <= 9:
             self.drum_knob(number, delta, shift)
+        elif self.focus.active and self.engine and number <= 3:
+            # the zoomed track view: knobs 1-3 work on the box under the playhead
+            what = ("gain", "in", "out")[number - 1]
+            steps = self.knob_clicks(number, delta, shift)
+            self.box_edit(what, steps * 0.5 if what == "gain" else steps)
         elif number <= 8:
             if shift:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
@@ -944,7 +953,28 @@ class Transport:
             clip = "CLIPBOARD %s%s" % (self.beats_text(len(e.clip[0]) / fpb), "  STEREO" if len(e.clip) == 2 else "")
         else:
             clip = "CLIPBOARD EMPTY"
-        return [vol, mode, inout, clip]
+        info = e.box_info()
+        box = ("BOX: " + self.box_text(info)) if info else "NO BOX AT THE PLAYHEAD"
+        return [vol, mode, inout, clip, box]
+
+    def box_edit(self, what, delta=0):
+        info = self.engine.change_box(what, delta)
+        if info is None:
+            self.say("MOVE THE PLAYHEAD ONTO A BOX FIRST", 2)
+        elif info == "SILENT":
+            self.say("THIS BOX IS SILENT: NOTHING TO NORMALIZE", 2)
+        else:
+            self.say(("NORMALIZED: " if what == "normalize" else "BOX ") + self.box_text(info), 2)
+
+    @staticmethod
+    def fade_text(s):
+        if s <= 0:
+            return "OFF"
+        return "%d ms" % round(s * 1000) if s < 1 else "%g s" % round(s, 2)
+
+    def box_text(self, info):
+        return "GAIN %+.1f dB   FADE IN %s   FADE OUT %s" % (info["gain"], self.fade_text(info["in"]),
+                                                               self.fade_text(info["out"]))
 
     def armed_text(self, armed):
         if len(armed) == 8:

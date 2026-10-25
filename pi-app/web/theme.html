@@ -44,21 +44,24 @@
   .row:last-child { border-bottom: 0; }
   .row label { font-size: 14px; }
   .row .ctl { display: flex; gap: 6px; align-items: center; }
-  .swatch { -webkit-appearance: none; appearance: none; width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+  /* Colours are painted on <canvas>, not as CSS backgrounds: phone browsers' dark modes (Samsung Internet's,
+     for one) darken bright background colours but leave pictures alone. */
+  .swatch { -webkit-appearance: none; appearance: none; width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; overflow: hidden; background: none; }
+  .swatch canvas, .compare canvas { display: block; width: 100%; height: 100%; }
   /* our own colour picker: it always opens on the colour the setting has now */
   /* no dimming behind the picker: on iPad it darkened the picker's own colours too */
   .picker-bg { position: fixed; inset: 0; background: transparent; z-index: 10; display: grid; place-items: end center; padding: 16px; }
   .picker { width: min(360px, 100%); isolation: isolate; opacity: 1; filter: none; box-shadow: 0 8px 40px #000; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
   .picker h3 { margin: 0; font: 600 15px var(--ui); }
-  .sv { position: relative; height: 200px; border-radius: 6px; touch-action: none; cursor: crosshair;
-        background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
+  .sv { position: relative; height: 200px; border-radius: 6px; touch-action: none; cursor: crosshair; overflow: hidden; }
+  .sv canvas { display: block; width: 100%; height: 100%; }
   .sv .dot { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; pointer-events: none; }
-  .hue { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; border-radius: 9px; outline: none;
-         background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
-  .hue::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2px solid #000; }
-  .hue::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2px solid #000; }
+  .hue { position: relative; height: 22px; touch-action: none; cursor: pointer; }
+  .hue canvas { position: absolute; left: 0; right: 0; top: 2px; width: 100%; height: 18px; border-radius: 9px; }
+  .hue .thumb { position: absolute; top: 0; width: 22px; height: 22px; margin-left: -11px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px #000; pointer-events: none; }
   .compare { display: flex; gap: 8px; align-items: center; }
-  .compare div { flex: 1; height: 32px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; font: 500 11px var(--mono); color: #fff; text-shadow: 0 0 3px #000; cursor: pointer; }
+  .compare div { flex: 1; height: 32px; border-radius: 6px; border: 1px solid var(--line); position: relative; overflow: hidden; cursor: pointer; }
+  .compare span { position: absolute; inset: 0; display: grid; place-items: center; font: 500 11px var(--mono); color: #fff; text-shadow: 0 0 3px #000; }
   .picker .bottom { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
   input[type=text], input[type=number], select { font: 13px var(--mono); color: var(--fg); background: var(--lane); border: 1px solid var(--line); border-radius: 5px; padding: 5px 6px; }
   input.hex { width: 86px; }
@@ -144,9 +147,9 @@ function colourCard(sec, defs, cur) {
     const row = document.createElement("div"); row.className = "row";
     const lab = document.createElement("label"); lab.textContent = nice(k);
     const ctl = document.createElement("div"); ctl.className = "ctl";
-    const pick = document.createElement("button"); pick.className = "swatch"; pick.title = "Pick a colour";
+    const pick = swatchButton("Pick a colour");
     const hex = document.createElement("input"); hex.type = "text"; hex.className = "hex"; hex.spellcheck = false;
-    const set = v => { pick.style.background = v; hex.value = v.toUpperCase(); row.classList.toggle("changed", v.toLowerCase() !== defs[k].toLowerCase()); };
+    const set = v => { pick.paint(v); hex.value = v.toUpperCase(); row.classList.toggle("changed", v.toLowerCase() !== defs[k].toLowerCase()); };
     set(cur[k]);
     pick.onclick = () => openPicker(nice(k), cur[k], v => { cur[k] = v; set(v); changed(); });
     hex.onchange = () => { let v = hex.value.trim(); if (!v.startsWith("#")) v = "#" + v; if (hexOk(v)) { cur[k] = v.toUpperCase(); set(cur[k]); changed(); } else set(cur[k]); };
@@ -181,7 +184,7 @@ function fontCard(sec, defs, cur) {
       fam.value = st.family; weights(); size.value = st.size; tr.value = st.tracking;
       sample.style.fontFamily = face(st.family, st.weight); sample.style.fontSize = Math.min(40, st.size) + "px";
       sample.style.letterSpacing = st.tracking + "em";
-      for (const [ck, sw] of swatches) sw.style.background = st[ck];
+      for (const [ck, sw] of swatches) sw.paint(st[ck]);
       sample.style.color = st.colour || "";
       wrap.classList.toggle("changed", !same(st, d));
     };
@@ -195,8 +198,7 @@ function fontCard(sec, defs, cur) {
     const swatches = [];
     for (const ck of ["colour", "colour_showing"]) {
       if (!(ck in d)) continue;
-      const sw = document.createElement("button"); sw.className = "swatch";
-      sw.title = ck === "colour" ? "Colour" : "Colour of the page showing";
+      const sw = swatchButton(ck === "colour" ? "Colour" : "Colour of the page showing");
       sw.onclick = () => openPicker(nice(k) + (ck === "colour" ? " colour" : ": page showing"), st[ck], v => { st[ck] = v; show(); changed(); });
       swatches.push([ck, sw]);
       lw(ck === "colour" ? "colour" : "showing", sw);
@@ -229,6 +231,16 @@ function shapeCard(sec, defs, cur) {
 
 // ---- the colour picker (opens on the current colour, changes show live)
 
+function paint(canvas, colour) {
+  const c = canvas.getContext("2d"); c.fillStyle = colour; c.fillRect(0, 0, canvas.width, canvas.height);
+}
+function swatchButton(title) {
+  const b = document.createElement("button"); b.className = "swatch"; b.title = title;
+  const cv = document.createElement("canvas"); cv.width = 44; cv.height = 30; b.appendChild(cv);
+  b.paint = colour => paint(cv, colour);
+  return b;
+}
+
 function hsvToHex(h, s, v) {
   const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
   return "#" + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, "0")).join("").toUpperCase();
@@ -243,19 +255,34 @@ function hexToHsv(hex) {
 function openPicker(title, start, onChange) {
   let [h, s, v] = hexToHsv(start);
   const bg = document.createElement("div"); bg.className = "picker-bg";
-  bg.innerHTML = '<div class="picker"><h3></h3><div class="sv"><div class="dot"></div></div>' +
-    '<input class="hue" type="range" min="0" max="360" step="1">' +
-    '<div class="compare"><div class="was" title="Back to this">WAS</div><div class="now">NOW</div></div>' +
+  bg.innerHTML = '<div class="picker"><h3></h3><div class="sv"><canvas width="320" height="200"></canvas><div class="dot"></div></div>' +
+    '<div class="hue"><canvas width="360" height="18"></canvas><div class="thumb"></div></div>' +
+    '<div class="compare"><div class="was" title="Back to this"><canvas width="160" height="32"></canvas><span>WAS</span></div>' +
+    '<div class="now"><canvas width="160" height="32"></canvas><span>NOW</span></div></div>' +
     '<div class="bottom"><input type="text" class="hex" spellcheck="false"><button class="done">Done</button></div></div>';
   document.body.appendChild(bg);
   const q = s2 => bg.querySelector(s2), sv = q(".sv"), dot = q(".dot"), hue = q(".hue"), hex = q(".hex");
   q("h3").textContent = title;
-  q(".was").style.background = start;
+  paint(q(".was canvas"), start);
+  // the hue bar, drawn once
+  { const cv = q(".hue canvas"), c = cv.getContext("2d"), g = c.createLinearGradient(0, 0, cv.width, 0);
+    ["#f00", "#ff0", "#0f0", "#0ff", "#00f", "#f0f", "#f00"].forEach((col, i) => g.addColorStop(i / 6, col));
+    c.fillStyle = g; c.fillRect(0, 0, cv.width, cv.height); }
+  const drawSV = () => {
+    const cv = q(".sv canvas"), c = cv.getContext("2d"), W = cv.width, H = cv.height;
+    c.fillStyle = hsvToHex(h, 1, 1); c.fillRect(0, 0, W, H);
+    let g = c.createLinearGradient(0, 0, W, 0); g.addColorStop(0, "#fff"); g.addColorStop(1, "rgba(255,255,255,0)");
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "#000");
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  };
+  let drawnHue = null;
   const show = (send = true) => {
     const c = hsvToHex(h, s, v);
-    sv.style.backgroundColor = hsvToHex(h, 1, 1);
+    if (drawnHue !== h) { drawSV(); drawnHue = h; }
     dot.style.left = (s * 100) + "%"; dot.style.top = ((1 - v) * 100) + "%";
-    hue.value = h; q(".now").style.background = c;
+    q(".hue .thumb").style.left = (h / 360 * 100) + "%";
+    paint(q(".now canvas"), c);
     if (document.activeElement !== hex) hex.value = c;
     if (send) onChange(c);
   };
@@ -267,7 +294,9 @@ function openPicker(title, start, onChange) {
   };
   sv.onpointerdown = ev => { sv.setPointerCapture(ev.pointerId); fromPointer(ev); };
   sv.onpointermove = ev => { if (sv.hasPointerCapture(ev.pointerId)) fromPointer(ev); };
-  hue.oninput = () => { h = +hue.value; show(); };
+  const fromHue = ev => { const r = hue.getBoundingClientRect(); h = Math.max(0, Math.min(359.9, (ev.clientX - r.left) / r.width * 360)); show(); };
+  hue.onpointerdown = ev => { hue.setPointerCapture(ev.pointerId); fromHue(ev); };
+  hue.onpointermove = ev => { if (hue.hasPointerCapture(ev.pointerId)) fromHue(ev); };
   hex.onchange = () => { let c = hex.value.trim(); if (!c.startsWith("#")) c = "#" + c; if (hexOk(c)) { [h, s, v] = hexToHsv(c.toUpperCase()); show(); } else hex.value = hsvToHex(h, s, v); };
   q(".was").onclick = () => { [h, s, v] = hexToHsv(start); show(); };
   const close = () => bg.remove();

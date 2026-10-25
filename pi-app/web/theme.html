@@ -41,11 +41,11 @@
   .row:last-child { border-bottom: 0; }
   .row label { font-size: 14px; }
   .row .ctl { display: flex; gap: 6px; align-items: center; }
-  .swatch { width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+  .swatch { -webkit-appearance: none; appearance: none; width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
   /* our own colour picker: it always opens on the colour the setting has now */
-  .picker-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 10; display: grid; place-items: end center; padding: 16px; }
-  body:has(.picker-bg) .screen { z-index: 11; }   /* keep the picture of the screen in view while picking */
-  .picker { width: min(360px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  /* no dimming behind the picker: on iPad it darkened the picker's own colours too */
+  .picker-bg { position: fixed; inset: 0; background: transparent; z-index: 10; display: grid; place-items: end center; padding: 16px; }
+  .picker { width: min(360px, 100%); isolation: isolate; opacity: 1; filter: none; box-shadow: 0 8px 40px #000; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
   .picker h3 { margin: 0; font: 600 15px var(--ui); }
   .sv { position: relative; height: 200px; border-radius: 6px; touch-action: none; cursor: crosshair;
         background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }

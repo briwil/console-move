@@ -414,8 +414,13 @@ class Transport:
     PAD_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
 
     def drums_key(self):
-        """The MIDI key: the drum page, then the sequencer, then back to the tape."""
+        """The MIDI key: the drum page, then the sequencer, then back to the tape. Over an FX page it
+        closes the FX page first (showing the drum page or sequencer that was under it, or opening it)."""
         e = self.engine
+        if self.fx_page:
+            self.fx_page = None
+            if self.drum_page:
+                return
         if self.drum_page and not self.seq_page:
             self.seq_page = True
             return

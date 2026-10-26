@@ -51,7 +51,7 @@ def _load():
     f, p, i = ctypes.c_float, ctypes.c_void_p, ctypes.c_int
     fp = ctypes.POINTER(ctypes.c_float)
     for name, args, res in [("rev_new", [f], p), ("rev_free", [p], None), ("rev_clear", [p], None),
-                            ("rev_params", [p, f, f, f, f], None), ("rev_process", [p, fp, fp, fp, fp, i], None),
+                            ("rev_params", [p, f, f, f, f], None), ("rev_room", [p, f], None), ("rev_process", [p, fp, fp, fp, fp, i], None),
                             ("dly_new", [f, f], p), ("dly_free", [p], None), ("dly_clear", [p], None),
                             ("dly_params", [p, f, f, f], None), ("dly_process", [p, fp, fp, fp, fp, i], None)]:
         fn = getattr(lib, name)
@@ -96,8 +96,10 @@ class Reverb(_Effect):
         super().__init__(_lib.rev_new(rate), _lib.rev_process, _lib.rev_free)
 
     def set(self, size, tone):
-        """size and tone 0..1. Ranges from the Elements and Rings modules."""
-        _lib.rev_params(self.h, 0.35 + 0.53 * size, 0.3 + 0.6 * tone, 0.625, 0.2)
+        """size and tone 0..1. SIZE sets the room (its lines shrink to an eighth at 0) and the tail
+        together: fully down is a small, short room, fully up the Elements hall. Tone as on Elements."""
+        _lib.rev_room(self.h, 0.125 + 0.875 * size ** 1.5)
+        _lib.rev_params(self.h, 0.2 + 0.68 * size, 0.3 + 0.6 * tone, 0.625, 0.2)
 
     def clear(self):
         _lib.rev_clear(self.h)

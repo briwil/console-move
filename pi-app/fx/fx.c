@@ -7,7 +7,9 @@
  * Same topology, coefficients and modulation. Changes: plain C, float storage
  * (the original packs samples into 16 bits; this keeps its clipping), and the
  * delay lengths are scaled from the module's 32 kHz to the tape's sample rate
- * so the room sounds the same size.
+ * so the room sounds the same size, and a ROOM setting shrinks every line (down
+ * to an eighth), so it goes from Elements' big hall down to a small room
+ * (Elements itself can only change how long the tail is, never the size).
  *
  * The delay is new: a stereo tape delay whose time glides (with a little
  * pitch bend, like tape) when you change it, with soft saturation and a
@@ -36,6 +38,7 @@ typedef struct {
     int base[RV_LINES], len[RV_LINES];
     int write_ptr;
     float scale;                           /* sample rate / 32000 */
+    float room;                            /* 0.125..1: how much of each line is used (the room's size) */
     /* the two slow LFOs: cosine, 0..1, stepped every 32 samples as in the original */
     float lfo_phase[2], lfo_inc[2], lfo_value[2];
     float amount, input_gain, reverb_time, diffusion, lp;
@@ -115,7 +118,20 @@ Reverb *rev_new(float sample_rate) {
     r->reverb_time = 0.5f;
     r->diffusion = 0.625f;
     r->lp = 0.7f;
+    r->room = 1.0f;
     return r;
+}
+
+/* The room's size: every line (and the modulation) shrinks together. Lines keep their place in the
+ * buffer, so changing it only shortens how far back each one reads. */
+void rev_room(Reverb *r, float room) {
+    if (room < 0.125f) room = 0.125f;
+    if (room > 1.0f) room = 1.0f;
+    r->room = room;
+    for (int i = 0; i < RV_LINES; i++) {
+        int n = (int)(RV_LENGTHS[i] * r->scale * room + 0.5f);
+        r->len[i] = n < 4 ? 4 : n;
+    }
 }
 
 void rev_free(Reverb *r) { free(r); }
@@ -130,7 +146,7 @@ void rev_params(Reverb *r, float reverb_time, float lp, float diffusion, float i
 /* Wet output only. in and out may not overlap. */
 void rev_process(Reverb *r, const float *in_l, const float *in_r, float *out_l, float *out_r, int n) {
     const float kap = r->diffusion, klp = r->lp, krt = r->reverb_time, gain = r->input_gain;
-    const float s = r->scale;
+    const float s = r->scale * r->room;
     float lp_1 = r->lp_decay_1, lp_2 = r->lp_decay_2;
     Ctx c;
     c.r = r;

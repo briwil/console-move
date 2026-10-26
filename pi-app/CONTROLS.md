@@ -265,8 +265,9 @@ shows it too.
 
 ## Drum synth (the MIDI key)
 
-**Three drum machines.** Each song picks one in **SETTINGS → DRUM MACHINE**, and the
-song remembers it. New songs start with the one you used last.
+**Three drum machines.** On the drum page or the sequencer, press **FILE → DRUM
+MACHINE** and pick one. The song remembers it, and new songs start with the one you
+used last.
 - **LXR-02** is the one described below.
 - **TR-606** (6W6) and **TR-808** (8W8) are from Schwung on the Ableton Move.
 
@@ -285,8 +286,9 @@ How they differ:
   aren't used. Console's reverb and delay do that job, as for the LXR.
 - **Kits:** each machine keeps its own kits (FILE → SAVE / LOAD Kit). A song keeps
   each machine's kit, so switching back finds it as you left it.
-- **Switching machine:** the song's sequencer steps stay, but step locks are
-  cleared, because they belong to the old machine's settings.
+- **Each machine has its own sequencer.** Switching to another machine gives you its
+  own patterns, empty the first time. Switching back finds the previous machine's
+  patterns, kit and locks just as you left them, and the song saves them all.
 - **MULTI with the 808:** key n records onto track n, and SHIFT + key n records
   onto the same track.
 

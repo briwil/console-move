@@ -526,7 +526,8 @@ class Engine:
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
-        self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song)
+        self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song) ...
+        self.seqs = {}                          # ... one sequencer per drum machine: {machine: Sequencer}
         self.seq_hits = [0.0] * sequencer.MAX_LANES  # when each lane's last sequencer hit is heard (for the screen)
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
@@ -665,13 +666,25 @@ class Engine:
         return bool(self.device and self.device.get("virtual"))
 
     def set_drum_machine(self, machine):
-        """SETTINGS > DRUMS: the song's drum machine. Its kit and patterns stay with the song; step locks
-        belong to one machine's settings, so they're cleared. Returns True if it switched."""
+        """The drums menu (FILE on the drum page) > MACHINE: the song's drum machine. Each machine has its own
+        kit and its own sequencer patterns in the song, so switching back finds them as they were.
+        Returns True if it switched."""
         if not self.drums or machine == self.drums.machine:
             return False
+        old = self.drums.machine
         if not self.drums.use(machine):
             return False
-        self.seq.clear_all_locks()
+        with self.lock:
+            self.seqs[old] = self.seq
+            new = self.seqs.get(machine)
+            if new is None:
+                new = sequencer.Sequencer()
+                new.bar_beats = self.bar_beats()
+                new.from_json(None)
+                self.seqs[machine] = new
+            new.anchor = self.seq.anchor          # playing on: the new patterns keep the same bar lines
+            self.seq.stop()
+            self.seq = new
         self.remember("drum_machine", machine)
         self._drum_machine_changed()
         self.dirty.add(-1)
@@ -883,6 +896,7 @@ class Engine:
                 self.drums.restore(getattr(self, "settings", {}).get("drum_machine", "lxr"), {})
                 self._drum_machine_changed()
             self.seq.from_json(None)                    # ... and empty patterns
+            self.seqs = {self.drums.machine if self.drums else "lxr": self.seq}
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -892,7 +906,8 @@ class Engine:
 
     def is_empty(self):
         """Nothing in this song: no audio, no sequencer steps, and the drum kit as a new song has it."""
-        if self.has_audio() or not all(p.empty() for p in self.seq.patterns):
+        seqs = list(self.seqs.values()) + [self.seq]
+        if self.has_audio() or not all(p.empty() for s in seqs for p in s.patterns):
             return False
         return not self.drums or all(self.drums.is_init_kit(m, k) for m, k in self.drums.machine_kits().items())
 
@@ -919,10 +934,11 @@ class Engine:
             meta = {}
         except ValueError:
             return False
-        seq = sequencer.Sequencer()
-        seq.from_json(meta.get("drum_seq"))
-        if not all(p.empty() for p in seq.patterns):
-            return False
+        for data in [meta.get("drum_seq")] + list((meta.get("drum_seqs") or {}).values()):
+            seq = sequencer.Sequencer()
+            seq.from_json(data)
+            if not all(p.empty() for p in seq.patterns):
+                return False
         if self.drums:
             kits = dict(meta.get("drum_kits") or {})
             if meta.get("drum_kit"):
@@ -1026,7 +1042,8 @@ class Engine:
         with self.lock:
             self.time_sig = [int(num), int(den)]
             self.dirty.add(-1)
-        self.seq.set_bar_beats(self.bar_beats())
+        for s in {id(x): x for x in list(self.seqs.values()) + [self.seq]}.values():
+            s.set_bar_beats(self.bar_beats())
 
     def set_bpm(self, bpm):
         """Change the tempo (only while stopped). The audio stays put; the bar lines move."""
@@ -1062,11 +1079,25 @@ class Engine:
         if effects:
             self.fx = dict(effects.DEFAULTS)
             self.fx.update({k: v for k, v in (meta.get("fx") or {}).items() if k in effects.DEFAULTS})
-        self.seq.bar_beats = self.bar_beats()          # missing patterns start at a bar of the song's time
-        self.seq.from_json(meta.get("drum_seq"))
+        # each drum machine's patterns (older songs have one set, for the machine they used)
+        self.seqs = {}
+        saved = dict(meta.get("drum_seqs") or {})
+        if meta.get("drum_seq") is not None:
+            saved[meta.get("drum_machine", "lxr")] = meta["drum_seq"]
+        for mid, data in saved.items():
+            s = sequencer.Sequencer()
+            s.bar_beats = self.bar_beats()                 # missing patterns start at a bar of the song's time
+            s.from_json(data)
+            self.seqs[mid] = s
+        self.seq.bar_beats = self.bar_beats()
+        self.seq.from_json(None)
         if self.drums:
             self.drums.restore(meta.get("drum_machine", "lxr"), meta.get("drum_kits"), meta.get("drum_kit"))
             self._drum_machine_changed()
+        machine = self.drums.machine if self.drums else meta.get("drum_machine", "lxr")
+        if machine in self.seqs:
+            self.seq = self.seqs[machine]
+        self.seqs[machine] = self.seq
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
         self._meta_regions = meta.get("regions")
@@ -1110,6 +1141,8 @@ class Engine:
                 meta["drum_kit"] = self.drums.kit()
                 meta["drum_kits"] = self.drums.machine_kits()
             meta["drum_seq"] = self.seq.to_json()
+            current = self.drums.machine if self.drums else "lxr"
+            meta["drum_seqs"] = {m: s.to_json() for m, s in self.seqs.items() if m != current}
         if not changed:
             return False
 
@@ -2131,15 +2164,16 @@ class Engine:
                     soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
                     for offset, lane, _vel, _locks in events:
                         self.seq_hits[lane] = soon + offset / self.rate
-                seq_voices, live_voices = self.drums.render(PERIOD, events)
+                m = self.drums.m                # this block's machine (switching one mid-block can't mix them up)
+                seq_voices, live_voices = m.render(PERIOD, events)
                 # what you hear: both, now. What's recorded (at pos, where you pressed): your hits now, and
                 # the sequencer's from read_ahead frames ago (they were made that far ahead, to sound on time)
                 voices = live_voices + self._delay_sequencer(seq_voices)
                 # each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
-                x = self.drums.multi(voices) if self.input_mode == "all" else self.drums.stereo(voices)
+                x = m.multi(voices) if self.input_mode == "all" else m.stereo(voices)
                 heard = seq_voices + live_voices
-                pans = self.drums.pans() * DRUMS_MONITOR
-                rev_g, dly_g = self.drums.sends()            # each drum's sends to the reverb and delay
+                pans = m.pans() * DRUMS_MONITOR
+                rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
                 out = self.process(x, monitor=heard @ pans,
                                    monitor_rev=(heard * rev_g) @ pans if rev_g.any() else None,
                                    monitor_dly=(heard * dly_g) @ pans if dly_g.any() else None)

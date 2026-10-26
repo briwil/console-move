@@ -2,6 +2,8 @@
 - SAVE KIT names the drum synth's settings and keeps them; LOAD KIT puts a saved kit back. Kits live in
   ~/console-data/kits/<name>.json (the 606's and 808's in kits/606/ and kits/808/), so every song can use
   them; each drum machine lists only its own.
+- DRUM MACHINE picks the song's drum machine (LXR-02, TR-606, TR-808); each has its own kit and its own
+  sequencer patterns in the song, so switching back finds them as they were.
 - COPY PATTERN copies the sequencer's current pattern onto another one.
 - CLEAR P-LOCKS takes every parameter lock off the current pattern.
 
@@ -17,8 +19,10 @@ import menu
 import sequencer
 
 KITS = os.path.join(audio.DATA, "kits")
-ITEMS = [("SAVE", "menu_new"), ("LOAD", "menu_save"), ("COPY", "menu_load"), ("CLEAR", "menu_settings")]
-TEXTS = {"SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern", "CLEAR": "CLEAR Locks + Steps"}
+ITEMS = [("MACHINE", "menu_more"), ("SAVE", "menu_new"), ("LOAD", "menu_save"), ("COPY", "menu_load"),
+         ("CLEAR", "menu_settings")]
+TEXTS = {"MACHINE": "DRUM MACHINE", "SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern",
+         "CLEAR": "CLEAR Locks + Steps"}
 ROWS = 7                                   # saved kits shown at once (the layout's set_value1-7)
 
 
@@ -49,6 +53,7 @@ class KitMenu(menu.Menu):
         self.replace = None                # a name that's already saved: PLAY again replaces it
         self.copy_to = 1                   # COPY PATTERN: where to (0-15)
         self.confirm = None                # a copy waiting for PLAY again (it would replace a pattern)
+        self.machines = []                 # MACHINE: [(id, title)] to pick from
 
     @property
     def drums(self):
@@ -67,13 +72,14 @@ class KitMenu(menu.Menu):
         return self.engine.seq
 
     def key(self, name):
-        if self.mode in ("load", "copy", "clear") and not isinstance(name, tuple):
+        if self.mode in ("load", "copy", "clear", "machine") and not isinstance(name, tuple):
             if name in ("UP", "LEFT", "BAR_LEFT"):
                 self.turn(-1)
             elif name in ("DOWN", "RIGHT", "BAR_RIGHT"):
                 self.turn(1)
             elif name in menu.CONFIRM:
-                {"load": self.load, "copy": self.copy_pattern, "clear": self.clear_locks}[self.mode]()
+                {"load": self.load, "copy": self.copy_pattern, "clear": self.clear_locks,
+                 "machine": self.switch_machine}[self.mode]()
             elif name == "FILE":
                 self.mode, self.msg = "list", ""
             self.refresh()
@@ -87,9 +93,10 @@ class KitMenu(menu.Menu):
             return
         if self.mode == "clear":
             return
-        if self.mode == "load":
-            if self.kits:
-                self.pick = max(0, min(len(self.kits) - 1, self.pick + delta))
+        if self.mode in ("load", "machine"):
+            n = len(self.kits if self.mode == "load" else self.machines)
+            if n:
+                self.pick = max(0, min(n - 1, self.pick + delta))
             self.msg = ""
             return
         if self.mode == "list":
@@ -116,6 +123,13 @@ class KitMenu(menu.Menu):
             self.say("THE DRUM SYNTH ISN'T RUNNING")
             return
         what = ITEMS[self.choice][0]
+        if what == "MACHINE":
+            import drums
+            self.machines = drums.available_machines()
+            ids = [m for m, _ in self.machines]
+            self.pick = ids.index(self.drums.machine) if self.drums.machine in ids else 0
+            self.mode, self.msg = "machine", ""
+            return
         if what == "SAVE":
             self.mode = "name"
             taken = {n.lower() for n in kit_names(self.drums.machine)}
@@ -189,6 +203,29 @@ class KitMenu(menu.Menu):
         self.close()
         self.transport.say("KIT LOADED: %s" % name.upper(), 3)
 
+    def item_y(self, item):
+        """Where a menu item sits in the layout (menu_more is the drums menu's own extra row)."""
+        if item not in self.ys:
+            self.ys[item] = (self.s.get(item) or {}).get("y", 0)
+        return self.ys[item]
+
+    def switch_machine(self):
+        """This song's drum machine. Each one keeps its own kit and its own patterns in the song."""
+        if not self.machines:
+            return
+        mid, title = self.machines[self.pick]
+        e, t = self.engine, self.transport
+        if mid == self.drums.machine:
+            self.say("THIS SONG IS ALREADY ON THE %s" % title)
+            return
+        if not e.set_drum_machine(mid):
+            self.say("THE %s ISN'T BUILT YET: RUN ~/console/pi-app/setup.sh ONCE" % title)
+            return
+        t.drum_voice, t.drum_key, t.drum_tab = 0, 1, 0
+        t.seqp.lane, t.seqp.mode = 0, 0
+        self.close()
+        t.say("DRUMS: %s  (ITS OWN KIT AND PATTERNS)" % title, 4)
+
     def copy_pattern(self):
         src, dst = self.seq.current, self.copy_to
         if dst == src:
@@ -228,19 +265,22 @@ class KitMenu(menu.Menu):
         s = self.s
         s.set("song", t="DRUMS")
         self.choice = min(self.choice, len(ITEMS) - 1)
-        listing, loading = self.mode == "list", self.mode == "load"
+        listing, loading = self.mode == "list", self.mode in ("load", "machine")
         texts = TEXTS
         for label, item in menu.ITEMS:
             s.set(item, t="")
         for i, (label, item) in enumerate(ITEMS):
             on = i == self.choice
             s.set(item, t=texts[label] if listing else "", c=menu.ON if on else menu.OFF,
-                  s=menu.SIZE_ON if on else menu.SIZE_OFF, y=self.ys[item] - (2 if on else 0))
+                  s=menu.SIZE_ON if on else menu.SIZE_OFF, y=self.item_y(item) - (2 if on else 0))
         # the LOAD list, in the settings rows
-        top = max(0, min(self.pick - ROWS // 2, len(self.kits) - ROWS)) if loading else 0
+        names = getattr(self, "kits", []) if self.mode == "load" else [
+            title + ("   (THIS SONG)" if self.drums and mid == self.drums.machine else "")
+            for mid, title in getattr(self, "machines", [])]
+        top = max(0, min(self.pick - ROWS // 2, len(names) - ROWS)) if loading else 0
         for r in range(ROWS):
             i = top + r
-            name = self.kits[i] if loading and i < len(self.kits) else ""
+            name = names[i] if loading and i < len(names) else ""
             on = loading and i == self.pick
             s.set("set_label%d" % (r + 1), t="")
             s.set("set_value%d" % (r + 1), t=name, c=menu.ON if on else "#F2F3F5", x=640, a="center")
@@ -258,7 +298,8 @@ class KitMenu(menu.Menu):
         elif loading:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = "LOAD A KIT     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK"
+            hint = ("LOAD A KIT     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK" if self.mode == "load" else
+                    "DRUM MACHINE FOR THIS SONG     BIG KNOB: PICK ONE     PLAY: SWITCH     FILE: BACK")
         elif self.mode == "copy":
             dst = self.seq.patterns[self.copy_to]
             s.set("prompt", t="COPY PATTERN %d TO" % (self.seq.current + 1), y=self.prompt_y)

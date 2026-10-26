@@ -106,7 +106,9 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   - MULTI: lane n records onto track n % 8.
 - **Saved with the song:** the machine is per song (`drum_machine`, plus `drum_kits` for every machine
   used). Kits live in `kits/`, `kits/606/` and `kits/808/`.
-- **Patterns:** every pattern keeps 16 lanes, and switching machine clears the step locks.
+- **Patterns:** each machine has its own `Sequencer` in the song (`engine.seqs`, saved as `drum_seqs`
+  plus `drum_seq` for the current one), and every pattern keeps 16 lanes.
+- The machine is picked from the drums menu (FILE on the drum page, `kitmenu.py`: DRUM MACHINE).
 - Built by `setup.sh` (needs g++), or by `drums.py` in the background at start.
 
 ### Sequencer (grid)

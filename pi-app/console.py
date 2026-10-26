@@ -383,6 +383,8 @@ class Transport:
             self.focus.toggle(self.armed)
         elif name == "SEQ_UNDO":
             self.seqp.undo()
+        elif name.startswith("MUTE") and name[4:].isdigit() and self.full_drum_page():
+            self.drum_reset(int(name[4:]))        # the drum page: push a knob, its setting goes back to default
         elif name == "MUTE1" and self.seq_page:
             self.seqp.cycle_mode()                # push knob 1 on the sequencer: the next knob mode
         elif name in ("MUTE1", "MUTE2", "MUTE3", "SOLO1", "SOLO2", "SOLO3") and self.focus.active and e \
@@ -470,6 +472,20 @@ class Transport:
         e.change_drum(param, self.knob_clicks(number, delta, shift))
         self.drumpage.edited[number] = time.monotonic()        # lime, with its value, for a moment
         self.say("%s  %s  %s" % (e.drums.names[self.drum_voice], e.drums.label(param), e.drums.value_text(param)), 2)
+
+    def drum_reset(self, number):
+        """Knob n pushed on the drum page: its setting back to where the Init Kit has it."""
+        e = self.engine
+        pages = self.drum_pages()
+        self.drum_tab = min(self.drum_tab, len(pages) - 1)
+        params = pages[self.drum_tab][1]
+        if number > len(params):
+            return
+        param = params[number - 1]
+        e.reset_drum(param)
+        self.drumpage.edited[number] = time.monotonic()
+        self.say("%s  %s  BACK TO %s" % (e.drums.names[self.drum_voice], e.drums.label(param),
+                                         e.drums.value_text(param)), 2)
 
     def knob_clicks(self, number, delta, shift):
         """Turning quickly goes further; SHIFT: one step at a time."""

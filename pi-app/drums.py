@@ -532,7 +532,8 @@ class Schwung:
     def set_param(self, index, value):
         if not 0 <= index < self.param_count:
             return
-        value = self.stepped(index, int(value), 0) if self.params[index]["kind"] == "menu" else max(0, min(127, int(value)))
+        top = len(self.params[index]["options"]) - 1 if self.params[index]["kind"] == "menu" else 127
+        value = max(0, min(top, int(value)))
         with self._lock:
             self.values[index] = value
             self._pending.append(("param", index, value))

@@ -316,6 +316,8 @@ On the drum page the track keys are drum pads, so they don't select tracks;
 SHIFT+track still arms one. Press MIDI (twice: it goes through the
 sequencer) to get the track keys back.
 
+**Push a knob** on the drum page to put its setting back to where the Init Kit has it.
+
 **Shaping the sounds.** The drum page shows the settings of the voice you
 played last (its name is top right; key 7, the open hi-hat, picks the
 hi-hat). Knobs 1–8 turn the setting shown on their row; knob 9 steps

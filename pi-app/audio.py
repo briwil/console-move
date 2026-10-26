@@ -1263,6 +1263,14 @@ class Engine:
             self.dirty.add(-1)                      # the kit is saved with the song
         return v
 
+    def reset_drum(self, param):
+        """A drum setting back to the kit's starting value (the Init Kit's). Returns it."""
+        v = self.drums.init_values[param] if 0 <= param < len(self.drums.init_values) else 0
+        self.drums.set_param(param, v)
+        with self.lock:
+            self.dirty.add(-1)
+        return v
+
     def change_fx(self, key, delta):
         """Change one effect setting: rev_size, rev_tone, rev_level, dly_feedback, dly_level (by delta),
         or dly_time (by delta steps through effects.DELAY_TIMES). Returns the new value."""

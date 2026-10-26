@@ -1458,6 +1458,27 @@ class Engine:
             self.loop_on = self.loop_b > self.loop_a
             self.dirty.add(-1)
 
+    def region_state(self):
+        with self.lock:
+            return self.loop_on, self.loop_a, self.loop_b
+
+    def set_region(self, a_beats, b_beats, loop_on=None):
+        """In and out points at a and b (in beats); a == b takes them away. loop_on: leave as it is (None)."""
+        with self.lock:
+            fpb = self.frames_per_beat()
+            a = round(min(max(0.0, a_beats), self.tape_beats) * fpb)
+            b = round(min(max(0.0, b_beats), self.tape_beats) * fpb)
+            self.loop_a, self.loop_b = (a, b) if b > a else (0, 0)
+            if loop_on is not None:
+                self.loop_on = loop_on
+            self.loop_on = self.loop_on and self.loop_b > self.loop_a
+            self.dirty.add(-1)
+
+    def restore_region(self, state):
+        with self.lock:
+            self.loop_on, self.loop_a, self.loop_b = state
+            self.dirty.add(-1)
+
     def clear_region(self):
         with self.lock:
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0

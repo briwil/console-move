@@ -216,6 +216,16 @@ are emptied. SHIFT+CUT undoes it. Stop first; it doesn't work while playing.
 
 ## In / out points, replace and overdub
 
+**Quick in/out sweep: SHIFT + knob 9.** Turn it and the playhead jumps a bar per click
+from where it was (snapped to the nearest bar line). The in and out points stretch from
+that starting bar to where the playhead is now:
+- turning right, the start is the IN point and you set the OUT;
+- turning left, the start is the OUT point and you set the IN.
+
+Pause for 2 seconds and the next turn starts a new sweep from the playhead.
+**SHIFT + push knob 9** undoes the last sweep: the in/out points go back to how they
+were, and the playhead goes back to where it started. A sweep turns LOOP on.
+
 - SHIFT+← sets IN, SHIFT+→ sets OUT. LOOP plays round between them.
 - With IN/OUT set, recording only writes between them (punch in / out),
   even if you hold RECORD across the whole thing.
@@ -463,7 +473,7 @@ On a keyboard, **W** does the same as FX.
 | Knob | Turn | Push |
 |---|---|---|
 | 1–8 (above the tracks) | Track volume (with SHIFT: pan) | Mute / unmute (with SHIFT: solo / unsolo) |
-| 9 (left of the right-hand three) | Zoom | Zoom back to 4 bars |
+| 9 (left of the right-hand three) | Zoom (with SHIFT: sweep in/out points, below) | Zoom back to 4 bars (with SHIFT: undo the sweep) |
 | 10 (the middle one) | Grid: 1/4, 1/8, 1/16, 1/32 (with SHIFT: headphone volume) | Loop on / off |
 | 11, the big knob | Move the playhead by grid steps (with SHIFT: by bars) | Back to the start (or the loop start) |
 

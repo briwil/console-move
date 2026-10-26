@@ -191,6 +191,8 @@ class Board:
                 name = PUSHES[number - 32]
                 if self.shift and name.startswith("MUTE"):
                     name = "SOLO" + name[4:]          # SHIFT + push a track knob: solo
+                elif self.shift and name == "ZOOM_RESET":
+                    name = "SWEEP_UNDO"               # SHIFT + push knob 9: undo the in/out sweep
                 self.q.put(name)
         elif kind == "cc" and 1 <= number <= 11:
             delta = value - 64
@@ -345,6 +347,8 @@ class Transport:
             t.zoom_in()
         elif name == "ZOOM_OUT":
             t.zoom_out()
+        elif name == "SWEEP_UNDO":
+            self.sweep_undo()
         elif name == "ZOOM_RESET":
             t.zoom = tape.ZOOMS.index(4)
         elif name == "INPUT":
@@ -517,6 +521,8 @@ class Transport:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
             else:
                 self.volume(number, delta * 0.02)
+        elif number == 9 and shift:
+            self.sweep(delta)                     # SHIFT + knob 9: in and out points, a bar a click
         elif number == 9:
             for _ in range(abs(delta)):
                 t.zoom_in() if delta > 0 else t.zoom_out()
@@ -527,6 +533,47 @@ class Transport:
                 t.grid = (t.grid + (1 if delta > 0 else -1)) % len(tape.GRIDS)
         elif number == 11:
             self.move(delta, tape.BEATS_PER_BAR if shift else t.step)
+
+    SWEEP_GAP = 2.0           # seconds: turns closer together than this are one sweep
+
+    def sweep(self, delta):
+        """SHIFT + knob 9: from where the playhead is (on the nearest bar line), each click moves it a bar
+        and the in and out points span from there to where it is now: turning right, the start is the
+        IN point; turning left, it's the OUT point. A pause starts a new sweep."""
+        e, t = self.engine, self.tape
+        if not e:
+            return
+        now = time.monotonic()
+        bar = tape.BEATS_PER_BAR
+        s = getattr(self, "_sweep", None)
+        if not s or now - s["t"] > self.SWEEP_GAP:
+            pos = e.beats()
+            start = round(pos / bar) * bar
+            s = self._sweep = {"start": start, "pos": start, "undo": e.region_state(), "from": pos, "t": now}
+        s["t"] = now
+        s["pos"] = max(0.0, min(e.tape_beats, s["pos"] + (1 if delta > 0 else -1) * bar * abs(delta)))
+        self.set_pos(s["pos"])
+        a, b = sorted((s["start"], s["pos"]))
+        e.set_region(a, b, loop_on=True if b > a else None)
+        if b > a:
+            self.say("IN %s  OUT %s   (SHIFT + PUSH KNOB 9: UNDO)" % (self.position_text(a), self.position_text(b)), 3)
+        else:
+            self.say("NO IN/OUT POINTS (TURN ON TO MAKE THEM)", 2)
+
+    def sweep_undo(self):
+        """SHIFT + push knob 9: the in and out points as they were before the last sweep, and the playhead
+        back where it started."""
+        s = getattr(self, "_sweep", None)
+        if not s or not self.engine:
+            self.say("NO SWEEP TO UNDO", 2)
+            return
+        self.engine.restore_region(s["undo"])
+        self.set_pos(s["from"])
+        self._sweep = None
+        r = self.engine.loop_region()
+        fpb = self.engine.frames_per_beat()
+        self.say("IN/OUT POINTS BACK: %s" % ("IN %s  OUT %s" % (self.position_text(r[0] / fpb), self.position_text(r[1] / fpb))
+                                              if r else "NONE"), 3)
 
     def record_key(self):
         e = self.engine

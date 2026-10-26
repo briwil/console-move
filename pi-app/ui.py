@@ -34,6 +34,20 @@ def _load_fonts():
 
 FONT_FILES = _load_fonts()
 
+
+def system_family(family):
+    """The theme page can swap the two fonts everything else uses: "sans" (main text, the menus) and
+    "mono" (labels and numbers: the tape, the sequencer, the FX pages)."""
+    if family not in ("sans", "mono"):
+        return family
+    try:
+        import theme
+        fams = theme.section("system").get("families", {})
+    except Exception:
+        return family
+    chosen = fams.get("main_text" if family == "sans" else "labels_and_numbers", family)
+    return chosen if chosen in FONT_FILES else family
+
 # ---------------------------------------------------------------- reading the layout
 
 # command -> (item type, argument kinds, field names); n = number, c = colour, s = text
@@ -223,6 +237,7 @@ class Screen:
         return changed
 
     def font(self, family, weight, size):
+        family = system_family(family)
         weights = FONT_FILES.get(family) or FONT_FILES["sans"]
         wt = min(weights, key=lambda w: abs(w - weight))
         key = (family, wt, size)

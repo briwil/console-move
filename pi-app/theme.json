@@ -1,4 +1,11 @@
 {
+ "system": {
+  "name": "Everything else (menus, tape, sequencer, FX)",
+  "families": {
+   "main_text": "sans",
+   "labels_and_numbers": "mono"
+  }
+ },
  "drum_page": {
   "name": "Drum page",
   "colours": {

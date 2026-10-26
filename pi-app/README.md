@@ -136,6 +136,8 @@ Changes save by themselves and show on the screen within a second.
 - The defaults are `pi-app/theme.json`. Your changes are kept in `~/console-data/theme.json`,
   so updates never overwrite them. **Back to defaults** removes your changes.
 - **Download theme** saves your theme as a file. Send it over to make it the new default in the code.
+- The **Everything else** section at the top swaps the two fonts the rest of the screens use: **Main text**
+  (the menus) and **Labels and numbers** (the tape, the sequencer, the FX pages).
 - Fonts can be any in `fonts/fonts.json` (Outfit, Roboto Condensed, Inter, Plex, Space Grotesk…).
 
 ## If the picture is upside down

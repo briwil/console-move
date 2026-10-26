@@ -129,6 +129,7 @@ function build() {
     const h = document.createElement("h2"); h.textContent = sdef.name || nice(sec); box.appendChild(h);
     const grid = document.createElement("div"); grid.className = "grid"; box.appendChild(grid);
     const cur = current[sec];
+    if (sdef.families) grid.appendChild(familyCard(sec, sdef.families, cur.families));
     if (sdef.colours) grid.appendChild(colourCard(sec, sdef.colours, cur.colours));
     if (sdef.fonts) grid.appendChild(fontCard(sec, sdef.fonts, cur.fonts));
     if (sdef.shapes) grid.appendChild(shapeCard(sec, sdef.shapes, cur.shapes));
@@ -217,6 +218,40 @@ function fontCard(sec, defs, cur) {
     c.appendChild(wrap);
     show();
   }
+  return c;
+}
+
+function familyCard(sec, defs, cur) {
+  const c = card("Fonts");
+  const samples = {main_text: "LOAD Project   SETTINGS", labels_and_numbers: "001.1.1   GRID 1/16   120.0 BPM"};
+  for (const k of Object.keys(defs)) {
+    const wrap = document.createElement("div"); wrap.className = "font";
+    const top = document.createElement("div"); top.className = "top";
+    const lab = document.createElement("label"); lab.textContent = nice(k);
+    const ctl = document.createElement("div"); ctl.className = "ctl";
+    const fam = document.createElement("select");
+    const sample = document.createElement("div"); sample.className = "sample"; sample.textContent = samples[k] || "Console";
+    const seen = new Set();
+    for (const [id, f] of Object.entries(fonts).sort((a, b) => a[1].name.localeCompare(b[1].name))) {
+      if (seen.has(f.name) && id !== cur[k] && id !== defs[k]) continue;
+      seen.add(f.name);
+      const o = document.createElement("option"); o.value = id; o.textContent = f.name; fam.appendChild(o);
+    }
+    const show = () => {
+      fam.value = cur[k];
+      sample.style.fontFamily = face(cur[k], 500); sample.style.fontSize = "22px";
+      wrap.classList.toggle("changed", cur[k] !== defs[k]);
+    };
+    fam.onchange = () => { cur[k] = fam.value; show(); changed(); };
+    const span = document.createElement("span"); span.textContent = "font"; ctl.append(span, fam);
+    top.append(lab, undoButton(() => { cur[k] = defs[k]; show(); changed(); }));
+    wrap.append(top, ctl, sample);
+    c.appendChild(wrap);
+    show();
+  }
+  const note = document.createElement("p"); note.className = "hint";
+  note.textContent = "Screens were laid out for Roboto Condensed: wide fonts may run into each other.";
+  c.appendChild(note);
   return c;
 }
 

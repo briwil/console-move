@@ -15,7 +15,8 @@ import math
 import random
 import threading
 
-LANES = 7
+MAX_LANES = 16          # lanes kept in every pattern: the drum machine uses its own number of them
+LANES = MAX_LANES       #   (LXR 7, 606 8, 808 16: drums.Drums().lanes)
 MAX_STEPS = 64
 PATTERNS = 16
 LANE_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
@@ -179,6 +180,14 @@ class Sequencer:
             if self.anchor + k * step_frames > tape_frame:
                 self._skip.add((lane, k))    # it's just ahead: you've played it already, don't play it twice
             return i
+
+    def clear_all_locks(self):
+        """Every step lock in every pattern goes (they belong to one drum machine's settings)."""
+        with self.lock:
+            for p in self.patterns:
+                for ln in p.lanes:
+                    for s in ln.steps:
+                        s.locks = {}
 
     def lane(self, i):
         return self.pattern.lanes[i]

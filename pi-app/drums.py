@@ -1,5 +1,11 @@
-"""The drum synth: the six drum voices of the Erica Synths LXR-02 (its open-source firmware, GPL-3.0),
-running on the Pi as one of the console's inputs.
+"""The drum synth, one of the console's inputs. Three drum machines, picked per song in SETTINGS:
+
+- LXR-02: the six drum voices of the Erica Synths LXR-02 (its open-source firmware, GPL-3.0). Class LXR.
+- TR-606 and TR-808: 6W6 and 8W8 from Schwung (Ableton Move), GPL-3.0, in drums/schwung/. Class Schwung.
+
+Drums (at the bottom) holds the one in use and passes everything to it, so the rest of the app talks to
+whichever machine the song has. Each machine has lanes (what the drum keys play: keys 1-8, and with SHIFT
+9-16 when a machine has more than 8) and voices (its sounds, each with its settings pages).
 
 The sound engine is the LXR's own code, in drums/lxr/, compiled with the console's glue
 (drums/console_drums.c) into drums/libdrums.so. setup.sh builds it; if it's missing or older than the
@@ -32,7 +38,8 @@ PROBLEM = ""              # why the drum synth is off, if it is
 
 
 def _newest_source():
-    files = glob.glob(os.path.join(DIR, "**", "*.[ch]"), recursive=True) + [os.path.join(DIR, "build.sh")]
+    files = [f for f in glob.glob(os.path.join(DIR, "**", "*.[ch]"), recursive=True)
+             if os.sep + "schwung" + os.sep not in f] + [os.path.join(DIR, "build.sh")]
     return max((os.path.getmtime(f) for f in files), default=0)
 
 
@@ -85,8 +92,33 @@ AVAILABLE = _lib is not None
 _live = (_load(LIVE_LIB) if AVAILABLE else None) or _lib
 
 
-class Drums:
-    """One drum synth (the library holds a single engine, so make one of these)."""
+class LXR:
+    """The LXR-02's drum synth (the library holds a single engine, so make one of these)."""
+
+    id, title = "lxr", "LXR-02"
+    voices, channels, lanes = VOICES, VOICES, 7
+    names, short = NAMES, SHORT
+    lane_voice = [0, 1, 2, 3, 4, 5, 5]          # lane 6 plays the hi-hat open
+    lane_short = ["D1", "D2", "D3", "SN", "CY", "HHc", "HHo"]
+    lane_names = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
+
+    def pages(self, voice):
+        return dp.PAGES[voice]
+
+    @staticmethod
+    def label(param):
+        return dp.LABELS.get(param, "?")
+
+    @staticmethod
+    def kind(param):
+        return dp.KINDS.get(param, ("num",))[0]
+
+    def multi(self, voices):
+        """Voices -> the input channels MULTI records (one per track): the voices as they are."""
+        return voices
+
+    def channel_sends(self):
+        return self.sends()
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -273,6 +305,8 @@ class Drums:
         pos = 0
         ptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         for offset, lane, vel, locks in events:
+            if lane >= self.lanes:
+                continue                     # a lane another machine used (patterns keep all 16)
             offset = max(pos, min(frames, offset))
             if offset > pos:
                 _lib.drums_render(ptr(seq[pos:offset]), offset - pos)
@@ -304,3 +338,387 @@ class Drums:
     def stereo(self, voices):
         """(frames, 6) voices -> (frames, 2), panned the way the kit says."""
         return voices @ self.pans()
+
+
+# ---------------------------------------------------------------- the TR-606 and TR-808 (Schwung)
+
+SW_DIR = os.path.join(DIR, "schwung")
+# lane order: what keys 1-8 play, then with SHIFT 9-16. The common drums are on the first eight.
+SPECS = {
+    "606": {"title": "TR-606", "header": "606/sd606_params.h", "prefix": "sd606",
+            "voices": ["bd", "sd", "lt", "ht", "ch", "oh", "cy", "cp"],
+            "lanes": ["bd", "sd", "lt", "ht", "ch", "oh", "cy", "cp"]},
+    "808": {"title": "TR-808", "header": "808/w8_params.h", "prefix": "w8",
+            "voices": ["bd", "sd", "lt", "mt", "ht", "lc", "mc", "hc", "rs", "cl", "ma", "cp", "cb", "ch", "oh", "cy"],
+            "lanes": ["bd", "sd", "lt", "mt", "ht", "cp", "ch", "oh", "lc", "mc", "hc", "rs", "cl", "ma", "cb", "cy"]},
+}
+# the machines' own effects and master stage aren't used (Console has its own effects and mixes the voices)
+SKIP_KEYS = {"master_dist", "master_drive", "comp", "note_map", "ui_focus", "mutes", "rev_decay", "rev_tone",
+             "rev_hpf", "rev_level", "dly_time", "dly_fdbk", "dly_tone", "dly_hpf", "dly_level", "dly_bpm"}
+LABEL_WORDS = {"Rev": "REVERB", "Dly": "DELAY", "Distortion": "DIST", "Velocity": "VELOCITY"}
+
+
+def _c_json(path, name):
+    """A JSON text the machine's header keeps as a C string (split over many lines)."""
+    import json
+    import re
+    s = open(path).read()
+    body = s[s.index(name + "[] ="):]
+    pos, parts = body.index("=") + 1, []
+    lit = re.compile(r'\s*"((?:[^"\\]|\\.)*)"')
+    while True:
+        m = lit.match(body, pos)
+        if not m:
+            break
+        parts.append(m.group(1))
+        pos = m.end()
+    return json.loads("".join(parts).encode().decode("unicode_escape"))
+
+
+_sw_building = threading.Lock()
+
+
+def _sw_build(mid):
+    """drums/schwung/lib<mid>.so, built with g++ if it's missing or older than its code."""
+    with _sw_building:
+        return _sw_build_now(mid)
+
+
+def _sw_build_now(mid):
+    lib = os.path.join(SW_DIR, "lib%s.so" % mid)
+    srcs = glob.glob(os.path.join(SW_DIR, mid, "*")) + glob.glob(os.path.join(SW_DIR, "glue*"))
+    newest = max((os.path.getmtime(f) for f in srcs), default=0)
+    if os.path.exists(lib) and os.path.getmtime(lib) >= newest:
+        return lib
+    try:
+        r = subprocess.run(["g++", "-O2", "-shared", "-fPIC", "-w", "-o", lib + ".tmp",
+                            os.path.join(SW_DIR, "glue%s.cpp" % mid)], capture_output=True, text=True, timeout=600)
+        if r.returncode == 0:
+            os.replace(lib + ".tmp", lib)
+        else:
+            print("Drums: couldn't build the %s (%s)" % (mid, r.stderr.strip()[-400:]))
+    except (OSError, subprocess.SubprocessError) as e:
+        print("Drums: couldn't build the %s (%s)" % (mid, e))
+    return lib if os.path.exists(lib) else None
+
+
+def _sw_load(path):
+    try:
+        lib = ctypes.CDLL(path)
+    except OSError as e:
+        print("Drums: couldn't load %s: %s" % (path, e))
+        return None
+    i, v, s = ctypes.c_int, None, ctypes.c_char_p
+    for name, args, res in [("sw_init", [ctypes.c_float], i), ("sw_voices", [], i), ("sw_set", [s, i], v),
+                            ("sw_get", [s], i), ("sw_trigger", [i, i], v),
+                            ("sw_render", [ctypes.POINTER(ctypes.c_float), i], v)]:
+        fn = getattr(lib, name)
+        fn.argtypes, fn.restype = args, res
+    return lib
+
+
+class Schwung:
+    """The TR-606 (6W6) or TR-808 (8W8), each voice coming out on its own (see drums/schwung/glue*.cpp)."""
+
+    channels = 8                     # MULTI: lanes 1-8 onto tracks 1-8; with 16, lanes 9-16 share them
+
+    def __init__(self, mid):
+        spec = SPECS[mid]
+        self.id, self.title = mid, spec["title"]
+        lib = _sw_build(mid)
+        self.available = False
+        self._lib = _sw_load(lib) if lib else None
+        live_path = lib[:-3] + "_live.so" if lib else None
+        if self._lib and live_path:
+            try:
+                if not os.path.exists(live_path) or os.path.getmtime(live_path) < os.path.getmtime(lib):
+                    shutil.copyfile(lib, live_path + ".tmp")
+                    os.replace(live_path + ".tmp", live_path)
+            except OSError:
+                live_path = None
+        self._live = (_sw_load(live_path) if live_path else None) or self._lib
+        if not self._lib:
+            return
+        self.voices = self._lib.sw_init(44100.0)
+        if self._live is not self._lib:
+            self._live.sw_init(44100.0)
+        self.available = self.voices == len(spec["voices"])
+        # the settings, from the machine's own tables
+        header = os.path.join(SW_DIR, spec["header"])
+        chain = _c_json(header, spec["prefix"] + "_chain_params_json")
+        levels = _c_json(header, spec["prefix"] + "_ui_pages_json")["levels"]
+        info = {p["key"]: p for p in chain}
+        self.params = []             # [{key, label, kind, count/options, default, voice}]
+        self.index = {}
+        def add(key, label, voice):
+            p = info[key]
+            entry = {"key": key, "label": LABEL_WORDS.get(label, label).upper(), "voice": voice,
+                     "kind": "menu" if p["type"] == "enum" else "num",
+                     "options": [o.upper() for o in p.get("options", [])], "default": int(p.get("default", 0))}
+            self.index[key] = len(self.params)
+            self.params.append(entry)
+        self._pages = []
+        self.names = []
+        for v, vk in enumerate(spec["voices"]):
+            lvl = levels[vk]
+            self.names.append(lvl["name"].upper())
+            labels = {q["key"]: q["label"] for q in lvl["params"] if "key" in q}
+            for key in lvl["knobs"]:
+                if key not in self.index and key not in SKIP_KEYS:
+                    add(key, labels.get(key, key), v)
+        root_labels = {q["key"]: q["label"] for q in levels["root"]["params"] if "key" in q}
+        kit_keys = [k for k in ("volume", "vel_depth", "hh_choke") if k in info]
+        for key in kit_keys:
+            if key not in self.index:
+                add(key, root_labels.get(key, key), None)
+        kit_page = ("KIT", [self.index[k] for k in kit_keys])
+        for v, vk in enumerate(spec["voices"]):
+            knobs = [self.index[k] for k in levels[vk]["knobs"] if k in self.index]
+            self._pages.append([("SOUND", knobs), kit_page])
+        self.short = [vk.upper() for vk in spec["voices"]]
+        self.lane_voice = [spec["voices"].index(k) for k in spec["lanes"]]
+        self.lanes = len(self.lane_voice)
+        self.lane_short = [self.short[v] for v in self.lane_voice]
+        self.lane_names = [self.names[v] for v in self.lane_voice]
+        self.param_count = self.engine_params = len(self.params)
+        self.init_values = [p["default"] for p in self.params]
+        self.values = list(self.init_values)
+        self._send_keys = [(self.index.get(vk + "_rev"), self.index.get(vk + "_dly")) for vk in spec["voices"]]
+        self._lock = threading.Lock()
+        self._pending = []
+        self._locked = [set() for _ in range(self.voices)]
+        self.load_kit(self.init_values)
+
+    # ------------------------------------------------------------ what the screens ask
+    def pages(self, voice):
+        return self._pages[voice]
+
+    def label(self, param):
+        return self.params[param]["label"] if 0 <= param < len(self.params) else "?"
+
+    def kind(self, param):
+        return self.params[param]["kind"] if 0 <= param < len(self.params) else "num"
+
+    def value_text(self, param, v=None):
+        v = self.get_param(param) if v is None else v
+        p = self.params[param]
+        if p["kind"] == "menu":
+            return p["options"][v] if 0 <= v < len(p["options"]) else str(v)
+        return str(v)
+
+    def fraction(self, param, v=None):
+        v = self.get_param(param) if v is None else v
+        p = self.params[param]
+        if p["kind"] == "menu":
+            return v / max(1, len(p["options"]) - 1)
+        return v / 127
+
+    @staticmethod
+    def lockable(param):
+        return True
+
+    def stepped(self, param, v, clicks):
+        p = self.params[param]
+        if p["kind"] == "menu":
+            return max(0, min(len(p["options"]) - 1, v + (1 if clicks > 0 else -1)))
+        return max(0, min(127, v + clicks))
+
+    def step(self, param, clicks):
+        v = self.stepped(param, self.get_param(param), clicks)
+        self.set_param(param, v)
+        return v
+
+    # ------------------------------------------------------------ settings
+    def set_param(self, index, value):
+        if not 0 <= index < self.param_count:
+            return
+        value = self.stepped(index, int(value), 0) if self.params[index]["kind"] == "menu" else max(0, min(127, int(value)))
+        with self._lock:
+            self.values[index] = value
+            self._pending.append(("param", index, value))
+
+    def get_param(self, index):
+        return self.values[index] if 0 <= index < self.param_count else 0
+
+    def kit(self):
+        return list(self.values)
+
+    def load_kit(self, values):
+        values = [int(v) for v in list(values)[:self.param_count]]
+        values += self.init_values[len(values):]
+        with self._lock:
+            self.values = values
+            self._pending.extend(("param", i, v) for i, v in enumerate(values))
+
+    def init_kit(self):
+        self.load_kit(self.init_values)
+
+    def sends(self):
+        """Each voice's reverb and delay sends (its REVERB and DELAY knobs), 0..1."""
+        rev = np.array([self.values[r] if r is not None else 0 for r, _ in self._send_keys], np.float32) / 127
+        dly = np.array([self.values[d] if d is not None else 0 for _, d in self._send_keys], np.float32) / 127
+        return rev, dly
+
+    def channel_sends(self):
+        rev, dly = self.sends()
+        first = [self.lane_voice[c] for c in range(min(self.channels, self.lanes))]
+        return rev[first], dly[first]
+
+    def set_bpm(self, bpm):
+        pass                         # nothing here follows the tempo (their delays aren't used)
+
+    # ------------------------------------------------------------ sound
+    def hit(self, lane, velocity=100):
+        with self._lock:
+            self._pending.append(("hit", lane, velocity))
+
+    @property
+    def two_engines(self):
+        return self._live is not self._lib
+
+    def _set(self, lib, index, value):
+        lib.sw_set(self.params[index]["key"].encode(), int(value))
+
+    def render(self, frames, events=(), with_live=True):
+        """As LXR.render: (sequencer, by hand), each (frames, voices)."""
+        todo = []
+        if with_live:
+            with self._lock:
+                todo, self._pending = self._pending, []
+        seq = np.zeros((frames, self.voices), np.float32)
+        live = np.zeros((frames, self.voices), np.float32)
+        engines = (self._lib, self._live) if self.two_engines else (self._lib,)
+        for t in todo:
+            if t[0] == "hit":
+                if 0 <= t[1] < self.lanes:
+                    self._live.sw_trigger(self.lane_voice[t[1]], t[2])
+            elif t[0] == "param":
+                for lib in engines:
+                    self._set(lib, t[1], t[2])
+        pos = 0
+        ptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        for offset, lane, vel, locks in events:
+            if not 0 <= lane < self.lanes:
+                continue
+            offset = max(pos, min(frames, offset))
+            if offset > pos:
+                self._lib.sw_render(ptr(seq[pos:offset]), offset - pos)
+                pos = offset
+            voice = self.lane_voice[lane]
+            for p in self._locked[voice] - set(locks):
+                self._set(self._lib, p, self.values[p])
+            for p, v in locks.items():
+                if 0 <= p < self.param_count:
+                    self._set(self._lib, p, v)
+            self._locked[voice] = set(p for p in locks if 0 <= p < self.param_count)
+            self._lib.sw_trigger(voice, vel)
+        if pos < frames:
+            self._lib.sw_render(ptr(seq[pos:]), frames - pos)
+        if self.two_engines and with_live:
+            self._live.sw_render(ptr(live), frames)
+        return seq, live
+
+    def pans(self):
+        return np.ones((self.voices, 2), np.float32)          # these machines are mono: every voice centred
+
+    def stereo(self, voices):
+        return voices @ self.pans()
+
+    def multi(self, voices):
+        """Voices -> 8 channels for MULTI: lane n (and with SHIFT, lane n + 8) onto track n."""
+        out = np.zeros((len(voices), self.channels), np.float32)
+        for lane, v in enumerate(self.lane_voice):
+            out[:, lane % self.channels] += voices[:, v]
+        return out
+
+
+MACHINES = [("lxr", "LXR-02"), ("606", "TR-606"), ("808", "TR-808")]
+
+
+def _prebuild():
+    """At start-up, build the 606 and 808 in the background if they need it (setup.sh normally has), so
+    picking one in SETTINGS doesn't wait for the compiler."""
+    for mid in SPECS:
+        _sw_build(mid)
+
+
+threading.Thread(target=_prebuild, daemon=True, name="drum builds").start()
+
+
+class Drums:
+    """The song's drum machine. Everything is passed on to it (Drums().use() picks another)."""
+
+    def __init__(self, machine="lxr"):
+        self.__dict__["_machines"] = {}
+        self.__dict__["m"] = None
+        self.__dict__["saved_kits"] = {}       # {machine: kit} from the song, for machines not started yet
+        if not self.use(machine):
+            self.use("lxr")
+
+    def use(self, machine):
+        """Switch to a machine ("lxr", "606", "808"). Returns True if it's there (built and working)."""
+        ms = self._machines
+        if machine not in ms:
+            try:
+                ms[machine] = LXR() if machine == "lxr" else Schwung(machine)
+            except Exception as e:
+                print("Drums: the %s isn't available: %s" % (machine, e))
+                return False
+            if machine != "lxr" and not ms[machine].available:
+                del ms[machine]
+                return False
+            if machine in self.saved_kits:
+                ms[machine].load_kit(self.saved_kits[machine])
+        self.__dict__["m"] = ms[machine]
+        return True
+
+    def restore(self, machine, kits, kit=None):
+        """Opening a song: its machine, every machine's kit as the song left it (the Init Kit if it has none)
+        and kit for the song's own machine (older songs only have that one)."""
+        kits = dict(kits or {})
+        if kit is not None:
+            kits[machine] = kit
+        self.__dict__["saved_kits"] = kits
+        for mid, m in self._machines.items():
+            if mid in kits:
+                m.load_kit(kits[mid])
+            else:
+                m.init_kit()
+        return self.use(machine) or self.use("lxr")
+
+    def is_init_kit(self, machine, kit):
+        """Whether kit (saved for machine) is that machine's Init Kit (False if it can't tell)."""
+        m = self._machines.get(machine)
+        if m is None:
+            return not kit
+        if not kit:
+            return True
+        values = [int(v) for v in list(kit)[:m.param_count]]
+        if machine == "lxr" and len(values) == dp.NOISE_DECAY and len(values) > 56:
+            values.append(values[56])
+        values += m.init_values[len(values):]
+        return values == m.init_values
+
+    @property
+    def machine(self):
+        return self.m.id
+
+    def machine_kits(self):
+        """{machine: kit} for every machine used so far (saved with the song)."""
+        return {k: m.kit() for k, m in self._machines.items()}
+
+    def __getattr__(self, name):
+        return getattr(self.__dict__["m"], name)
+
+    def __setattr__(self, name, value):
+        setattr(self.m, name, value)
+
+
+def available_machines():
+    """[(id, title)] of the machines that can run here."""
+    out = [("lxr", "LXR-02")] if AVAILABLE else []
+    for mid, spec in SPECS.items():
+        lib = os.path.join(SW_DIR, "lib%s.so" % mid)
+        if os.path.exists(lib) or os.path.exists(os.path.join(SW_DIR, "glue%s.cpp" % mid)):
+            out.append((mid, spec["title"]))
+    return out

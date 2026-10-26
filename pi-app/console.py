@@ -153,6 +153,7 @@ class Board:
         self.pads = None                   # Transport.pad: plays the drum synth straight from this thread
         self.seq_page = lambda: False      # True on the sequencer page: track keys go to it, pressed and let go
         self.heard = lambda: 0             # the tape frame you're hearing (for live recording into the sequencer)
+        self.banked = lambda: False        # True when the drum machine has more than 8 lanes (SHIFT: 9-16)
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -161,15 +162,12 @@ class Board:
                 if name == "SHIFT":
                     self.shift = bool(value)
                     return
-                if name.startswith("TRACK") and not self.shift and self.seq_page():
+                if name.startswith("TRACK") and self.seq_page() and (not self.shift or self.banked()):
+                    # the sequencer: the drum keys pick and place (with SHIFT, lanes 9-16 on the 808)
                     n = int(name[5:])
-                    if n == 8:
-                        if value:
-                            self.q.put("SEQ_UNDO")
-                        return
                     if value and self.pads:
-                        self.pads(n)                      # heard straight away
-                    self.q.put(("LANE", n, bool(value), self.heard()))
+                        self.pads(n, self.shift)          # heard straight away
+                    self.q.put(("LANE", n, bool(value), self.heard(), self.shift))
                     return
                 if name in HOLD_KEYS and (not value or not self.shift):
                     if value:
@@ -181,7 +179,7 @@ class Board:
                     return
                 if not value:
                     return
-                if name.startswith("TRACK") and not self.shift and self.pads and self.pads(int(name[5:])):
+                if name.startswith("TRACK") and self.pads and self.pads(int(name[5:]), self.shift):
                     return                                # a drum pad: played already, nothing else to do
                 if self.shift:
                     if name.startswith("TRACK"):
@@ -223,7 +221,7 @@ class Transport:
         self.drum_page = False                    # the DRUMS key: track keys 1-7 play the drum synth
         self.drum_voice = 0                       # the voice the knobs edit (the last one played), 0-5
         self.drum_tab = 0                         # which page of its settings (knob 9 turns them)
-        self._drum_hits = [0.0] * 6               # when each voice was last played, to light it up
+        self._drum_hits = [0.0] * 16              # when each voice was last played, to light it up
         self.drum_key = 1                         # the drum key played last (7: the open hi-hat)
         import drumpage
         self.drumpage = drumpage.DrumPage(self)
@@ -432,21 +430,30 @@ class Transport:
             e.set_input("DRUMS", "DRUM SYNTH")
             self.say("INPUT: DRUM SYNTH  (SETTINGS > INPUT TO CHANGE BACK)", 4)
 
-    def pad(self, n):
-        """Track key n on the drum page: play voice n (7 is the hi-hat open). True if it played.
+    def pad(self, n, shift=False):
+        """Track key n on the drum page: play the drum on lane n (with SHIFT, lane n + 8 on a machine with
+        more than 8; on the LXR, 7 is the hi-hat open). True if it played (else SHIFT + key arms the track).
         Called from the MIDI thread, so it only reads a few flags and queues the hit."""
         e = self.engine
-        if not (self.drum_page and e and e.drums_input and 1 <= n <= 7):
+        if not (self.drum_page and e and e.drums_input and e.drums and 1 <= n <= 8):
             return False
-        e.hit(n - 1, 100)
-        voice = min(n, 6) - 1                     # 7 (open hi-hat) is the hi-hat voice too
+        d = e.drums
+        if shift and d.lanes <= 8:
+            return False
+        lane = n - 1 + (8 if shift else 0)
+        if lane >= d.lanes:
+            return False
+        e.hit(lane, 100)
+        voice = d.lane_voice[lane]
         self.drum_voice = voice
-        self.drum_key = n
+        self.drum_key = lane + 1
         self._drum_hits[voice] = time.monotonic()
         return True
 
     def drum_pages(self):
-        return drumparams.PAGES[self.drum_voice]
+        d = self.engine.drums
+        self.drum_voice = min(self.drum_voice, d.voices - 1)
+        return d.pages(self.drum_voice)
 
     def drum_knob(self, number, delta, shift):
         """On the drum page: knobs 1-8 are the settings on the page, knob 9 turns the page."""
@@ -462,8 +469,7 @@ class Transport:
         param = params[number - 1]
         e.change_drum(param, self.knob_clicks(number, delta, shift))
         self.drumpage.edited[number] = time.monotonic()        # lime, with its value, for a moment
-        self.say("%s  %s  %s" % (drums_mod().NAMES[self.drum_voice], drumparams.LABELS[param],
-                                 e.drums.value_text(param)), 2)
+        self.say("%s  %s  %s" % (e.drums.names[self.drum_voice], e.drums.label(param), e.drums.value_text(param)), 2)
 
     def knob_clicks(self, number, delta, shift):
         """Turning quickly goes further; SHIFT: one step at a time."""
@@ -829,6 +835,8 @@ class Transport:
             self.say("SPLIT %s AT %s" % (where, pos) if done == "added"
                      else "JOINED BACK TOGETHER ON %s" % where if done == "removed"
                      else "NO BOX HERE TO SPLIT", 2)
+        elif name == "UNDO" and self.seq_page and e and e.drums:
+            self.seqp.undo()                      # on the sequencer, SHIFT+CUT undoes the last pattern edit
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
 
@@ -1166,6 +1174,7 @@ def main():
     if board:
         board.pads = transport.pad
         board.seq_page = lambda: transport.seq_page
+        board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
         if engine:
             board.heard = lambda: engine.pos
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)

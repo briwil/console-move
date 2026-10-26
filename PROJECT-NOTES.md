@@ -89,6 +89,26 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - The snare has a separate noise decay (param 247). VEL>VOL is on in the Init kit.
 - Input modes: MULTI (each voice to its own track), STEREO (kit to a pair), MONO.
 
+### Drum machines (LXR-02, TR-606, TR-808)
+
+- `drums.Drums` holds the song's machine and passes everything on to it:
+  - `LXR` is the LXR-02;
+  - `Schwung("606")` and `Schwung("808")` are 6W6 (charlesvestal/schwung-6W6) and 8W8
+    (athousanddetails/schwung-8W8), vendored in `drums/schwung/606` and `808`.
+- `drums/schwung/glue606.cpp` and `glue808.cpp` compile each whole engine with a per-voice render
+  (`render_voices`). That way Console gets one channel per voice for MULTI, and does the panning and
+  effects itself; the engines' own FX and master stage are skipped.
+- Their settings and pages are read at run time from the machines' own headers
+  (`*_chain_params_json`, `*_ui_pages_json`), so updating the vendored code keeps them in step.
+- **Lanes vs voices:**
+  - Lanes are what keys play: LXR 7, 606 8, 808 16 (SHIFT + keys = lanes 9–16).
+  - `lane_voice` maps each lane to a voice; the 808's lane order puts the common drums on keys 1–8.
+  - MULTI: lane n records onto track n % 8.
+- **Saved with the song:** the machine is per song (`drum_machine`, plus `drum_kits` for every machine
+  used). Kits live in `kits/`, `kits/606/` and `kits/808/`.
+- **Patterns:** every pattern keeps 16 lanes, and switching machine clears the step locks.
+- Built by `setup.sh` (needs g++), or by `drums.py` in the background at start.
+
 ### Sequencer (grid)
 
 - Seven lanes (one per drum key) and 32 steps visible. Knob 1 moves the cursor, which

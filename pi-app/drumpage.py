@@ -64,8 +64,9 @@ class DrumPage:
 
     def draw(self, surf):
         th = theme.section("drum_page")
-        if theme.version() != self._theme_version:
-            self._theme_version = theme.version()
+        machine_id = self.t.engine.drums.machine
+        if (theme.version(), machine_id) != self._theme_version:
+            self._theme_version = (theme.version(), machine_id)
             self._page_size = None
         col = {k: theme.rgb(v) for k, v in th["colours"].items()}
         ink = lambda style, key="colour": theme.rgb(style.get(key, "#FFFFFF"))     # a text style's own colour
@@ -80,18 +81,26 @@ class DrumPage:
         t.drum_tab = min(t.drum_tab, len(pages) - 1)
         _, params = pages[t.drum_tab]
 
-        # top: the voice, the tempo and the 7 drum keys
-        names = __import__("drums").NAMES
-        self.text(surf, names[voice], fonts["voice_name"], ink(fonts["voice_name"]), 22, 45)
+        # top: the voice, the tempo, the machine and its drum keys (with SHIFT, 9-16 on a machine with more)
+        self.text(surf, d.names[voice], fonts["voice_name"], ink(fonts["voice_name"]), 22, 45)
         sig = "%d/%d" % tuple(e.time_sig) if getattr(e, "time_sig", None) else "4/4"
         self.text(surf, "%.1f BPM %s" % (e.bpm, sig), fonts["tempo"], ink(fonts["tempo"]), RIGHT, 21, align="right")
-        key = getattr(t, "drum_key", voice + 1)
-        for k in range(7):
-            v = min(k, 5)
-            glow = max(0.0, 1.0 - (now - t._drum_hits[v]) / 0.25) if (k < 6 or key == 7) else 0.0
-            base = col["key_selected"] if k + 1 == key else col["key"]
+        key = max(1, min(d.lanes, getattr(t, "drum_key", voice + 1)))
+        bank = (key - 1) // 8
+        machine = d.title + ("   KEYS %d-%d" % (bank * 8 + 1, min(d.lanes, bank * 8 + 8)) if d.lanes > 8 else "")
+        self.text(surf, machine, fonts["tempo"], ink(fonts["tempo"]), 1040, 46, align="right")
+        lane_voice = d.lane_voice
+        for k in range(8):
+            lane = bank * 8 + k
+            if lane >= d.lanes:
+                pygame.draw.rect(surf, col["key"], (1052 + k * 25, 30, 20, 20), 1, border_radius=shp["key_corner"])
+                continue
+            v = lane_voice[lane]
+            shared = lane_voice.count(v) > 1
+            glow = max(0.0, 1.0 - (now - t._drum_hits[v]) / 0.25) if (not shared or lane + 1 == key) else 0.0
+            base = col["key_selected"] if lane + 1 == key else col["key"]
             colour = tuple(round(c + (255 - c) * glow * 0.7) for c in base)
-            pygame.draw.rect(surf, colour, (1077 + k * 25, 30, 20, 20), border_radius=shp["key_corner"])
+            pygame.draw.rect(surf, colour, (1052 + k * 25, 30, 20, 20), border_radius=shp["key_corner"])
 
         # the rules and the grid, with the panel on it
         pygame.draw.rect(surf, col["rules"], (LEFT, 57, RIGHT - LEFT, 2))
@@ -110,7 +119,7 @@ class DrumPage:
             cx = round(px + (i + 0.5) * pw / n)
             editing = now - self.edited.get(i + 1, 0.0) < EDIT_SHOW
             colour = col["turning"] if editing else col["setting_bars_and_boxes"]
-            kind = drumparams.KINDS.get(param, ("num",))[0]
+            kind = d.kind(param)
             if kind in TEXT_KINDS:
                 pygame.draw.rect(surf, colour, (cx - box // 2, MID_Y - box // 2, box, box), border,
                                  border_radius=shp["box_corner"])
@@ -119,7 +128,7 @@ class DrumPage:
                           fit=box - 2 * border - 4)
             else:
                 self.bar(surf, cx, d.fraction(param), colour, shp)
-            label = d.value_text(param) if editing else drumparams.LABELS[param]
+            label = d.value_text(param) if editing else d.label(param)
             self.text(surf, label, fonts["setting_name"], col["turning"] if editing else ink(fonts["setting_name"]), cx, 258, align="centre", fit=pw / n - 8)
 
         # the pages along the bottom, spread edge to edge
@@ -157,7 +166,8 @@ class DrumPage:
         if self._page_size is None:
             size = style["size"]
             tr = style.get("tracking", 0)
-            for pages in drumparams.PAGES:
+            d = self.t.engine.drums
+            for pages in (d.pages(v) for v in range(d.voices)):
                 labels = [short_page(p[0]) for p in pages]
                 while size > 10:
                     f = self.t.s.font(style["family"], style["weight"], size)

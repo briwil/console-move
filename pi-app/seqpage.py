@@ -27,7 +27,6 @@ STEP_PARAMS = ["length", "vel", "chance", "ratchet", "hits", "rotate", "rate"]  
 STEP_LABELS = {"length": "LENGTH", "vel": "VELOCITY", "chance": "CHANCE", "ratchet": "RATCHETS",
                "hits": "EUCLID", "rotate": "SHIFT", "rate": "RATE"}
 LANE_PARAMS = ("length", "hits", "rotate", "rate")
-SHORT = ["D1", "D2", "D3", "SN", "CY", "HHc", "HHo"]
 CHANCE_SHOW = 1.0                # seconds the steps show chance after the chance knob stops turning
 CHANCE_COLOUR = (242, 243, 245)
 GESTURE_GAP = 1.5                # seconds: knob turns closer together than this are one undo step
@@ -52,11 +51,28 @@ class SeqPage:
     def seq(self):
         return self.t.engine.seq
 
+    @property
+    def d(self):
+        return self.t.engine.drums
+
     def voice(self, lane=None):
-        return sequencer.LANE_VOICE[self.lane if lane is None else lane]
+        """The drum machine's voice a lane plays (its settings pages)."""
+        lv = self.d.lane_voice
+        return lv[min(len(lv) - 1, self.lane if lane is None else lane)]
+
+    def short(self, lane):
+        names = self.d.lane_short
+        return names[lane] if lane < len(names) else "L%d" % (lane + 1)
+
+    def shown_lanes(self):
+        """The lanes on screen: up to 8, the bank of the picked lane (9-16 are SHIFT + the drum keys)."""
+        n = self.d.lanes
+        self.lane = min(self.lane, n - 1)
+        first = (self.lane // 8) * 8
+        return list(range(first, min(n, first + 8)))
 
     def pages(self):
-        return drumparams.PAGES[self.voice()]
+        return self.d.pages(self.voice())
 
     def mode_name(self):
         return "STEP" if self.mode == 0 else self.pages()[self.mode - 1][0]
@@ -93,10 +109,13 @@ class SeqPage:
 
     # ------------------------------------------------------------ keys and knobs
 
-    def lane_key(self, n, down, heard_frame=0):
-        lane = n - 1
+    def lane_key(self, n, down, heard_frame=0, shift=False):
+        """Drum key n pressed or let go (with SHIFT: lane n + 8, on a machine with more than 8)."""
         e = self.e
         if not e or not e.drums:
+            return
+        lane = n - 1 + (8 if shift and self.d.lanes > 8 else 0)
+        if lane >= self.d.lanes:
             return
         if down:
             # stopped: pressing a different drum's key picks its lane; press it again for a step
@@ -113,23 +132,23 @@ class SeqPage:
                 self._cursor_until = 0.0
                 self.held[lane] = True                     # placed already: letting go doesn't toggle
                 e.seq_changed()
-                self.t.say("%s  STEP %d" % (SHORT[lane], i + 1), 1)
+                self.t.say("%s  STEP %d" % (self.short(lane), i + 1), 1)
             return
         turned = self.held.pop(lane, None)
         if turned is None or turned:
             return
         if getattr(self, "_switching", False):
             self._switching = False
-            self.t.say("%s  (PRESS AGAIN TO ADD A STEP)" % sequencer.LANE_NAMES[lane], 2)
+            self.t.say("%s  (PRESS AGAIN TO ADD A STEP)" % self.d.lane_names[lane], 2)
             return
         length = self.seq.lane(lane).length
         if self.cursor >= length:
-            self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (self.cursor + 1, SHORT[lane], length), 3)
+            self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (self.cursor + 1, self.short(lane), length), 3)
             return
         self._edit(("toggle", time.monotonic()))
         on = self.seq.toggle(lane, self.cursor)
         e.seq_changed()
-        self.t.say("%s  STEP %d %s" % (SHORT[lane], self.cursor + 1, "ON" if on else "OFF"), 1)
+        self.t.say("%s  STEP %d %s" % (self.short(lane), self.cursor + 1, "ON" if on else "OFF"), 1)
 
     def cycle_mode(self):
         self.mode = (self.mode + 1) % (len(self.pages()) + 1)
@@ -176,28 +195,28 @@ class SeqPage:
                 if param in LANE_PARAMS:
                     seq.change_lane(lane, param, clicks if param == "length" else delta)
                 elif i >= seq.lane(lane).length:
-                    self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, SHORT[lane]), 2)
+                    self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, self.short(lane)), 2)
                     return
                 elif held or seq.step(lane, i).on:          # with no key held, only a step that's on
                     seq.change_step(lane, i, param, clicks if param == "vel" else delta)
                 else:
-                    self.t.say("STEP %d OF %s IS OFF: HOLD ITS KEY TO SET IT" % (i + 1, SHORT[lane]), 2)
+                    self.t.say("STEP %d OF %s IS OFF: HOLD ITS KEY TO SET IT" % (i + 1, self.short(lane)), 2)
                     return
             e.seq_changed()
             if param == "chance":
                 self._chance_until = time.monotonic() + CHANCE_SHOW   # the steps show chance for a moment
             lane = lanes[-1]
-            self.t.say("%s  %s  %s" % (SHORT[lane], STEP_LABELS[param], self.step_value(param, lane)), 2)
+            self.t.say("%s  %s  %s" % (self.short(lane), STEP_LABELS[param], self.step_value(param, lane)), 2)
             return
         # a sound page: lock it to the step under the cursor while a drum key is held, else the drum's sound
         if self.lane in self.held:
             lane = self.lane
             if not e.drums.lockable(param):
-                self.t.say("%s CAN'T BE LOCKED TO A STEP" % drumparams.LABELS[param], 3)
+                self.t.say("%s CAN'T BE LOCKED TO A STEP" % e.drums.label(param), 3)
                 return
             i = self.target(lane)
             if i >= seq.lane(lane).length:
-                self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, SHORT[lane]), 3)
+                self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, self.short(lane)), 3)
                 return
             self._edit((number, lane, "lock"))
             self.held[lane] = True
@@ -206,11 +225,11 @@ class SeqPage:
             seq.set_lock(lane, i, param, e.drums.stepped(param, base, clicks))
             e.seq_changed()
             v = seq.step(lane, i).locks[param]
-            self.t.say("%s STEP %d  %s  %s  (LOCKED)" % (SHORT[lane], i + 1, drumparams.LABELS[param],
+            self.t.say("%s STEP %d  %s  %s  (LOCKED)" % (self.short(lane), i + 1, e.drums.label(param),
                                                          e.drums.value_text(param, v)), 2)
             return
         e.change_drum(param, clicks)
-        self.t.say("%s  %s  %s" % (SHORT[self.lane], drumparams.LABELS[param], e.drums.value_text(param)), 2)
+        self.t.say("%s  %s  %s" % (self.short(self.lane), e.drums.label(param), e.drums.value_text(param)), 2)
 
     # ------------------------------------------------------------ values for the screen
 
@@ -256,9 +275,9 @@ class SeqPage:
             if self.mode == 0:
                 boxes.append((STEP_LABELS[p], self.step_value(p), False))
             elif st is not None and p in st.locks:
-                boxes.append((drumparams.LABELS[p], e.drums.value_text(p, st.locks[p]), True))
+                boxes.append((e.drums.label(p), e.drums.value_text(p, st.locks[p]), True))
             else:
-                boxes.append((drumparams.LABELS[p], e.drums.value_text(p), False))
+                boxes.append((e.drums.label(p), e.drums.value_text(p), False))
         pat = "%d" % (self.seq.current + 1) + (" > %d" % (self.seq.queued + 1) if self.seq.queued is not None else "")
         boxes.append(("PATTERN", pat, False))
         boxes.append(("BIG KNOB", "TAPE", False))
@@ -284,36 +303,40 @@ class SeqPage:
                 surf.blit(v, (x + (w - v.get_width()) // 2, 58))
             x += w + gap
         ln = seq.lane(self.lane)
-        info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   KEY 8: UNDO" % (
-            self.mode_name(), SHORT[self.lane], ln.length, sequencer.RATES[ln.rate][0])
+        info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   %s  ·   SHIFT+CUT: UNDO" % (
+            self.mode_name(), self.short(self.lane), ln.length, sequencer.RATES[ln.rate][0], self.d.title)
+        if self.d.lanes > 8:
+            info += "   ·   SHIFT+KEYS: %s" % ("LANES 1-8" if self.lane >= 8 else "LANES 9-16")
         surf.blit(tiny.render(info, True, grey), (20, 84))
         # the grid
         first = self.first_column()
         x0, pitch, cw = 72, 35, 28
-        top, row_h, ch = 102, 35, 29
+        shown = self.shown_lanes()
+        top, row_h = 102, (35 if len(shown) <= 7 else 31)
+        ch = row_h - 6
         col_x = lambda c: x0 + c * pitch
-        grid_bottom = top + sequencer.LANES * row_h
+        grid_bottom = top + len(shown) * row_h
         sig = tuple(e.time_sig)
-        groups = [sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in range(sequencer.LANES)]
+        groups = {l: sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in shown}
         if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
             cx = col_x(self.cursor - first)
-            pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, sequencer.LANES * row_h + 4), border_radius=5)
+            pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, len(shown) * row_h + 4), border_radius=5)
         playing = None
         if e.playing:
             playing = seq.position(e._heard_frame(), e.frames_per_beat())
         now = time.monotonic()
         show_chance = now < getattr(self, "_chance_until", 0.0)
-        for lane in range(sequencer.LANES):
-            y = top + lane * row_h
-            colour = ui.rgb(self.t.tab_colours.get(lane + 1) or "#7D838C")
+        for row, lane in enumerate(shown):
+            y = top + row * row_h
+            colour = ui.rgb(self.t.tab_colours.get(lane % 8 + 1) or "#7D838C")
             dim = tuple(round(c * 0.75) for c in colour)
             # the drum's tag, lit for a moment when it plays
-            hit = max(self.t._drum_hits[self.voice(lane)] if lane < 6 else 0.0,
+            hit = max(self.t._drum_hits[self.voice(lane)],
                       e.seq_hits[lane] if e.seq_hits[lane] <= now else 0.0)
             glow = max(0.0, 1.0 - (now - hit) / 0.2)
             tag = tuple(round(c + (255 - c) * glow * 0.6) for c in colour)
             pygame.draw.rect(surf, tag, (20, y, 42, ch), border_radius=5)
-            t = small.render(SHORT[lane], True, dark)
+            t = small.render(self.short(lane), True, dark)
             surf.blit(t, (20 + (42 - t.get_width()) // 2, y + (ch - t.get_height()) // 2))
             if lane == self.lane:
                 pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)

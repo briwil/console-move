@@ -28,11 +28,11 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "WIFI", "UPDATE"]
+SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "DRUMS", "WIFI", "UPDATE"]
 ROWS = 7                                     # setting rows on screen at once (the layout's set_label1-7)
 PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
 MAX_PASSWORD = 63
-LABELS = {"WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
+LABELS = {"DRUMS": "DRUM MACHINE", "WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -173,7 +173,7 @@ class Menu:
             elif SETTINGS[self.row] == "WIFI":
                 self.mode, self.msg, self.confirm, self.pick = "wifi", "", None, 0
                 self.wifi.scan()
-            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT"):
+            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "DRUMS"):
                 self.change(1)
         elif name == "FILE":
             self.mode, self.msg = "list", ""
@@ -197,6 +197,22 @@ class Menu:
                 self.say({"internal": "CONSOLE SENDS MIDI CLOCK, START AND STOP",
                           "external": "CONSOLE FOLLOWS THE OP-XY'S CLOCK, START AND STOP",
                           "link": "TEMPO, BARS AND START / STOP SHARED OVER THE NETWORK"}[e.sync_mode])
+        elif what == "DRUMS":
+            import drums
+            if not e.drums:
+                self.say("THE DRUM SYNTH ISN'T AVAILABLE")
+                return
+            ids = [m for m, _ in drums.available_machines()]
+            now = e.drums.machine
+            i = ids.index(now) if now in ids else 0
+            for k in range(1, len(ids)):
+                want = ids[(i + (k if delta > 0 else -k)) % len(ids)]
+                if e.set_drum_machine(want):
+                    self.transport.drum_voice, self.transport.drum_key, self.transport.drum_tab = 0, 1, 0
+                    self.transport.seqp.lane = 0
+                    self.say("THIS SONG'S DRUMS: %s  (STEP LOCKS CLEARED)" % e.drums.title)
+                    return
+            self.say("NO OTHER DRUM MACHINE IS BUILT YET: RUN ~/console/pi-app/setup.sh")
         elif what == "FORMAT":
             import audio
             fs = audio.EXPORT_FORMATS
@@ -258,6 +274,10 @@ class Menu:
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
         if what == "INPUT":
             return self.input_text()
+        if what == "DRUMS":
+            if not e.drums:
+                return "NOT AVAILABLE"
+            return "%s  (this song)" % e.drums.title
         if what == "OUTPUT":
             return self.output_text()
         if what == "UPDATE":

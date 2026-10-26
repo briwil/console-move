@@ -265,6 +265,31 @@ shows it too.
 
 ## Drum synth (the MIDI key)
 
+**Three drum machines.** Each song picks one in **SETTINGS → DRUM MACHINE**, and the
+song remembers it. New songs start with the one you used last.
+- **LXR-02** is the one described below.
+- **TR-606** (6W6) and **TR-808** (8W8) are from Schwung on the Ableton Move.
+
+How they differ:
+
+| | LXR-02 | TR-606 | TR-808 |
+|---|---|---|---|
+| Keys 1–8 | 7 drums (key 7: open hat) | BD SD LT HT CH OH CY CP | BD SD LT MT HT CP CH OH |
+| SHIFT + keys 1–8 | arm tracks | arm tracks | LC MC HC RS CL MA CB CY |
+| Pages per drum | 6 (knob 9) | SOUND and KIT | SOUND and KIT |
+
+- **SOUND page:** each drum's own settings (TUNE, DECAY, DRIVE, DIST, LEVEL…), plus
+  REVERB and DELAY, which send it to Console's effects.
+- **KIT page:** the volume, how much velocity matters, and the hi-hat choke.
+- **What's left out of the 606 and 808:** their own effects and master distortion
+  aren't used. Console's reverb and delay do that job, as for the LXR.
+- **Kits:** each machine keeps its own kits (FILE → SAVE / LOAD Kit). A song keeps
+  each machine's kit, so switching back finds it as you left it.
+- **Switching machine:** the song's sequencer steps stay, but step locks are
+  cleared, because they belong to the old machine's settings.
+- **MULTI with the 808:** key n records onto track n, and SHIFT + key n records
+  onto the same track.
+
 Console has a drum machine built in: the six drum voices of the Erica Synths
 LXR-02, running on the Pi from its open-source firmware. It's an input, like
 the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
@@ -354,8 +379,11 @@ a lane's end are dark.
   follows the picked lane's playhead (the white outline). A drum key puts
   the step where it's playing, on the nearest step; the knobs then work on
   that step. Turning knob 1 shows the cursor again for a moment.
-- **Track key 8** undoes the last change (10 steps back), including COPY
-  Pattern and CLEAR P-locks.
+- **SHIFT+CUT** undoes the last change (10 steps back), including COPY
+  Pattern and CLEAR P-locks. (Track key 8 is a drum now: the 606's clap,
+  the 808's open hat.)
+- **The TR-808's 16 drums:** the grid shows 8 lanes at a time. SHIFT + a drum
+  key picks and plays lanes 9–16 (LC to CY), and the grid switches to them.
 - **Knob 10** picks the pattern (16 per song; while playing, the next one
   takes over when the current one ends). The big knob moves the tape as usual.
 
@@ -404,7 +432,8 @@ on for every drum; kits and songs saved before have it off.
 ## Effects: reverb and delay (the FX key)
 
 Each track can send some of its sound to a **reverb** (ported from the one
-in Mutable Instruments Elements and Rings) and a **delay** (a tape-style
+in Mutable Instruments Elements and Rings; SIZE now shrinks the room too, from a
+small room at 0% to the big hall at 100%) and a **delay** (a tape-style
 echo that follows the tempo). Press **FX** to step through the pages:
 
 | Page | Knobs 1–8 | Knob 9 | Knob 10 | Big knob |

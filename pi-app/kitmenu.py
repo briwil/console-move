@@ -1,6 +1,7 @@
 """The drums menu: FILE on the drum and sequencer pages.
 - SAVE KIT names the drum synth's settings and keeps them; LOAD KIT puts a saved kit back. Kits live in
-  ~/console-data/kits/<name>.json, so every song can use them.
+  ~/console-data/kits/<name>.json (the 606's and 808's in kits/606/ and kits/808/), so every song can use
+  them; each drum machine lists only its own.
 - COPY PATTERN copies the sequencer's current pattern onto another one.
 - CLEAR P-LOCKS takes every parameter lock off the current pattern.
 
@@ -21,16 +22,21 @@ TEXTS = {"SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern", "CLEAR"
 ROWS = 7                                   # saved kits shown at once (the layout's set_value1-7)
 
 
-def kit_names():
+def kits_dir(machine="lxr"):
+    """LXR-02 kits in kits/ (as always); the 606's and 808's in kits/606/ and kits/808/."""
+    return KITS if machine == "lxr" else os.path.join(KITS, machine)
+
+
+def kit_names(machine="lxr"):
     try:
-        files = [f[:-5] for f in os.listdir(KITS) if f.endswith(".json") and not f.startswith(".")]
+        files = [f[:-5] for f in os.listdir(kits_dir(machine)) if f.endswith(".json") and not f.startswith(".")]
     except OSError:
         return []
     return sorted(files, key=str.lower)
 
 
-def kit_path(name):
-    return os.path.join(KITS, name + ".json")
+def kit_path(name, machine="lxr"):
+    return os.path.join(kits_dir(machine), name + ".json")
 
 
 class KitMenu(menu.Menu):
@@ -112,7 +118,7 @@ class KitMenu(menu.Menu):
         what = ITEMS[self.choice][0]
         if what == "SAVE":
             self.mode = "name"
-            taken = {n.lower() for n in kit_names()}
+            taken = {n.lower() for n in kit_names(self.drums.machine)}
             n = 1
             while ("kit %d" % n) in taken:
                 n += 1
@@ -129,7 +135,7 @@ class KitMenu(menu.Menu):
                 return
             self.mode, self.msg = "clear", ""
         else:
-            self.kits = kit_names()
+            self.kits = kit_names(self.drums.machine)
             if not self.kits:
                 self.say("NO SAVED KITS YET: SAVE ONE FIRST")
                 return
@@ -145,20 +151,20 @@ class KitMenu(menu.Menu):
         if name.startswith("."):
             self.say("A NAME CAN'T START WITH A DOT")
             return
-        same = [n for n in kit_names() if n.lower() == name.lower()]
+        same = [n for n in kit_names(self.drums.machine) if n.lower() == name.lower()]
         if same and self.replace != name:
             self.replace = name
             self.say("THERE'S ALREADY A KIT CALLED %s: PLAY AGAIN TO REPLACE IT" % name.upper())
             return
         try:
-            os.makedirs(KITS, exist_ok=True)
+            os.makedirs(kits_dir(self.drums.machine), exist_ok=True)
             for old in same:
                 if old != name:
-                    os.remove(kit_path(old))        # "kit 1" replacing "Kit 1": one file, the new spelling
-            tmp = kit_path(name) + ".tmp"
+                    os.remove(kit_path(old, self.drums.machine))        # "kit 1" replacing "Kit 1": one file, the new spelling
+            tmp = kit_path(name, self.drums.machine) + ".tmp"
             with open(tmp, "w") as f:
-                json.dump({"name": name, "values": self.drums.kit()}, f)
-            os.replace(tmp, kit_path(name))
+                json.dump({"name": name, "machine": self.drums.machine, "values": self.drums.kit()}, f)
+            os.replace(tmp, kit_path(name, self.drums.machine))
         except OSError as err:
             self.say("COULDN'T SAVE: %s" % str(err).upper())
             return
@@ -171,7 +177,7 @@ class KitMenu(menu.Menu):
             return
         name = self.kits[self.pick]
         try:
-            with open(kit_path(name)) as f:
+            with open(kit_path(name, self.drums.machine)) as f:
                 values = json.load(f)["values"]
         except (OSError, ValueError, KeyError, TypeError) as err:
             self.say("COULDN'T LOAD %s: %s" % (name.upper(), str(err).upper()[:40]))

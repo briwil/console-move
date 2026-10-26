@@ -173,7 +173,12 @@ function fontCard(sec, defs, cur) {
     const sample = document.createElement("div"); sample.className = "sample"; sample.textContent = k === "tempo" ? "120.0 BPM 4/4" : k === "pages" ? "OSC+AMP  PITCH+VEL" : k === "knob_9_hint" ? "KNOB 9: PAGE" : k === "box_text" ? "SINE" : k === "setting_name" ? "TUNE  DECAY" : "DRUM 1";
     const ctl = document.createElement("div"); ctl.className = "ctl";
     const fam = document.createElement("select");
-    for (const [id, f] of Object.entries(fonts)) { const o = document.createElement("option"); o.value = id; o.textContent = f.name; fam.appendChild(o); }
+    const seen = new Set();          // A to Z, each font once ("sans" and "mono" are both Roboto Condensed)
+    for (const [id, f] of Object.entries(fonts).sort((a, b) => a[1].name.localeCompare(b[1].name))) {
+      if (seen.has(f.name) && id !== st.family) continue;
+      seen.add(f.name);
+      const o = document.createElement("option"); o.value = id; o.textContent = f.name; fam.appendChild(o);
+    }
     const wt = document.createElement("select");
     const size = document.createElement("input"); size.type = "number"; size.min = 8; size.max = 80;
     const tr = document.createElement("input"); tr.type = "number"; tr.step = 0.01; tr.min = -0.2; tr.max = 0.5;

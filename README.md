@@ -51,11 +51,16 @@ cd ~/console && git pull
 
 ## Fonts
 
-The screen can use any font listed in `pi-app/fonts/fonts.json`: Inter Tight,
-IBM Plex Mono, IBM Plex Sans, Space Grotesk, Archivo Narrow, Barlow Condensed,
-JetBrains Mono, Space Mono, and the pixel fonts Silkscreen, VT323 and
-DotGothic16. All are under the SIL Open Font License (see `pi-app/fonts/OFL-*.txt`).
+The screen can use any font listed in `pi-app/fonts/fonts.json`, and the theme page
+(console.local/theme) offers all of them. There are about 35, all free from Google Fonts under
+the SIL Open Font License (see `pi-app/fonts/OFL-*.txt`). They include:
+- Outfit, Roboto Condensed, Inter, Geist, DM Sans, Manrope and Archivo;
+- Space Grotesk and Sora;
+- mono fonts: Geist Mono, JetBrains Mono, DM Mono, Azeret, Space Mono, Red Hat Mono and IBM Plex Mono;
+- techy fonts: Michroma, Orbitron, Chakra Petch, Oxanium and Rajdhani;
+- display fonts: Unbounded, Syne, Bebas Neue and Big Shoulders;
+- dot and pixel fonts: Doto, Tiny5, Jersey 10, Sixtyfour, Silkscreen, VT323 and DotGothic16.
 
-To add a font, put its `.ttf` files in `pi-app/fonts/`, add an entry to
-`fonts.json` (an id, its name and one file per weight), and add the same entry
-to the `FONTS` list near the top of the designer's script.
+To add a font, put its `.ttf` files in `pi-app/fonts/` (one per weight) and add an entry to
+`fonts.json` (an id, its name and one file per weight). The new fonts are trimmed to Western
+characters to keep them small.

@@ -277,11 +277,10 @@ How they differ:
 |---|---|---|---|
 | Keys 1–8 | 7 drums (key 7: open hat) | BD SD LT HT CH OH CY CP | BD SD LT MT HT CP CH OH |
 | SHIFT + keys 1–8 | arm tracks | arm tracks | LC MC HC RS CL MA CB CY |
-| Pages per drum | 6 (knob 9) | SOUND and KIT | SOUND and KIT |
+| Pages per drum | 6 (knob 9) | SOUND | SOUND |
 
 - **SOUND page:** each drum's own settings (TUNE, DECAY, DRIVE, DIST, LEVEL…), plus
   REVERB and DELAY, which send it to Console's effects.
-- **KIT page:** the volume, how much velocity matters, and the hi-hat choke.
 - **What's left out of the 606 and 808:** their own effects and master distortion
   aren't used. Console's reverb and delay do that job, as for the LXR.
 - **Kits:** each machine keeps its own kits (FILE → SAVE / LOAD Kit). A song keeps

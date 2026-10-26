@@ -471,10 +471,11 @@ class Schwung:
         for key in kit_keys:
             if key not in self.index:
                 add(key, root_labels.get(key, key), None)
-        kit_page = ("KIT", [self.index[k] for k in kit_keys])
+        # (volume, velocity depth and choke keep their defaults: no page of their own. Each drum's LEVEL
+        # sets its loudness, velocity always counts fully, and CHOKE is on the closed hat's page.)
         for v, vk in enumerate(spec["voices"]):
             knobs = [self.index[k] for k in levels[vk]["knobs"] if k in self.index]
-            self._pages.append([("SOUND", knobs), kit_page])
+            self._pages.append([("SOUND", knobs)])
         self.short = [vk.upper() for vk in spec["voices"]]
         self.lane_voice = [spec["voices"].index(k) for k in spec["lanes"]]
         self.lanes = len(self.lane_voice)

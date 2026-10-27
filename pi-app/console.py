@@ -480,6 +480,8 @@ class Transport:
         while pattern recording the drum on lane n. From the MIDI thread, like pad()."""
         if self.seqp.rec:
             return self.pad(n, shift)
+        if shift:
+            return False                          # SHIFT + key moves the box: no sound
         e = self.engine
         if not (self.drum_page and e and e.drums_input and e.drums):
             return False

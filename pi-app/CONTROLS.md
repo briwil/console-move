@@ -388,8 +388,10 @@ a time; lanes go up to 64 steps. Steps past a lane's end are dark.
   plays the lane's drum. Letting go puts that step on, or takes it off.
 - **Hold any track key and turn knob 1** to move the box 8 steps along the
   lane (steps 9–16, 17–24…, up to the lane's end). Letting go of the key
-  then doesn't change its step. Each lane keeps its own box, and the box
-  stays where you put it while the pattern plays.
+  then doesn't change its step. Or hold **SHIFT and press any track key**:
+  the box moves to the next 8 steps, and after the lane's end back to the
+  start. Each lane keeps its own box, and the box stays where you put it
+  while the pattern plays.
 - **SHIFT+CUT** undoes the last change (10 steps back), including COPY
   Pattern and CLEAR P-locks.
 - **Knob 10** picks the pattern (16 per song; while playing, the next one

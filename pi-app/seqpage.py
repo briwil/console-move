@@ -6,7 +6,7 @@ Step mode (the usual):
   steps 1-8 to start with). Pressing a key plays the lane's drum; letting go puts that step on, or
   takes it off.
 - Hold a key and turn knob 1: the box moves 8 steps along the lane (letting go then doesn't
-  change the step). Hold a key and turn knobs 2-9: that step's velocity, chance and ratchets, or on
+  change the step). SHIFT + any key also moves it 8 steps on, back to the start after the end. Hold a key and turn knobs 2-9: that step's velocity, chance and ratchets, or on
   a sound page, a setting locked to it (a p-lock).
 - With no key held, knobs 2-9 change the lane (length, Euclid, shift, rate) or the drum's sound.
 - Push knob 1 for the next knob mode: the drum's sound pages. Knob 10 picks the pattern.
@@ -94,7 +94,7 @@ class SeqPage:
 
     def takes_key(self, shift):
         """True if a track key belongs to this page (called from the MIDI thread)."""
-        return not shift or (self.rec and self.d.lanes > 8)
+        return not shift or not self.rec or self.d.lanes > 8
 
     def targets(self):
         """The steps knobs 2-9 work on: the held keys' steps, or while recording the steps just played in."""
@@ -150,6 +150,13 @@ class SeqPage:
             return
         if self.rec:
             self._rec_key(n, down, heard_frame, shift)
+            return
+        if down and shift:
+            # SHIFT + any key: the box moves to the next 8 steps, back to the start after the lane's end
+            last = (max(1, self.seq.lane(self.lane).length) - 1) // BOX * BOX
+            start = self.box_start()
+            self.box[self.lane] = 0 if start >= last else start + BOX
+            self.t.say("%s  KEYS ARE STEPS %s" % (self.short(self.lane), self.box_text()), 2)
             return
         if down:
             self.keys[n] = False

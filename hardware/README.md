@@ -1,5 +1,8 @@
 # Control board (rev 0.1)
 
+The next version, split into three boards with 16 step buttons and 6 more keys, is in
+[v2/](v2/README.md).
+
 Open `console-controls.kicad_pro` in KiCad 10. The project's footprint library,
 `console.pretty`, has the PGA2350 and the Kailh Choc hotswap footprints, and
 `fp-lib-table` loads it automatically.

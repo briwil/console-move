@@ -29,6 +29,9 @@ Track8:
 - **Control board:** custom KiCad board (rev 0.1, made by JLCPCB) with a Pimoroni PGA2350
   running CircuitPython. It has 24 Kailh Choc keys and 11 EC11 knobs with pushes, and
   talks to the Pi as USB MIDI ("Console Controls", channel 16). See `firmware/` and `hardware/`.
+  Rev 0.2 (`hardware/v2/`, not built yet) splits it into keypad, keys and knob boards joined by
+  ribbon cables, adding 6 keys (notes 24-29) and 16 step buttons (notes 48-63); the firmware's
+  `BOARD = 2` reads it. The Pi app doesn't use the new notes yet.
 - **Audio:** any USB audio device. Mostly that's an OP-XY in 8-channel mode (records all 8
   tracks at once). Headphones are on the screen's jack (HDMI audio).
 

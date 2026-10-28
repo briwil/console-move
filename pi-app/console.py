@@ -239,6 +239,7 @@ class Transport:
         self.message_until = 0.0
         self.holding = None                # the hold key (LIFT or CUT) being held, if any
         self.drop_ask = None               # DROP of several tracks: {"insert", "merged"} while it asks how
+        self.shift_held = lambda: False    # whether SHIFT is down on the control board (set up in main)
         self.bounce_pending = None         # (sources, dest) after the first BOUNCE press
         self._dirty_since = None
         self.glide = None                  # (from beat, to beat, seconds so far): the playhead easing somewhere
@@ -1305,6 +1306,7 @@ def main():
         board.seq_page = lambda: transport.seq_page
         board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
         board.seq_pads = transport.seq_pad
+        transport.shift_held = lambda: board.shift       # the sequencer's box lights up while SHIFT is held
         if engine:
             board.heard = lambda: engine.seq_clock        # where the sequencer is (for live steps)
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)

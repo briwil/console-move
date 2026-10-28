@@ -404,14 +404,14 @@ jobs here.
 open hat), 32 steps on screen at a time; lanes go up to 64 steps. Steps past
 a lane's end are dark.
 
-- **Knob 1** moves the cursor (the highlighted column), step 1 to 64. It
+- **Knob 1** moves the cursor (the white outline down a column), step 1 to 64. It
   moves to the 16th column, then the steps scroll under it; near step 64 it
   moves on to the end (and the same going back). Turn quickly to go faster.
 - **Track keys 1–7** are the drums: press and let go to put a step at the
   cursor, or take it off. Each plays its sound as you press it. While
   stopped, pressing a different drum's key first just picks its lane;
   press it again to add a step.
-- **While playing** (recording or not), the blue cursor hides and the grid
+- **While playing** (recording or not), the cursor hides and the grid
   follows the picked lane's playhead (the white outline). A drum key puts
   the step where it's playing, on the nearest step; the knobs then work on
   that step. Turning knob 1 shows the cursor again for a moment.
@@ -419,9 +419,10 @@ a lane's end are dark.
   Pattern and CLEAR P-locks. (Track key 8 is a drum now: the 606's clap,
   the 808's open hat.)
 - **8-step boxes.** Each lane has a box around 8 of its steps (steps 1–8 to
-  start with). The picked lane's box shows as a solid block in its colour,
-  with the steps inside drawn dark (a dark filled step is on); the other
-  lanes' boxes don't show. **← / →** move the picked lane's
+  start with). The picked lane's box shows as a faint block in its colour;
+  the other lanes' boxes don't show. While SHIFT is held, and for a second
+  after the arrows move it, it lights up solid, with the steps inside drawn
+  dark (a dark filled step is on). **← / →** move the picked lane's
   box 8 steps along it. **SHIFT + track key 1–8** puts that step of the box
   on (or off) on the picked lane, and plays its drum. The grid jumps to the
   box for a few seconds when you use them.

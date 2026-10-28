@@ -49,6 +49,7 @@ class SeqPage:
         self._cursor_until = 0.0     # while playing, the cursor shows for a moment when knob 1 turns
         self.box = {}                # lane -> the first step of its 8-step box (0, 8, 16...)
         self._box_until = 0.0        # the grid shows the picked lane's box until then
+        self._bright_until = 0.0     # the box is drawn at full strength until then (just after the arrows)
 
     @property
     def e(self):
@@ -111,6 +112,7 @@ class SeqPage:
         last = (max(1, self.seq.lane(self.lane).length) - 1) // BOX * BOX
         self.box[self.lane] = max(0, min(last, self.box_start() + way * BOX))
         self._box_until = time.monotonic() + BOX_SHOW
+        self._bright_until = time.monotonic() + 1.0
         self.t.say("%s  BOX: STEPS %s  (SHIFT + KEYS 1-8)" % (self.short(self.lane), self.box_text()), 2)
 
     def box_key(self, n):
@@ -379,9 +381,11 @@ class SeqPage:
         grid_bottom = top + len(shown) * row_h
         sig = tuple(e.time_sig)
         groups = {l: sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in shown}
-        # the picked lane's 8-step box: a solid block in the lane's colour under its steps, drawn first
-        # so the cursor column and the steps go on top (inside it the steps are drawn dark)
+        # the picked lane's 8-step box: a block in the lane's colour under its steps, drawn first so the
+        # cursor column and the steps go on top. A third strength normally; full while SHIFT is held and
+        # for a second after the arrows move it (then the steps inside are drawn dark)
         box = None
+        bright = self.t.shift_held() or time.monotonic() < self._bright_until
         if self.lane in shown:
             b = self.box_start()
             c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(self.lane).length)
@@ -389,12 +393,15 @@ class SeqPage:
                 y = top + shown.index(self.lane) * row_h
                 bx = col_x(c0 - first)
                 rect = (bx - 4, y - 4, col_x(c1 - first) - bx + 8 - (pitch - cw), ch + 8)
-                pygame.draw.rect(surf, ui.rgb(self.t.tab_colours.get(self.lane % 8 + 1) or "#7D838C"), rect,
-                                 border_radius=7)
+                full = ui.rgb(self.t.tab_colours.get(self.lane % 8 + 1) or "#7D838C")
+                bg = (12, 13, 16)
+                fill = full if bright else tuple(round(b + (c - b) * 0.33) for c, b in zip(full, bg))
+                pygame.draw.rect(surf, fill, rect, border_radius=7)
                 box = (b, b + BOX)
         if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
             cx = col_x(self.cursor - first)
-            pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, len(shown) * row_h + 4), border_radius=5)
+            # the cursor: a white outline down the column (like the picked lane's outline across)
+            pygame.draw.rect(surf, white, (cx - 4, top - 6, cw + 8, len(shown) * row_h + 4), 2, border_radius=6)
         playing = None
         if e.playing:
             playing = seq.position(e._heard_frame(), e.frames_per_beat())
@@ -427,7 +434,7 @@ class SeqPage:
                 if i >= lane_steps.length:
                     pygame.draw.rect(surf, (32, 34, 40), (x, y, cw, ch), 1, border_radius=5)
                     continue
-                in_box = box is not None and lane == self.lane and box[0] <= i < box[1]
+                in_box = bright and box is not None and lane == self.lane and box[0] <= i < box[1]
                 colour, dim = (dark, dark) if in_box else (lane_colour, lane_dim)
                 if st.on:
                     # filled from the bottom by its velocity (or, just after turning the chance knob, its chance)

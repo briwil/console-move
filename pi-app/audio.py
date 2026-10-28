@@ -525,6 +525,8 @@ class Engine:
         self.dly_sends = [0.0] * TRACKS         # ... and to the delay
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
+        self._drum_rev = self._drum_dly = None  # the drum synth's own reverb and delay, printed into STEREO/MONO takes
+        self._drum_fx_ringing = 0               # frames to keep them running after the sends go to 0
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
         self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song) ...
         self.seqs = {}                          # ... one sequencer per drum machine: {machine: Sequencer}
@@ -2243,11 +2245,10 @@ class Engine:
                 # what you hear: both, now. What's recorded (at pos, where you pressed): your hits now, and
                 # the sequencer's from read_ahead frames ago (they were made that far ahead, to sound on time)
                 voices = live_voices + self._delay_sequencer(seq_voices)
-                # each voice (MULTI), or the kit panned in stereo (STEREO, and MONO mixes it)
-                x = m.multi(voices) if self.input_mode == "all" else m.stereo(voices)
+                rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
+                x = self._drum_input(m, voices, rev_g, dly_g)
                 heard = seq_voices + live_voices
                 pans = m.pans() * DRUMS_MONITOR
-                rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
                 out = self.process(x, monitor=heard @ pans,
                                    monitor_rev=(heard * rev_g) @ pans if rev_g.any() else None,
                                    monitor_dly=(heard * dly_g) @ pans if dly_g.any() else None)
@@ -2268,6 +2269,24 @@ class Engine:
             self.device = None
             with self.lock:
                 self.recording = False
+
+    def _drum_input(self, m, voices, rev_g, dly_g):
+        """What the drum synth puts on tape: each voice (MULTI: each track then plays back that drum's
+        reverb and delay through its own sends), or the kit panned in stereo (STEREO, and MONO mixes
+        it) with its reverb and delay printed in, from effects of its own so the tape tracks' sends
+        don't get in."""
+        if self.input_mode == "all":
+            return m.multi(voices)
+        p = m.pans()
+        x = voices @ p
+        if effects and effects.AVAILABLE and (rev_g.any() or dly_g.any() or self._drum_fx_ringing > 0):
+            if self._drum_rev is None:
+                self._drum_rev, self._drum_dly = effects.Reverb(self.rate), effects.Delay(self.rate)
+            wet = self.run_effects((voices * rev_g) @ p, (voices * dly_g) @ p, self._drum_rev, self._drum_dly)
+            x = x + wet
+            # keep running a while after the sends go to 0, so a tail isn't cut off
+            self._drum_fx_ringing = 10 * self.rate if (rev_g.any() or dly_g.any()) else self._drum_fx_ringing - len(x)
+        return x
 
     def _heard_frame(self):
         """The tape frame you're hearing as this block goes out (pos + read_ahead, round the loop)."""

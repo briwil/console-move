@@ -123,6 +123,12 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   `Transport.drop_ask`). Separate: from the selected track down, packed together. Merged: a mono
   mix at the volumes heard, divided by the landing track's volume so it sounds the same.
 
+### Drum effects printed (Oct 2026)
+
+- Recording the drum synth in STEREO or MONO prints its reverb and delay sends into the take
+  (`Engine._drum_input`, with its own `_drum_rev` / `_drum_dly` at the FX page's settings). MULTI
+  stays dry and copies each drum's sends onto its track (as before). Brian asked for printed.
+
 ### Sequencer (grid)
 
 - Seven lanes (one per drum key) and 32 steps visible. Knob 1 moves the cursor, which

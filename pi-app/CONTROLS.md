@@ -366,9 +366,13 @@ tracks' sends and the reverb and delay settings, then press FX until it's
 off to get back. **FX SENDS** (each drum's last page): REVERB and DELAY, how much of that
 drum goes to Console's reverb and delay (set their sound on the FX key's
 pages). They work on the drums as you hear them live; the tape tracks have
-their own sends (the FX key). Recording in MULTI copies each drum's sends
-onto its track, so it plays back with the same reverb and delay. In STEREO
-and MONO the kit is one recording: set that track's sends with the FX key.
+their own sends (the FX key). **Recording in STEREO or MONO prints them**:
+the kit's reverb and delay go into the recording as you hear them, tails
+included (the drums have a reverb and delay of their own for this, with the
+FX key's settings, so the tape tracks' effects don't get in). Recording in
+MULTI keeps each drum dry on its own track and copies the drum's sends onto
+that track instead, so it plays back with the same reverb and delay and you
+can still change them.
 
 Turn a knob quickly to move further; hold SHIFT for one step at a time.
 The kit is saved with the song, and a new song starts from the LXR's Init
@@ -482,8 +486,9 @@ On a keyboard, **W** does the same as FX.
 
 - The amounts come after the track's volume and pan, so a muted track
   sends nothing, and a track panned left echoes on the left.
-- The effects are never recorded onto the tracks, so you can change them
-  any time. They keep ringing after you stop.
+- The tracks' effects are never recorded onto the tracks, so you can change
+  them any time. They keep ringing after you stop. (The drum synth's own
+  sends are the exception: in STEREO and MONO they're printed, see above.)
 - Everything is saved with the song.
 - **EXPORT** puts the effects in the mix (with their tails) and also writes
   `reverb return` and `delay return` as stereo files. The dry stems plus

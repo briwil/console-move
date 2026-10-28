@@ -395,8 +395,14 @@ a lane's end are dark.
 - **SHIFT+CUT** undoes the last change (10 steps back), including COPY
   Pattern and CLEAR P-locks. (Track key 8 is a drum now: the 606's clap,
   the 808's open hat.)
-- **The TR-808's 16 drums:** the grid shows 8 lanes at a time. SHIFT + a drum
-  key picks and plays lanes 9–16 (LC to CY), and the grid switches to them.
+- **8-step boxes.** Each lane has a box around 8 of its steps (steps 1–8 to
+  start with), outlined on the picked lane. **← / →** move the picked lane's
+  box 8 steps along it. **SHIFT + track key 1–8** puts that step of the box
+  on (or off) on the picked lane, and plays its drum. The grid jumps to the
+  box for a few seconds when you use them.
+- **The TR-808's 16 drums:** the grid shows 8 lanes at a time. **SHIFT + knob
+  1** switches the drum keys and the grid between drums 1–8 and 9–16 (LC to
+  CY).
 - **Knob 10** picks the pattern (16 per song; while playing, the next one
   takes over when the current one ends). The big knob moves the tape as usual.
 

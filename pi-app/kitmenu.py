@@ -222,7 +222,7 @@ class KitMenu(menu.Menu):
             self.say("THE %s ISN'T BUILT YET: RUN ~/console/pi-app/setup.sh ONCE" % title)
             return
         t.drum_voice, t.drum_key, t.drum_tab = 0, 1, 0
-        t.seqp.lane, t.seqp.mode = 0, 0
+        t.seqp.lane, t.seqp.mode, t.seqp.box = 0, 0, {}
         self.close()
         t.say("DRUMS: %s  (ITS OWN KIT AND PATTERNS)" % title, 4)
 

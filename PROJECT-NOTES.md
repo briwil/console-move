@@ -120,6 +120,9 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   scrolls at the 16th column. Hold a drum key to place steps and change them with the knobs.
 - Pushing knob 1 cycles the knob modes: STEP, then the sound pages. In a sound mode,
   holding a step's key p-locks it (parameter locks, Elektron style).
+- Each lane has an 8-step box (`SeqPage.box`): ← / → move the picked lane's box, SHIFT + track
+  key 1-8 toggles that step of it on the picked lane. The 808's drums 9-16 are SHIFT + knob 1
+  (the keys' bank). Brian's design, Oct 2026 (after trying and dropping a keys-are-steps version).
 - Key 8 is undo (10 levels).
 - 16 patterns, with copy pattern and "clear locks + step settings". Each lane has its own
   rate (triplets too). Length follows bars and the time signature.

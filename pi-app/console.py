@@ -154,6 +154,7 @@ class Board:
         self.seq_page = lambda: False      # True on the sequencer page: track keys go to it, pressed and let go
         self.heard = lambda: 0             # the tape frame you're hearing (for live recording into the sequencer)
         self.banked = lambda: False        # True when the drum machine has more than 8 lanes (SHIFT: 9-16)
+        self.seq_pads = None               # Transport.seq_pad: the sequencer page's key sound
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -162,11 +163,11 @@ class Board:
                 if name == "SHIFT":
                     self.shift = bool(value)
                     return
-                if name.startswith("TRACK") and self.seq_page() and (not self.shift or self.banked()):
-                    # the sequencer: the drum keys pick and place (with SHIFT, lanes 9-16 on the 808)
+                if name.startswith("TRACK") and self.seq_page():
+                    # the sequencer: the drum keys pick and place (with SHIFT, a step of the picked lane's box)
                     n = int(name[5:])
-                    if value and self.pads:
-                        self.pads(n, self.shift)          # heard straight away
+                    if value and self.seq_pads:
+                        self.seq_pads(n, self.shift)      # heard straight away
                     self.q.put(("LANE", n, bool(value), self.heard(), self.shift))
                     return
                 if name in HOLD_KEYS and (not value or not self.shift):
@@ -336,6 +337,8 @@ class Transport:
                 self.playing = True
         elif name == "RECORD":
             self.record_key()
+        elif name in ("LEFT", "RIGHT") and self.seq_page and self.engine and self.engine.drums:
+            self.seqp.move_box(-1 if name == "LEFT" else 1)   # the sequencer: the picked lane's 8-step box
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
             self.move(-1 if name.endswith("LEFT") else 1, tape.BEATS_PER_BAR if name.startswith("BAR") else t.step)
         elif name == "HOME":
@@ -459,6 +462,23 @@ class Transport:
         self.drum_voice = voice
         self.drum_key = lane + 1
         self._drum_hits[voice] = time.monotonic()
+        return True
+
+    def seq_pad(self, n, shift=False):
+        """Track key n pressed on the sequencer page: the drum on lane n of the keys' bank (the 808's
+        9-16 after SHIFT + knob 1), or with SHIFT the picked lane's drum. From the MIDI thread."""
+        e = self.engine
+        if not (self.drum_page and e and e.drums_input and e.drums and 1 <= n <= 8):
+            return False
+        lane = self.seqp.lane if shift else n - 1 + 8 * (self.seqp.lane // 8)
+        if lane >= e.drums.lanes:
+            return False
+        e.hit(lane, 100)
+        voice = e.drums.lane_voice[lane]
+        self._drum_hits[voice] = time.monotonic()
+        if not shift:
+            self.drum_voice = voice
+            self.drum_key = lane + 1
         return True
 
     def drum_pages(self):
@@ -1243,6 +1263,7 @@ def main():
         board.pads = transport.pad
         board.seq_page = lambda: transport.seq_page
         board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
+        board.seq_pads = transport.seq_pad
         if engine:
             board.heard = lambda: engine.pos
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)

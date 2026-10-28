@@ -12,6 +12,9 @@
   setting to the step under the cursor (a parameter lock); with no key held, the knobs change the
   drum's own sound.
 - Track key 8 undoes (10 steps). Knob 10 picks the pattern.
+- Each lane has a box of 8 steps. ← / → move the picked lane's box 8 steps; SHIFT + track key 1-8
+  puts that step of the box on (or off) on the picked lane. On the TR-808, SHIFT + knob 1 switches
+  the drum keys and the grid between drums 1-8 and 9-16.
 """
 import time
 
@@ -30,6 +33,8 @@ LANE_PARAMS = ("length", "hits", "rotate", "rate")
 CHANCE_SHOW = 1.0                # seconds the steps show chance after the chance knob stops turning
 CHANCE_COLOUR = (242, 243, 245)
 GESTURE_GAP = 1.5                # seconds: knob turns closer together than this are one undo step
+BOX = 8                          # steps in a lane's box (SHIFT + track keys 1-8)
+BOX_SHOW = 4.0                   # seconds the grid shows the box after the arrows or SHIFT + a key
 
 
 class SeqPage:
@@ -42,6 +47,8 @@ class SeqPage:
         self._gesture = None         # (what, when): the edit being made, so one turn is one undo step
         self.placed = {}             # lane -> the step a key put down while playing (the knobs edit that one)
         self._cursor_until = 0.0     # while playing, the cursor shows for a moment when knob 1 turns
+        self.box = {}                # lane -> the first step of its 8-step box (0, 8, 16...)
+        self._box_until = 0.0        # the grid shows the picked lane's box until then
 
     @property
     def e(self):
@@ -83,6 +90,43 @@ class SeqPage:
             return STEP_PARAMS
         return self.pages()[self.mode - 1][1]
 
+    def box_start(self, lane=None):
+        """The first step of a lane's box, kept inside the lane if it got shorter."""
+        lane = self.lane if lane is None else lane
+        last = (max(1, self.seq.lane(lane).length) - 1) // BOX * BOX
+        return min(self.box.get(lane, 0), last)
+
+    def box_text(self, lane=None):
+        b = self.box_start(lane)
+        return "%d-%d" % (b + 1, b + BOX)
+
+    def bank(self):
+        """0: drums 1-8 on the keys and the grid; 1: drums 9-16 (the TR-808)."""
+        return self.lane // 8
+
+    def move_box(self, way):
+        """← / →: the picked lane's box, 8 steps along (it stops at the lane's ends)."""
+        if not (self.e and self.e.drums):
+            return
+        last = (max(1, self.seq.lane(self.lane).length) - 1) // BOX * BOX
+        self.box[self.lane] = max(0, min(last, self.box_start() + way * BOX))
+        self._box_until = time.monotonic() + BOX_SHOW
+        self.t.say("%s  BOX: STEPS %s  (SHIFT + KEYS 1-8)" % (self.short(self.lane), self.box_text()), 2)
+
+    def box_key(self, n):
+        """SHIFT + track key n: the box's nth step on the picked lane, on or off."""
+        lane = self.lane
+        i = self.box_start() + n - 1
+        self._box_until = time.monotonic() + BOX_SHOW
+        length = self.seq.lane(lane).length
+        if i >= length:
+            self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (i + 1, self.short(lane), length), 3)
+            return
+        self._edit(("toggle", time.monotonic()))
+        on = self.seq.toggle(lane, i)
+        self.e.seq_changed()
+        self.t.say("%s  STEP %d %s" % (self.short(lane), i + 1, "ON" if on else "OFF"), 1)
+
     def showing_cursor(self):
         """The blue cursor: always when stopped; while playing, only just after knob 1 turns."""
         return not self.e.playing or time.monotonic() < self._cursor_until
@@ -96,6 +140,8 @@ class SeqPage:
     def first_column(self):
         """The first step on screen: following the cursor, or while playing the picked lane's playhead."""
         at = self.cursor
+        if time.monotonic() < self._box_until:
+            return min(sequencer.MAX_STEPS - VISIBLE, self.box_start() // VISIBLE * VISIBLE)
         if self.e.playing and not self.showing_cursor():
             at = self.seq.position(self.e._heard_frame(), self.e.frames_per_beat())[self.lane]
         return max(0, min(sequencer.MAX_STEPS - VISIBLE, at - FOLLOW_AT))
@@ -110,11 +156,15 @@ class SeqPage:
     # ------------------------------------------------------------ keys and knobs
 
     def lane_key(self, n, down, heard_frame=0, shift=False):
-        """Drum key n pressed or let go (with SHIFT: lane n + 8, on a machine with more than 8)."""
+        """Drum key n pressed or let go (with SHIFT: the nth step of the picked lane's box)."""
         e = self.e
         if not e or not e.drums:
             return
-        lane = n - 1 + (8 if shift and self.d.lanes > 8 else 0)
+        if shift:
+            if down:
+                self.box_key(n)
+            return
+        lane = n - 1 + 8 * self.bank()
         if lane >= self.d.lanes:
             return
         if down:
@@ -168,6 +218,16 @@ class SeqPage:
     def knob(self, number, delta, shift):
         e, seq = self.e, self.seq
         clicks = self.t.knob_clicks(number, delta, shift)
+        if number == 1 and shift and self.d.lanes > 8:
+            # SHIFT + knob 1 on the TR-808: the keys and the grid switch between drums 1-8 and 9-16
+            bank = 1 if delta > 0 else 0
+            if bank != self.bank():
+                self.lane = min(self.d.lanes - 1, bank * 8 + self.lane % 8)
+                self.t.drum_voice = self.voice()
+                self.mode = min(self.mode, len(self.pages()))
+                self.held, self.placed = {}, {}
+            self.t.say("DRUM KEYS: %s" % ("9-16" if self.bank() else "1-8"), 2)
+            return
         if number == 1:
             self.cursor = max(0, min(sequencer.MAX_STEPS - 1, self.cursor + clicks))
             if e.playing:
@@ -305,8 +365,9 @@ class SeqPage:
         ln = seq.lane(self.lane)
         info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   %s  ·   SHIFT+CUT: UNDO" % (
             self.mode_name(), self.short(self.lane), ln.length, sequencer.RATES[ln.rate][0], self.d.title)
+        info += "   ·   ARROWS: BOX %s   ·   SHIFT+KEY: STEP" % self.box_text()
         if self.d.lanes > 8:
-            info += "   ·   SHIFT+KEYS: %s" % ("LANES 1-8" if self.lane >= 8 else "LANES 9-16")
+            info += "   ·   SHIFT+KNOB 1: %s" % ("DRUMS 1-8" if self.lane >= 8 else "DRUMS 9-16")
         surf.blit(tiny.render(info, True, grey), (20, 84))
         # the grid
         first = self.first_column()
@@ -340,6 +401,15 @@ class SeqPage:
             surf.blit(t, (20 + (42 - t.get_width()) // 2, y + (ch - t.get_height()) // 2))
             if lane == self.lane:
                 pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)
+            # the lane's 8-step box (outlined on the picked lane)
+            b = self.box_start(lane)
+            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(lane).length)
+            if c0 < c1:
+                bx = col_x(c0 - first)
+                rect = (bx - 3, y - 3, col_x(c1 - first) - bx + 6 - (pitch - cw), ch + 6)
+                # outlines only, so the cursor column still shows through
+                pygame.draw.rect(surf, (96, 196, 210) if lane == self.lane else (46, 70, 76), rect,
+                                 2 if lane == self.lane else 1, border_radius=6)
             lane_steps = seq.lane(lane)
             # a grey line between the lane's beats: every 4 steps at 1/16, 3 at 1/8T, by its time signature
             for c in range(1, VISIBLE):

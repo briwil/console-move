@@ -393,8 +393,10 @@ Kits are kept in `~/console-data/kits/`, so any song can load them.
 ## Drum sequencer (MIDI key, second press)
 
 The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
-plays whenever the tape plays, locked to it (it starts with the tape's
-first bar), and records like playing the keys does: MULTI, STEREO or MONO
+plays whenever the tape plays, but on its own clock: every PLAY starts the
+pattern from step 1, wherever the tape is, and tape loops and moving the
+playhead don't touch it (a 24-step lane keeps going through a 1-bar loop). It
+records like playing the keys does: MULTI, STEREO or MONO
 onto the armed tracks, exactly on the beat. The 4×4 keys keep their normal
 jobs here.
 

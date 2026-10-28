@@ -143,7 +143,9 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   same machine only), CLEAR Pattern (a new empty one) and "clear locks + step settings". Each lane has its own
   rate (triplets too). Length follows bars and the time signature.
 - While playing, the cursor is hidden and drum keys place steps live at the playhead.
-- It's locked to the tape, so recording the sequencer onto tracks lands exactly in time.
+- It runs on its own clock (`engine.seq_clock`, frames since PLAY), not the tape position: every PLAY
+  starts at step 1 and tape loops don't reset it (Oct 2026, Brian). Its sound still records onto the
+  tape exactly where it's heard.
 
 ### Drum page and the theme
 

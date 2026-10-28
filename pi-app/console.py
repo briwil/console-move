@@ -152,7 +152,7 @@ class Board:
         self.held = set()                  # hold keys pressed without SHIFT, waiting for their release
         self.pads = None                   # Transport.pad: plays the drum synth straight from this thread
         self.seq_page = lambda: False      # True on the sequencer page: track keys go to it, pressed and let go
-        self.heard = lambda: 0             # the tape frame you're hearing (for live recording into the sequencer)
+        self.heard = lambda: 0             # the sequencer's clock now (for live recording into the sequencer)
         self.banked = lambda: False        # True when the drum machine has more than 8 lanes (SHIFT: 9-16)
         self.seq_pads = None               # Transport.seq_pad: the sequencer page's key sound
 
@@ -1306,7 +1306,7 @@ def main():
         board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
         board.seq_pads = transport.seq_pad
         if engine:
-            board.heard = lambda: engine.pos
+            board.heard = lambda: engine.seq_clock        # where the sequencer is (for live steps)
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     project_menu.kits = kitmenu.KitMenu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     restore_terminal = start_terminal_keys(keys)

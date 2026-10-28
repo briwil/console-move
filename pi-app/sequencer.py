@@ -5,9 +5,10 @@ Each step: on/off, velocity, chance, ratchets (quick repeats inside the step) an
 (drum settings that change for that step only). Each lane: its own length (1-64, looping on its own),
 rate (1/16, triplets...) and a Euclidean fill.
 
-Timing is locked to the tape: step k of a lane starts at anchor + k * (frames per step), in tape frames,
-so the pattern lines up with the bars when the tape plays from the start. The audio thread asks events()
-for each block it plays. The screen and keys change things through the methods here; one lock keeps the
+Timing runs on the sequencer's own clock, not the tape's: frames since PLAY (engine.seq_clock), so every
+PLAY starts the pattern from step 1 and tape loops or moving the playhead don't touch it (Brian: they're
+separate things). Step k of a lane starts at anchor + k * (frames per step) on that clock. The audio
+thread asks events() for each block it plays. The screen and keys change things through the methods here; one lock keeps the
 two threads apart.
 """
 import copy

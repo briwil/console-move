@@ -525,6 +525,7 @@ class Engine:
         self.dly_sends = [0.0] * TRACKS         # ... and to the delay
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
+        self.seq_clock = 0                      # the sequencer's own clock: frames since PLAY (tape loops don't touch it)
         self._drum_rev = self._drum_dly = None  # the drum synth's own reverb and delay, printed into STEREO/MONO takes
         self._drum_fx_ringing = 0               # frames to keep them running after the sends go to 0
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
@@ -2224,15 +2225,18 @@ class Engine:
                     self.drums.set_bpm(bpm)     # the drum synth's tempo-synced LFOs follow the song
                 events = []
                 if self.playing and not was_playing:
-                    # just started: the first read_ahead frames of tape go by before you hear anything, so
-                    # make the sequencer's hits for them now, straight into what gets recorded
-                    start = self.pos
-                    ahead = self.seq.events(start, self.read_ahead, self.frames_per_beat())
+                    # just started: the pattern starts from step 1, wherever the tape is. The first
+                    # read_ahead frames go by before you hear anything, so make the sequencer's hits for
+                    # them now, straight into what gets recorded
+                    self.seq_clock = 0
+                    ahead = self.seq.events(0, self.read_ahead, self.frames_per_beat())
                     self._seq_fifo = self.drums.render(self.read_ahead, ahead, with_live=False)[0]
                 if self.playing:
                     was_playing = True
-                    # the sequencer plays in step with the tape you hear: read_ahead frames on from pos
-                    events = self.seq.events(self._heard_frame(), PERIOD, self.frames_per_beat())
+                    # the sequencer runs on its own clock (frames since PLAY), so tape loops and moving the
+                    # playhead don't touch it: read_ahead frames on from where the tape is being recorded
+                    events = self.seq.events(self.seq_clock + self.read_ahead, PERIOD, self.frames_per_beat())
+                    self.seq_clock += PERIOD
                 elif was_playing:
                     was_playing = False
                     self.seq.stop()
@@ -2289,12 +2293,8 @@ class Engine:
         return x
 
     def _heard_frame(self):
-        """The tape frame you're hearing as this block goes out (pos + read_ahead, round the loop)."""
-        t = self.pos + self.read_ahead
-        region = self.loop_region() if self.loop_on else None
-        if region and self.pos < region[1] and t >= region[1] and region[1] > region[0]:
-            t = region[0] + (t - region[1]) % (region[1] - region[0])
-        return t
+        """Where the sequencer is as you hear it (its own clock: frames since PLAY, plus read_ahead)."""
+        return self.seq_clock + self.read_ahead
 
     def _delay_sequencer(self, block):
         """block, read_ahead frames late: the sequencer's sound lined up with where it belongs on tape."""

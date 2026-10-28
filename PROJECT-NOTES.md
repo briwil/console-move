@@ -116,20 +116,15 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 
 ### Sequencer (grid)
 
-- One row per lane, 32 steps visible. Knob 1 picks the lane. Track keys 1-8 are the 8 steps in
-  the picked lane's box (each lane remembers its own box); press plays the lane's drum, let go
-  toggles the step. Hold a key + knob 1 moves the box by 8 (no toggle on release); hold a key +
-  knobs 3-5 edits that step. Lane knobs (length, Euclid, shift, rate) need no key (Oct 2026,
-  Brian's design).
+- Seven lanes (one per drum key) and 32 steps visible. Knob 1 moves the cursor, which
+  scrolls at the 16th column. Hold a drum key to place steps and change them with the knobs.
 - Pushing knob 1 cycles the knob modes: STEP, then the sound pages. In a sound mode,
   holding a step's key p-locks it (parameter locks, Elektron style).
-- RECORD on the page is pattern recording (`SeqPage.rec`): keys play drums and, while playing,
-  place them on the nearest step. The tape never records on this page; going there stops a
-  tape recording. SHIFT+CUT undoes (10 levels).
+- Key 8 is undo (10 levels).
 - 16 patterns, with copy pattern and "clear locks + step settings". Each lane has its own
   rate (triplets too). Length follows bars and the time signature.
-- It's locked to the tape, so recording the sequencer onto tracks (from the drum page) lands
-  exactly in time.
+- While playing, the cursor is hidden and drum keys place steps live at the playhead.
+- It's locked to the tape, so recording the sequencer onto tracks lands exactly in time.
 
 ### Drum page and the theme
 

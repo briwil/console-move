@@ -1,19 +1,17 @@
-"""The sequencer page (the MIDI key's second press): the lanes as rows of steps, 32 at a time.
+"""The sequencer page (the MIDI key's second press): the 7 lanes as rows of steps, 32 at a time.
 
-Step mode (the usual):
-- Knob 1 picks the lane (up and down the rows).
-- Track keys 1-8 are 8 steps of the picked lane: the ones in its box (each lane has its own box,
-  steps 1-8 to start with). Pressing a key plays the lane's drum; letting go puts that step on, or
-  takes it off.
-- Hold a key and turn knob 1: the box moves 8 steps along the lane (letting go then doesn't
-  change the step). SHIFT + any key also moves it 8 steps on, back to the start after the end. Hold a key and turn knobs 2-9: that step's velocity, chance and ratchets, or on
-  a sound page, a setting locked to it (a p-lock).
-- With no key held, knobs 2-9 change the lane (length, Euclid, shift, rate) or the drum's sound.
-- Push knob 1 for the next knob mode: the drum's sound pages. Knob 10 picks the pattern.
-
-RECORD on this page is pattern recording (the tape never records here): track keys 1-8 play the
-drums (SHIFT: lanes 9-16 on the 808), and while playing each press goes into the pattern on the
-nearest step. RECORD again: back to step mode.
+- Knob 1 moves the step cursor (the highlighted column), 1 to 64. It moves along to the 16th column,
+  then the steps scroll under it, until step 64 comes on screen and it moves on to the end (and the
+  same going back).
+- Track keys 1-7 are the drums: press and let go to put a step at the cursor, or take it off. Each one
+  plays its sound as you press it. While recording, a press puts the step where it's playing instead,
+  on the nearest step.
+- Hold a track key and turn knobs 2-9 to change that lane: in STEP mode its length, the velocity,
+  chance and ratchets of the step under the cursor, its Euclidean fill and shift, and its rate.
+- Push knob 1 for the next mode: the drum's sound pages. There, holding a track key locks the
+  setting to the step under the cursor (a parameter lock); with no key held, the knobs change the
+  drum's own sound.
+- Track key 8 undoes (10 steps). Knob 10 picks the pattern.
 """
 import time
 
@@ -24,7 +22,7 @@ import sequencer
 import ui
 
 VISIBLE = 32                     # steps on screen at once
-BOX = 8                          # steps the track keys work on
+FOLLOW_AT = 15                   # the cursor's column (from 0) while the steps scroll under it
 STEP_PARAMS = ["length", "vel", "chance", "ratchet", "hits", "rotate", "rate"]       # knobs 2-8 in STEP mode
 STEP_LABELS = {"length": "LENGTH", "vel": "VELOCITY", "chance": "CHANCE", "ratchet": "RATCHETS",
                "hits": "EUCLID", "rotate": "SHIFT", "rate": "RATE"}
@@ -37,14 +35,13 @@ GESTURE_GAP = 1.5                # seconds: knob turns closer together than this
 class SeqPage:
     def __init__(self, transport):
         self.t = transport
-        self.lane = 0                # the picked lane (knob 1)
+        self.cursor = 0
+        self.lane = 0                # the lane picked last (its sound pages are the modes)
         self.mode = 0                # 0: STEP; 1-5: the drum's sound pages
-        self.box = {}                # lane -> the first step of its box (0, 8, 16...)
-        self.keys = {}               # step mode: key 1-8 held -> True once a knob turned while it was held
-        self.rec = False             # pattern recording: the keys play the drums
-        self.held = {}               # recording: lane -> its key is held
+        self.held = {}               # lane -> True once a knob turned while it was held (no toggle on release)
         self._gesture = None         # (what, when): the edit being made, so one turn is one undo step
-        self.placed = {}             # recording: lane -> the step a key put down while playing
+        self.placed = {}             # lane -> the step a key put down while playing (the knobs edit that one)
+        self._cursor_until = 0.0     # while playing, the cursor shows for a moment when knob 1 turns
 
     @property
     def e(self):
@@ -68,7 +65,7 @@ class SeqPage:
         return names[lane] if lane < len(names) else "L%d" % (lane + 1)
 
     def shown_lanes(self):
-        """The lanes on screen: up to 8, the bank of the picked lane."""
+        """The lanes on screen: up to 8, the bank of the picked lane (9-16 are SHIFT + the drum keys)."""
         n = self.d.lanes
         self.lane = min(self.lane, n - 1)
         first = (self.lane // 8) * 8
@@ -86,31 +83,22 @@ class SeqPage:
             return STEP_PARAMS
         return self.pages()[self.mode - 1][1]
 
-    def box_start(self, lane=None):
-        """The first step of a lane's box, kept inside the lane if it got shorter."""
-        lane = self.lane if lane is None else lane
-        last = (max(1, self.seq.lane(lane).length) - 1) // BOX * BOX
-        return min(self.box.get(lane, 0), last)
+    def showing_cursor(self):
+        """The blue cursor: always when stopped; while playing, only just after knob 1 turns."""
+        return not self.e.playing or time.monotonic() < self._cursor_until
 
-    def takes_key(self, shift):
-        """True if a track key belongs to this page (called from the MIDI thread)."""
-        return not shift or not self.rec or self.d.lanes > 8
-
-    def targets(self):
-        """The steps knobs 2-9 work on: the held keys' steps, or while recording the steps just played in."""
-        if self.rec:
-            return [(lane, self.placed[lane]) for lane in sorted(self.held) if self.placed.get(lane) is not None]
-        b = self.box_start()
-        return [(self.lane, b + n - 1) for n in sorted(self.keys)]
+    def target(self, lane):
+        """The step the knobs work on: while playing, the one the key just put down, else the cursor."""
+        if self.e.playing and not self.showing_cursor() and self.placed.get(lane) is not None:
+            return self.placed[lane]
+        return self.cursor
 
     def first_column(self):
-        """The first step on screen: the page of 32 with the picked lane's box (while recording and
-        playing, the one where the picked lane is playing)."""
-        at = self.box_start()
-        if self.rec and self.e.playing:
-            at = max(0, self.seq.position(self.e._heard_frame(), self.e.frames_per_beat())[self.lane] - 15)
-            return min(sequencer.MAX_STEPS - VISIBLE, at)
-        return min(sequencer.MAX_STEPS - VISIBLE, at // VISIBLE * VISIBLE)
+        """The first step on screen: following the cursor, or while playing the picked lane's playhead."""
+        at = self.cursor
+        if self.e.playing and not self.showing_cursor():
+            at = self.seq.position(self.e._heard_frame(), self.e.frames_per_beat())[self.lane]
+        return max(0, min(sequencer.MAX_STEPS - VISIBLE, at - FOLLOW_AT))
 
     def _edit(self, what):
         """Before changing the pattern: one undo step per key press, or per run of turns of one knob."""
@@ -119,84 +107,53 @@ class SeqPage:
             self.seq.snapshot()
         self._gesture = (what, now)
 
-    def pick(self, lane):
-        self.lane = lane
-        self.t.drum_voice = self.voice()
-        self.mode = min(self.mode, len(self.pages()))
-
-    def leave(self):
-        """Off the page: nothing held, step mode."""
-        self.keys, self.held, self.placed = {}, {}, {}
-        self.rec = False
-
     # ------------------------------------------------------------ keys and knobs
 
-    def record_key(self):
-        self.rec = not self.rec
-        self.keys, self.held, self.placed = {}, {}, {}
-        if self.rec:
-            self.t.say("PATTERN RECORDING: THE KEYS PLAY THE DRUMS; PLAY TO RECORD THEM IN", 4)
-        else:
-            self.t.say("STEP MODE: THE KEYS ARE STEPS %s" % self.box_text(), 3)
-
-    def box_text(self, lane=None):
-        b = self.box_start(lane)
-        return "%d-%d" % (b + 1, b + BOX)
-
     def lane_key(self, n, down, heard_frame=0, shift=False):
-        """Track key n pressed or let go."""
+        """Drum key n pressed or let go (with SHIFT: lane n + 8, on a machine with more than 8)."""
         e = self.e
         if not e or not e.drums:
             return
-        if self.rec:
-            self._rec_key(n, down, heard_frame, shift)
-            return
-        if down and shift:
-            # SHIFT + any key: the box moves to the next 8 steps, back to the start after the lane's end
-            last = (max(1, self.seq.lane(self.lane).length) - 1) // BOX * BOX
-            start = self.box_start()
-            self.box[self.lane] = 0 if start >= last else start + BOX
-            self.t.say("%s  KEYS ARE STEPS %s" % (self.short(self.lane), self.box_text()), 2)
-            return
-        if down:
-            self.keys[n] = False
-            return
-        turned = self.keys.pop(n, None)
-        if turned is None or turned:
-            return
-        lane = self.lane
-        i = self.box_start() + n - 1
-        length = self.seq.lane(lane).length
-        if i >= length:
-            self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (i + 1, self.short(lane), length), 3)
-            return
-        self._edit(("toggle", time.monotonic()))
-        on = self.seq.toggle(lane, i)
-        e.seq_changed()
-        self.t.say("%s  STEP %d %s" % (self.short(lane), i + 1, "ON" if on else "OFF"), 1)
-
-    def _rec_key(self, n, down, heard_frame, shift):
-        e = self.e
         lane = n - 1 + (8 if shift and self.d.lanes > 8 else 0)
         if lane >= self.d.lanes:
             return
-        if not down:
-            self.held.pop(lane, None)
+        if down:
+            # stopped: pressing a different drum's key picks its lane; press it again for a step
+            self._switching = lane != self.lane and not e.playing
+            self.lane = lane
+            self.t.drum_voice = self.voice()
+            self.mode = min(self.mode, len(self.pages()))
+            self.held[lane] = False
+            if e.playing:
+                # playing: the step goes where it's playing (the nearest step), not at the cursor
+                self._edit(("live", time.monotonic()))
+                i = self.seq.live_place(lane, heard_frame, e.frames_per_beat())
+                self.placed[lane] = i
+                self._cursor_until = 0.0
+                self.held[lane] = True                     # placed already: letting go doesn't toggle
+                e.seq_changed()
+                self.t.say("%s  STEP %d" % (self.short(lane), i + 1), 1)
             return
-        self.pick(lane)
-        self.held[lane] = True
-        if e.playing:
-            # the step goes where it's playing (the nearest step)
-            self._edit(("live", time.monotonic()))
-            i = self.seq.live_place(lane, heard_frame, e.frames_per_beat())
-            self.placed[lane] = i
-            e.seq_changed()
-            self.t.say("%s  STEP %d" % (self.short(lane), i + 1), 1)
+        turned = self.held.pop(lane, None)
+        if turned is None or turned:
+            return
+        if getattr(self, "_switching", False):
+            self._switching = False
+            self.t.say("%s  (PRESS AGAIN TO ADD A STEP)" % self.d.lane_names[lane], 2)
+            return
+        length = self.seq.lane(lane).length
+        if self.cursor >= length:
+            self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (self.cursor + 1, self.short(lane), length), 3)
+            return
+        self._edit(("toggle", time.monotonic()))
+        on = self.seq.toggle(lane, self.cursor)
+        e.seq_changed()
+        self.t.say("%s  STEP %d %s" % (self.short(lane), self.cursor + 1, "ON" if on else "OFF"), 1)
 
     def cycle_mode(self):
         self.mode = (self.mode + 1) % (len(self.pages()) + 1)
         self.t.say("KNOBS: %s%s" % (self.mode_name(), "" if self.mode == 0 else
-                                    "  (HOLD A STEP KEY TO LOCK TO THAT STEP)"), 3)
+                                    "  (HOLD A DRUM KEY TO LOCK TO THE STEP)"), 3)
 
     def undo(self):
         n = self.seq.undo()
@@ -208,29 +165,13 @@ class SeqPage:
         left = len(self.seq.undo_stack)
         self.t.say("UNDONE%s  (%d MORE)" % ("" if n == self.seq.current else " IN PATTERN %d" % (n + 1), left), 2)
 
-    def _turned(self):
-        """A knob turned while keys were held: letting go of them doesn't change their steps."""
-        for n in self.keys:
-            self.keys[n] = True
-
     def knob(self, number, delta, shift):
         e, seq = self.e, self.seq
         clicks = self.t.knob_clicks(number, delta, shift)
         if number == 1:
-            way = 1 if delta > 0 else -1
-            if self.keys and not self.rec:
-                # a key held: the box moves 8 steps along the lane
-                self._turned()
-                last = (max(1, seq.lane(self.lane).length) - 1) // BOX * BOX
-                start = max(0, min(last, self.box_start() + way * BOX))
-                self.box[self.lane] = start
-                self.t.say("%s  KEYS ARE STEPS %s" % (self.short(self.lane), self.box_text()), 2)
-                return
-            lane = max(0, min(self.d.lanes - 1, self.lane + way))
-            if lane != self.lane:
-                self.pick(lane)
-                self.held, self.placed = {}, {}
-            self.t.say("%s  ·  KEYS ARE STEPS %s" % (self.d.lane_names[self.lane], self.box_text()), 2)
+            self.cursor = max(0, min(sequencer.MAX_STEPS - 1, self.cursor + clicks))
+            if e.playing:
+                self._cursor_until = time.monotonic() + 2.0
             return
         if number == 10:
             target = seq.queued if seq.queued is not None else seq.current
@@ -241,49 +182,48 @@ class SeqPage:
         if number - 2 >= len(params):
             return
         param = params[number - 2]
-        steps = self.targets()
-        self._turned()
+        lanes = sorted(self.held)
         if self.mode == 0:
-            if param in LANE_PARAMS:
-                lanes = sorted({l for l, _ in steps}) or [self.lane]
-                self._edit((number, tuple(lanes)))
-                for lane in lanes:
+            # the held drum keys' lanes, or with none held the lane picked last
+            held = bool(lanes)
+            lanes = lanes or [self.lane]
+            self._edit((number, tuple(lanes)))
+            for lane in lanes:
+                if held:
+                    self.held[lane] = True
+                i = self.target(lane)
+                if param in LANE_PARAMS:
                     seq.change_lane(lane, param, clicks if param == "length" else delta)
-                e.seq_changed()
-                self.t.say("%s  %s  %s" % (self.short(lanes[-1]), STEP_LABELS[param],
-                                           self.step_value(param, lanes[-1])), 2)
-                return
-            if not steps:
-                self.t.say("HOLD A STEP KEY TO CHANGE ITS %s" % STEP_LABELS[param], 2)
-                return
-            self._edit((number, tuple(steps)))
-            for lane, i in steps:
-                if i >= seq.lane(lane).length:
+                elif i >= seq.lane(lane).length:
                     self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, self.short(lane)), 2)
                     return
-                seq.change_step(lane, i, param, clicks if param == "vel" else delta)
+                elif held or seq.step(lane, i).on:          # with no key held, only a step that's on
+                    seq.change_step(lane, i, param, clicks if param == "vel" else delta)
+                else:
+                    self.t.say("STEP %d OF %s IS OFF: HOLD ITS KEY TO SET IT" % (i + 1, self.short(lane)), 2)
+                    return
             e.seq_changed()
             if param == "chance":
                 self._chance_until = time.monotonic() + CHANCE_SHOW   # the steps show chance for a moment
-            lane, i = steps[-1]
-            self.t.say("%s STEP %d  %s  %s" % (self.short(lane), i + 1, STEP_LABELS[param],
-                                               self.step_value(param, lane, i)), 2)
+            lane = lanes[-1]
+            self.t.say("%s  %s  %s" % (self.short(lane), STEP_LABELS[param], self.step_value(param, lane)), 2)
             return
-        # a sound page: locked to the held steps, or with none held the drum's own sound
-        if steps:
+        # a sound page: lock it to the step under the cursor while a drum key is held, else the drum's sound
+        if self.lane in self.held:
+            lane = self.lane
             if not e.drums.lockable(param):
                 self.t.say("%s CAN'T BE LOCKED TO A STEP" % e.drums.label(param), 3)
                 return
-            self._edit((number, tuple(steps), "lock"))
-            for lane, i in steps:
-                if i >= seq.lane(lane).length:
-                    self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, self.short(lane)), 3)
-                    return
-                st = seq.step(lane, i)
-                base = st.locks.get(param, e.drums.get_param(param))
-                seq.set_lock(lane, i, param, e.drums.stepped(param, base, clicks))
+            i = self.target(lane)
+            if i >= seq.lane(lane).length:
+                self.t.say("STEP %d IS PAST THE END OF %s" % (i + 1, self.short(lane)), 3)
+                return
+            self._edit((number, lane, "lock"))
+            self.held[lane] = True
+            st = seq.step(lane, i)
+            base = st.locks.get(param, e.drums.get_param(param))
+            seq.set_lock(lane, i, param, e.drums.stepped(param, base, clicks))
             e.seq_changed()
-            lane, i = steps[-1]
             v = seq.step(lane, i).locks[param]
             self.t.say("%s STEP %d  %s  %s  (LOCKED)" % (self.short(lane), i + 1, e.drums.label(param),
                                                          e.drums.value_text(param, v)), 2)
@@ -293,7 +233,7 @@ class SeqPage:
 
     # ------------------------------------------------------------ values for the screen
 
-    def step_value(self, param, lane=None, i=None):
+    def step_value(self, param, lane=None):
         lane = self.lane if lane is None else lane
         ln = self.seq.lane(lane)
         if param == "length":
@@ -304,11 +244,7 @@ class SeqPage:
             return str(ln.rotate)
         if param == "rate":
             return sequencer.RATES[ln.rate][0]
-        if i is None:
-            steps = [st for l, st in self.targets() if l == lane]
-            if not steps:
-                return "-"
-            i = steps[-1]
+        i = self.target(lane)
         if i >= ln.length:
             return "-"
         st = ln.steps[i]
@@ -321,18 +257,16 @@ class SeqPage:
     def knob_boxes(self):
         """[(label, value, locked)] for knobs 1-9, then 10 and the big knob."""
         e = self.e
-        steps = self.targets()
-        if self.keys and not self.rec:
-            boxes = [("BOX (TURN)", "STEPS " + self.box_text(), False)]
+        i = self.target(self.lane)
+        if self.showing_cursor():
+            boxes = [("CURSOR", "STEP %d" % (self.cursor + 1), False)]
         else:
-            boxes = [("LANE", self.short(self.lane), False)]
+            boxes = [("CURSOR", "PLAYING" if self.placed.get(self.lane) is None else "STEP %d" % (i + 1), False)]
         params = self.params()
         st = None
-        if steps:
-            lane, i = steps[-1]
-            ln = self.seq.lane(lane)
-            if i < ln.length:
-                st = ln.steps[i]
+        ln = self.seq.lane(self.lane)
+        if i < ln.length:
+            st = ln.steps[i]
         for i in range(8):
             if i >= len(params):
                 boxes.append(("", "", False))
@@ -358,7 +292,7 @@ class SeqPage:
         green, cursor_col = (60, 203, 127), (28, 78, 86)
         surf.set_clip(None)
         pygame.draw.rect(surf, (12, 13, 16), (0, 36, 1280, 330))
-        # what each knob does, with its value (green: locked to the held step)
+        # what each knob does, with its value (green: locked to the step under the cursor)
         x, w, gap = 20, 108, 4
         for n, (label, value, locked) in enumerate(self.knob_boxes()):
             pygame.draw.rect(surf, (60, 64, 72) if label else (26, 28, 33), (x, 40, w, 38), 1, border_radius=4)
@@ -369,20 +303,11 @@ class SeqPage:
                 surf.blit(v, (x + (w - v.get_width()) // 2, 58))
             x += w + gap
         ln = seq.lane(self.lane)
-        if self.rec:
-            info = "KEYS PLAY THE DRUMS%s   ·   PLAY TO RECORD THEM IN   ·   RECORD: BACK TO STEPS" % (
-                "  (SHIFT: 9-16)" if self.d.lanes > 8 else "")
-        else:
-            info = "KEYS: %s STEPS %s  (HOLD A KEY + KNOB 1 TO MOVE)" % (self.short(self.lane), self.box_text())
-        info += "   ·   KNOBS: %s (PUSH KNOB 1)   ·   %d STEPS  %s   ·   %s   ·   SHIFT+CUT: UNDO" % (
-            self.mode_name(), ln.length, sequencer.RATES[ln.rate][0], self.d.title)
-        x = 20
-        if self.rec:
-            pygame.draw.circle(surf, (230, 60, 60), (x + 6, 90), 6)
-            t = tiny.render("PATTERN REC", True, (230, 60, 60))
-            surf.blit(t, (x + 16, 84))
-            x += 16 + t.get_width() + 14
-        surf.blit(tiny.render(info, True, grey), (x, 84))
+        info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   %s  ·   SHIFT+CUT: UNDO" % (
+            self.mode_name(), self.short(self.lane), ln.length, sequencer.RATES[ln.rate][0], self.d.title)
+        if self.d.lanes > 8:
+            info += "   ·   SHIFT+KEYS: %s" % ("LANES 1-8" if self.lane >= 8 else "LANES 9-16")
+        surf.blit(tiny.render(info, True, grey), (20, 84))
         # the grid
         first = self.first_column()
         x0, pitch, cw = 72, 35, 28
@@ -393,6 +318,9 @@ class SeqPage:
         grid_bottom = top + len(shown) * row_h
         sig = tuple(e.time_sig)
         groups = {l: sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in shown}
+        if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
+            cx = col_x(self.cursor - first)
+            pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, len(shown) * row_h + 4), border_radius=5)
         playing = None
         if e.playing:
             playing = seq.position(e._heard_frame(), e.frames_per_beat())
@@ -411,17 +339,7 @@ class SeqPage:
             t = small.render(self.short(lane), True, dark)
             surf.blit(t, (20 + (42 - t.get_width()) // 2, y + (ch - t.get_height()) // 2))
             if lane == self.lane:
-                pygame.draw.rect(surf, (70, 75, 84), (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 1,
-                                 border_radius=7)
-            # the lane's box: the 8 steps the keys work on (bright on the picked lane)
-            b = self.box_start(lane)
-            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(lane).length)
-            if c0 < c1 and not self.rec:
-                bx = col_x(c0 - first)
-                rect = (bx - 3, y - 3, col_x(c1 - first) - bx + 6 - (pitch - cw), ch + 6)
-                pygame.draw.rect(surf, cursor_col if lane == self.lane else (30, 44, 48), rect, border_radius=6)
-                if lane == self.lane:
-                    pygame.draw.rect(surf, (96, 196, 210), rect, 2, border_radius=6)
+                pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)
             lane_steps = seq.lane(lane)
             # a grey line between the lane's beats: every 4 steps at 1/16, 3 at 1/8T, by its time signature
             for c in range(1, VISIBLE):

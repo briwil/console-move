@@ -373,53 +373,52 @@ Kits are kept in `~/console-data/kits/`, so any song can load them.
 
 The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
 plays whenever the tape plays, locked to it (it starts with the tape's
-first bar). The tape plays here but never records: RECORD on this page
-records into the pattern instead (see Pattern recording below), and going
-to the sequencer stops a tape recording. The 4×4 keys keep their normal jobs.
+first bar), and records like playing the keys does: MULTI, STEREO or MONO
+onto the armed tracks, exactly on the beat. The 4×4 keys keep their normal
+jobs here.
 
-**The grid.** The drums are rows (D1, D2, D3, SN, CY, HHc closed hat, HHo
-open hat on the LXR; 8 at a time on the TR-808's 16), 32 steps on screen at
-a time; lanes go up to 64 steps. Steps past a lane's end are dark.
+**The grid.** The 7 drums are rows (D1, D2, D3, SN, CY, HHc closed hat, HHo
+open hat), 32 steps on screen at a time; lanes go up to 64 steps. Steps past
+a lane's end are dark.
 
-- **Knob 1** picks the lane: turn to go down and up the rows.
-- **Each lane has a box** of 8 steps (steps 1–8 to start with). On the
-  picked lane it's outlined; the other lanes' boxes are shaded.
-- **Track keys 1–8 are the 8 steps in the picked lane's box.** Pressing a key
-  plays the lane's drum. Letting go puts that step on, or takes it off.
-- **Hold any track key and turn knob 1** to move the box 8 steps along the
-  lane (steps 9–16, 17–24…, up to the lane's end). Letting go of the key
-  then doesn't change its step. Or hold **SHIFT and press any track key**:
-  the box moves to the next 8 steps, and after the lane's end back to the
-  start. Each lane keeps its own box, and the box stays where you put it
-  while the pattern plays.
+- **Knob 1** moves the cursor (the highlighted column), step 1 to 64. It
+  moves to the 16th column, then the steps scroll under it; near step 64 it
+  moves on to the end (and the same going back). Turn quickly to go faster.
+- **Track keys 1–7** are the drums: press and let go to put a step at the
+  cursor, or take it off. Each plays its sound as you press it. While
+  stopped, pressing a different drum's key first just picks its lane;
+  press it again to add a step.
+- **While playing** (recording or not), the blue cursor hides and the grid
+  follows the picked lane's playhead (the white outline). A drum key puts
+  the step where it's playing, on the nearest step; the knobs then work on
+  that step. Turning knob 1 shows the cursor again for a moment.
 - **SHIFT+CUT** undoes the last change (10 steps back), including COPY
-  Pattern and CLEAR P-locks.
+  Pattern and CLEAR P-locks. (Track key 8 is a drum now: the 606's clap,
+  the 808's open hat.)
+- **The TR-808's 16 drums:** the grid shows 8 lanes at a time. SHIFT + a drum
+  key picks and plays lanes 9–16 (LC to CY), and the grid switches to them.
 - **Knob 10** picks the pattern (16 per song; while playing, the next one
   takes over when the current one ends). The big knob moves the tape as usual.
-
-**Pattern recording.** Press **RECORD** on the sequencer: the red PATTERN REC
-dot comes on and track keys 1–8 play the drums (SHIFT + a key: lanes 9–16 on
-the TR-808). Press PLAY and each key you press goes into the pattern on the
-nearest step; hold the key and turn knobs 3–5 to change that step. Press
-RECORD again to go back to steps. Nothing goes onto the tape.
 
 **Knob modes.** The row of boxes along the top shows what knobs 1–9, 10 and
 the big knob do, with their values. **Push knob 1** for the next mode:
 
-- **STEP**: knob 2 LENGTH (1–64, each lane loops on its own), 6 EUCLID
-  (spreads that many hits over the lane, rewriting its on/off steps),
-  7 SHIFT (rotates them) and 8 RATE (1/16, 1/16T, 1/8, 1/8T, 1/32) change
-  the picked lane, with or without a key held. **Hold a track key** and turn
-  3 VELOCITY, 4 CHANCE (100% down to 0% in tens, or 1:2, 2:2, 1:3… = plays on
-  that pass round the lane out of every 2, 3 or 4) or 5 RATCHETS (up to 4
-  quick hits) for that step; an empty step comes on. Hold several keys to
-  change several steps. Changing the rate keeps a lane that's a whole number
-  of bars the same number of bars: one bar is 16 steps at 1/16, 24 at 1/16T,
-  12 at 1/8T.
-- **The drum's sound pages** (OSC + AMP, FILTER + MIX, LFO…, for the picked
-  lane's drum): with no key held, knobs 2–9 change that drum's sound. Hold a
-  track key and turn: the setting is **locked** to that step (a p-lock; the
-  box shows it in green). The velocity and LFO destinations can't be locked.
+- **STEP**: turn for the drum picked last, or hold drum keys to pick
+  which: knob 2 LENGTH (1–64, each lane loops
+  on its own), 3 VELOCITY, 4 CHANCE (100% down to 0% in tens, or 1:2, 2:2, 1:3… =
+  plays on that pass round the lane out of every 2, 3 or 4) and 5 RATCHETS
+  (up to 4 quick hits) for the step under the cursor (holding its key turns
+  an empty step on; with no key held they only change a step that's on),
+  6 EUCLID (spreads that many hits over the lane, rewriting its on/off
+  steps), 7 SHIFT (rotates them), 8 RATE (1/16, 1/16T, 1/8, 1/8T, 1/32).
+  Changing the rate keeps a lane that's a whole number of bars the same
+  number of bars: one bar is 16 steps at 1/16, 24 at 1/16T, 12 at 1/8T.
+  Letting go of a key after turning a knob doesn't toggle its step.
+- **The drum's sound pages** (OSC + AMP, FILTER + MIX, LFO…, for the drum
+  picked last): with no key held, knobs 2–9 change that drum's sound. Hold
+  its drum key and turn: the setting is **locked** to the step under the
+  cursor (a p-lock; the box shows it in green). The velocity and LFO
+  destinations can't be locked.
 
 **Beats and bars.** Each lane has a grey line between its beats: every 4
 steps at 1/16, 3 at 1/8T, 6 at 1/16T, 2 at 1/8, 8 at 1/32 (in 4/4). They

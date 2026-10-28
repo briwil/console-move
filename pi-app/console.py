@@ -154,8 +154,6 @@ class Board:
         self.seq_page = lambda: False      # True on the sequencer page: track keys go to it, pressed and let go
         self.heard = lambda: 0             # the tape frame you're hearing (for live recording into the sequencer)
         self.banked = lambda: False        # True when the drum machine has more than 8 lanes (SHIFT: 9-16)
-        self.seq_keys = lambda shift: False   # True if the sequencer page takes a track key (with or without SHIFT)
-        self.seq_pads = None               # Transport.seq_pad: the sequencer page's key sound
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -164,11 +162,11 @@ class Board:
                 if name == "SHIFT":
                     self.shift = bool(value)
                     return
-                if name.startswith("TRACK") and self.seq_page() and self.seq_keys(self.shift):
-                    # the sequencer: the keys are steps (or while pattern recording, the drums)
+                if name.startswith("TRACK") and self.seq_page() and (not self.shift or self.banked()):
+                    # the sequencer: the drum keys pick and place (with SHIFT, lanes 9-16 on the 808)
                     n = int(name[5:])
-                    if value and self.seq_pads:
-                        self.seq_pads(n, self.shift)      # heard straight away, on the press
+                    if value and self.pads:
+                        self.pads(n, self.shift)          # heard straight away
                     self.q.put(("LANE", n, bool(value), self.heard(), self.shift))
                     return
                 if name in HOLD_KEYS and (not value or not self.shift):
@@ -336,8 +334,6 @@ class Transport:
                 self.say("STARTING ON THE NEXT BAR (LINK)", 2)
             else:
                 self.playing = True
-        elif name == "RECORD" and self.seq_page and self.engine and self.engine.drums:
-            self.seqp.record_key()                # the sequencer: pattern recording (the tape doesn't record)
         elif name == "RECORD":
             self.record_key()
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
@@ -367,12 +363,6 @@ class Transport:
             self.bounce()
         elif name == "DRUMS":
             self.drums_key()
-        elif name.startswith("TRACK") and self.seq_page and self.engine and self.engine.drums:
-            n = int(name[5:])                     # a keyboard number key on the sequencer: a press and let go
-            self.seq_pad(n)
-            heard = self.engine.pos
-            self.seqp.lane_key(n, True, heard)
-            self.seqp.lane_key(n, False, heard)
         elif name.startswith("TRACK") and self.pad(int(name[5:])):
             pass                                  # a keyboard number key on the drum page: played
         elif name.startswith("TRACK"):
@@ -437,14 +427,10 @@ class Transport:
                 return
         if self.drum_page and not self.seq_page:
             self.seq_page = True
-            self.seqp.leave()
-            if self.recording:
-                self.recording = False            # the tape doesn't record on the sequencer page
-                self.say("TAPE RECORDING STOPPED: THE SEQUENCER DOESN'T RECORD THE TAPE", 4)
             return
         if self.drum_page:
             self.drum_page = self.seq_page = False
-            self.seqp.leave()
+            self.seqp.held = {}
             return
         if not e or not e.drums:
             import drums
@@ -473,21 +459,6 @@ class Transport:
         self.drum_voice = voice
         self.drum_key = lane + 1
         self._drum_hits[voice] = time.monotonic()
-        return True
-
-    def seq_pad(self, n, shift=False):
-        """Track key n pressed on the sequencer page: in step mode the picked lane's drum (every key),
-        while pattern recording the drum on lane n. From the MIDI thread, like pad()."""
-        if self.seqp.rec:
-            return self.pad(n, shift)
-        if shift:
-            return False                          # SHIFT + key moves the box: no sound
-        e = self.engine
-        if not (self.drum_page and e and e.drums_input and e.drums):
-            return False
-        lane = min(self.seqp.lane, e.drums.lanes - 1)
-        e.hit(lane, 100)
-        self._drum_hits[e.drums.lane_voice[lane]] = time.monotonic()
         return True
 
     def drum_pages(self):
@@ -1169,7 +1140,10 @@ class Transport:
         elif self.drum_page and not (e.device and e.drums_input):
             hint = "DRUM SYNTH STARTING..."
         elif self.seq_page:
-            hint = "SEQUENCER  \u00b7  THE TAPE PLAYS BUT DOESN'T RECORD HERE  \u00b7  MIDI KEY: BACK TO THE TAPE"
+            mode = MODE_NAMES.get(e.input_mode, "")
+            where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
+                     if e.input_mode == "stereo" else self.armed_text(armed))
+            hint = "SEQUENCER  \u00b7  %s > %s  \u00b7  MIDI KEY: BACK TO THE TAPE" % (mode, where)
         elif self.drum_page:
             mode = MODE_NAMES.get(e.input_mode, "")
             where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
@@ -1269,8 +1243,6 @@ def main():
         board.pads = transport.pad
         board.seq_page = lambda: transport.seq_page
         board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
-        board.seq_pads = transport.seq_pad
-        board.seq_keys = lambda shift: bool(engine and engine.drums and transport.seqp.takes_key(shift))
         if engine:
             board.heard = lambda: engine.pos
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)

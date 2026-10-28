@@ -238,6 +238,7 @@ class Transport:
         self.message = ""
         self.message_until = 0.0
         self.holding = None                # the hold key (LIFT or CUT) being held, if any
+        self.drop_ask = None               # DROP of several tracks: {"insert", "merged"} while it asks how
         self.bounce_pending = None         # (sources, dest) after the first BOUNCE press
         self._dirty_since = None
         self.glide = None                  # (from beat, to beat, seconds so far): the playhead easing somewhere
@@ -311,6 +312,10 @@ class Transport:
     # ------------------------------------------------------------ actions
 
     def key(self, name):
+        if self.drop_ask is not None and name not in ("DROP", "DROP_INSERT") and \
+                not (isinstance(name, tuple) and name[0] == "KNOB"):
+            self.drop_ask = None                  # any other key: the drop question goes away
+            self.message_until = 0
         if isinstance(name, tuple):
             if name[0] == "KNOB":
                 self.knob(*name[1:])
@@ -525,6 +530,10 @@ class Transport:
 
     def knob(self, number, delta, shift):
         t = self.tape
+        if self.drop_ask is not None and number == 1:
+            self.drop_ask["merged"] = delta > 0           # DROP of several tracks: right = merged, left = separate
+            self.say_drop_ask()
+            return
         if self.fx_page and self.engine and not (number == 10 and shift):
             self.fx_knob(number, delta)           # the FX pages go over everything, the drum pages too
         elif self.seq_page and self.engine and self.engine.drums and number <= 10 and not (number == 10 and shift):
@@ -803,6 +812,21 @@ class Transport:
             note = "  (OUTPUT IS %s: USE ITS OWN VOLUME)" % (e.output_label or "NOT SET")
         self.say("VOLUME %d%%%s" % (round(v * 100), note), 2)
 
+    def clip_text(self):
+        """Where the clipboard came from: TRACK 3, TRACKS 3+4 (STEREO) or TRACKS 1, 3, 4."""
+        ts = self.engine.clip_tracks
+        if len(ts) == 1:
+            return "TRACK %d" % (ts[0] + 1)
+        if self.engine.clip_stereo():
+            return "TRACKS %d+%d (STEREO)" % (ts[0] + 1, ts[1] + 1)
+        return "TRACKS " + ", ".join(str(t + 1) for t in ts)
+
+    def say_drop_ask(self):
+        n = self.engine.clip_parts()
+        merged = self.drop_ask["merged"]
+        self.say("DROP %d TRACKS AS:  %s  /  %s   ·   KNOB 1 CHANGES   ·   DROP AGAIN TO DROP" % (
+            len(self.engine.clip), "SEPARATE" if merged else "[SEPARATE]", "[MERGED]" if merged else "MERGED"), 60)
+
     def edit_text(self):
         ts = self.engine.edit_tracks()
         return "TRACKS %d+%d (STEREO)" % (ts[0] + 1, ts[1] + 1) if len(ts) == 2 else "TRACK %d" % (ts[0] + 1)
@@ -898,21 +922,37 @@ class Transport:
             beats = e.copy()
             if beats:
                 self.glide_to_edit(0)
-            self.say("COPIED %s FROM %s" % (self.beats_text(beats), self.edit_text()) if beats
+            self.say("COPIED %s FROM %s" % (self.beats_text(beats), self.clip_text()) if beats
                      else "NOTHING HERE TO COPY")
         elif name == "CUT":
             beats = e.cut()
             if beats:
                 self.glide_to_edit(0)
-            self.say("CUT %s FROM %s" % (self.beats_text(beats), self.edit_text()) if beats
+            self.say("CUT %s FROM %s" % (self.beats_text(beats), self.clip_text()) if beats
                      else "NOTHING HERE TO CUT")
         elif name in ("DROP", "DROP_INSERT"):
-            done = e.drop(insert=name == "DROP_INSERT")
-            if done is True:
+            insert = name == "DROP_INSERT"
+            if e.clip is not None and e.clip_parts() > 1 and self.drop_ask is None:
+                # several tracks on the clipboard: ask how, then DROP again
+                self.drop_ask = {"insert": insert, "merged": False}
+                self.say_drop_ask()
+                return
+            merged = False
+            if self.drop_ask is not None:
+                merged = self.drop_ask["merged"]
+                insert = insert or self.drop_ask["insert"]
+                self.drop_ask = None
+            done = e.drop(insert=insert, merged=merged)
+            if isinstance(done, list):
                 self.glide_to_edit(1)
-                ts = e.edit_tracks() if len(e.clip) == 2 else [self.armed - 1]
-                where = "TRACKS %d+%d" % (ts[0] + 1, ts[0] + 2) if len(e.clip) == 2 else "TRACK %d" % self.armed
-                self.say("DROPPED ON %s AT %s%s" % (where, pos, ", PUSHING THE REST LATER" if name == "DROP_INSERT" else ""))
+                if len(done) == 1:
+                    where = "TRACK %d" % (done[0] + 1)
+                elif len(done) == 2 and e.clip_stereo():
+                    where = "TRACKS %d+%d" % (done[0] + 1, done[1] + 1)
+                else:
+                    where = "TRACKS %d-%d" % (done[0] + 1, done[-1] + 1)
+                self.say("DROPPED%s ON %s AT %s%s" % (" (MERGED)" if merged else "", where, pos,
+                                                      ", PUSHING THE REST LATER" if insert else ""))
             else:
                 self.say(done)
         elif name in ("SPLICE", "SPLICE_ALL"):
@@ -1071,7 +1111,8 @@ class Transport:
         fpb = e.frames_per_beat()
         inout = ("IN %s  OUT %s" % (self.position_text(r[0] / fpb), self.position_text(r[1] / fpb))) if r else "NO IN/OUT POINTS"
         if e.clip is not None:
-            clip = "CLIPBOARD %s%s" % (self.beats_text(len(e.clip[0]) / fpb), "  STEREO" if len(e.clip) == 2 else "")
+            clip = "CLIPBOARD %s%s" % (self.beats_text(len(e.clip[0]) / fpb), "  STEREO" if e.clip_stereo()
+                                       else "  %d TRACKS" % len(e.clip) if len(e.clip) > 1 else "")
         else:
             clip = "CLIPBOARD EMPTY"
         info = e.box_info()

@@ -305,12 +305,13 @@ class Tape:
                     pygame.draw.line(surf, col, (x, it["y"]), (x, y_bottom - 1), 2)
 
     def selection_x(self, it):
-        """(x start, x end, selecting) of the selected piece(s) when `it` is the armed track's lane, or None."""
+        """(x start, x end, selecting) of the selected piece(s) when `it` is the lane of a track LIFT
+        would take (the selected one and every other track you hear with a box there), or None."""
         e = self.engine
-        if not e or e.recording or it["name"] not in ["track%d_lane" % (t + 1) for t in e.edit_tracks()]:
+        if not e or e.recording:
             return None
         sel = e.selection()
-        if not sel:
+        if not sel or it["name"] not in ["track%d_lane" % (t + 1) for t in sel[0]]:
             return None
         fpb = e.frames_per_beat()
         return round(self.x_of(sel[1] / fpb)), round(self.x_of(sel[2] / fpb)), e.sel_anchor is not None

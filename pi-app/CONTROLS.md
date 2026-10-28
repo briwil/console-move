@@ -108,9 +108,9 @@ stereo mix) in the Exports folder.
 | MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Again: the sequencer. Again: back to the tape (see Drum synth and Drum sequencer below) | |
 | IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
-| CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space. Hold to take several boxes (see below) | Undo |
-| LIFT | Copy the box under the playhead onto the clipboard. Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
-| DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there | Insert it, pushing the rest of the track later |
+| CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space, from every track you hear that has a box there. Hold to take several boxes (see below) | Undo |
+| LIFT | Copy the box under the playhead onto the clipboard, from every track you hear that has a box there (mute the others). Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
+| DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there. Several tracks: it asks SEPARATE or MERGED first | Insert it, pushing the rest of the track later |
 | LOOP | Loop on / off (the first time, loops 4 bars from the current bar) | Clear the in/out points |
 | EXPORT | Export stems and a stereo mix to Exports | Bounce: the armed tracks onto the selected track (press twice) |
 | RECORD | Record on / off. When the OP-XY's clock is coming in and the tape is stopped: get ready, and recording starts when you press play on the OP-XY | Switch between REPLACE and OVERDUB |
@@ -152,6 +152,23 @@ like a region in a DAW. Empty tape has no boxes.
 - **DROP** puts the clipboard on the selected track at the playhead as a
   new box, covering what's there. SHIFT+DROP inserts it instead, pushing the
   rest of the track later (splitting a box it lands in the middle of).
+
+**Several tracks at once (like the OP-1).** LIFT and CUT take every track you
+hear, not just the selected one: the selected track's outline sets where
+the piece starts and ends, and every other track that isn't muted (or, while
+anything is soloed, every soloed track) with a box in that stretch comes too.
+They all get the white outline. Mute the tracks you want to leave behind.
+
+When the clipboard has more than one track, DROP asks how to put it down:
+
+- **SEPARATE**: each track on its own, onto the selected track and the ones
+  below it, in order (tracks 1, 2 and 4 lifted, track 5 selected: they land
+  on 5, 6 and 7). A stereo pair stays a pair. They have to fit above track 8.
+- **MERGED**: all of them mixed onto the selected track, in mono, at the
+  volumes you heard them at.
+
+Turn knob 1 to choose (left: separate, right: merged), then press DROP again
+(SHIFT+DROP to insert). Any other key cancels. SHIFT+CUT undoes the whole drop.
 - **Recording** makes a new box. In REPLACE mode it covers what was there;
   in OVERDUB mode it joins the box(es) it records over.
 - SHIFT+CUT undoes, including splits and joins.

@@ -114,6 +114,15 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - The machine is picked from the drums menu (FILE on the drum page, `kitmenu.py`: DRUM MACHINE).
 - Built by `setup.sh` (needs g++), or by `drums.py` in the background at start.
 
+### Lifting several tracks (Oct 2026)
+
+- LIFT / CUT take the selected track's outline span from every audible track with a box there
+  (`Engine.lift_tracks`; Brian chose "non-muted", OP-1 style). The clipboard keeps
+  `clip_tracks`, `clip_pairs` and `clip_vols`.
+- DROP of a multi-track clipboard asks SEPARATE / MERGED on screen (knob 1, DROP again;
+  `Transport.drop_ask`). Separate: from the selected track down, packed together. Merged: a mono
+  mix at the volumes heard, divided by the landing track's volume so it sounds the same.
+
 ### Sequencer (grid)
 
 - Seven lanes (one per drum key) and 32 steps visible. Knob 1 moves the cursor, which

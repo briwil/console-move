@@ -379,22 +379,19 @@ class SeqPage:
         grid_bottom = top + len(shown) * row_h
         sig = tuple(e.time_sig)
         groups = {l: sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in shown}
-        # each lane's 8-step box: a filled block under its steps (brighter on the picked lane), drawn
-        # first so the cursor column and the steps go on top
-        for row, lane in enumerate(shown):
-            b = self.box_start(lane)
-            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(lane).length)
+        # the picked lane's 8-step box: a solid block in the lane's colour under its steps, drawn first
+        # so the cursor column and the steps go on top (inside it the steps are drawn dark)
+        box = None
+        if self.lane in shown:
+            b = self.box_start()
+            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(self.lane).length)
             if c0 < c1:
-                y = top + row * row_h
+                y = top + shown.index(self.lane) * row_h
                 bx = col_x(c0 - first)
                 rect = (bx - 4, y - 4, col_x(c1 - first) - bx + 8 - (pitch - cw), ch + 8)
-                picked = lane == self.lane
-                colour = ui.rgb(self.t.tab_colours.get(lane % 8 + 1) or "#7D838C")
-                if picked:                               # the lane's own colour, dimmed, with a bright edge
-                    pygame.draw.rect(surf, tuple(round(c * 0.38) for c in colour), rect, border_radius=7)
-                    pygame.draw.rect(surf, tuple(round(c * 0.9) for c in colour), rect, 2, border_radius=7)
-                else:
-                    pygame.draw.rect(surf, (36, 40, 48), rect, border_radius=7)
+                pygame.draw.rect(surf, ui.rgb(self.t.tab_colours.get(self.lane % 8 + 1) or "#7D838C"), rect,
+                                 border_radius=7)
+                box = (b, b + BOX)
         if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
             cx = col_x(self.cursor - first)
             pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, len(shown) * row_h + 4), border_radius=5)
@@ -405,8 +402,8 @@ class SeqPage:
         show_chance = now < getattr(self, "_chance_until", 0.0)
         for row, lane in enumerate(shown):
             y = top + row * row_h
-            colour = ui.rgb(self.t.tab_colours.get(lane % 8 + 1) or "#7D838C")
-            dim = tuple(round(c * 0.75) for c in colour)
+            colour = lane_colour = ui.rgb(self.t.tab_colours.get(lane % 8 + 1) or "#7D838C")
+            dim = lane_dim = tuple(round(c * 0.75) for c in colour)
             # the drum's tag, lit for a moment when it plays
             hit = max(self.t._drum_hits[self.voice(lane)],
                       e.seq_hits[lane] if e.seq_hits[lane] <= now else 0.0)
@@ -430,6 +427,8 @@ class SeqPage:
                 if i >= lane_steps.length:
                     pygame.draw.rect(surf, (32, 34, 40), (x, y, cw, ch), 1, border_radius=5)
                     continue
+                in_box = box is not None and lane == self.lane and box[0] <= i < box[1]
+                colour, dim = (dark, dark) if in_box else (lane_colour, lane_dim)
                 if st.on:
                     # filled from the bottom by its velocity (or, just after turning the chance knob, its chance)
                     c = sequencer.CHANCES[st.chance]

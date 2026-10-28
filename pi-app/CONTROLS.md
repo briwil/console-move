@@ -419,8 +419,9 @@ a lane's end are dark.
   Pattern and CLEAR P-locks. (Track key 8 is a drum now: the 606's clap,
   the 808's open hat.)
 - **8-step boxes.** Each lane has a box around 8 of its steps (steps 1–8 to
-  start with): a block under them, in the lane's colour on the picked lane
-  and grey on the others. **← / →** move the picked lane's
+  start with). The picked lane's box shows as a solid block in its colour,
+  with the steps inside drawn dark (a dark filled step is on); the other
+  lanes' boxes don't show. **← / →** move the picked lane's
   box 8 steps along it. **SHIFT + track key 1–8** puts that step of the box
   on (or off) on the picked lane, and plays its drum. The grid jumps to the
   box for a few seconds when you use them.

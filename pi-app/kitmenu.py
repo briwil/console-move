@@ -4,8 +4,10 @@
   them; each drum machine lists only its own.
 - DRUM MACHINE picks the song's drum machine (LXR-02, TR-606, TR-808); each has its own kit and its own
   sequencer patterns in the song, so switching back finds them as they were.
-- COPY PATTERN copies the sequencer's current pattern onto another one.
-- CLEAR P-LOCKS takes every parameter lock off the current pattern.
+- COPY PATTERN keeps the sequencer's current pattern; PASTE PATTERN puts it onto the current one
+  (go to another pattern with knob 10 in between).
+- CLEAR PATTERN empties the current pattern (like a new one); CLEAR LOCKS + STEPS takes every
+  parameter lock off it and puts the steps' velocity, chance and ratchets back.
 
 It looks and works like the project menu (same layout, same naming: the big knob picks the letter,
 ← / → move, CUT deletes, PLAY is OK, FILE goes back).
@@ -20,9 +22,10 @@ import sequencer
 
 KITS = os.path.join(audio.DATA, "kits")
 ITEMS = [("MACHINE", "menu_more"), ("SAVE", "menu_new"), ("LOAD", "menu_save"), ("COPY", "menu_load"),
-         ("CLEAR", "menu_settings")]
+         ("PASTE", "menu_settings"), ("CLEAR_ALL", "menu_more2"), ("CLEAR", "menu_more3")]
 TEXTS = {"MACHINE": "DRUM MACHINE", "SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern",
-         "CLEAR": "CLEAR Locks + Steps"}
+         "PASTE": "PASTE Pattern", "CLEAR_ALL": "CLEAR Pattern", "CLEAR": "CLEAR Locks + Steps"}
+ITEM_TOP, ITEM_GAP = 84, 30                # the drums menu's 7 rows, closer together than the project menu's
 ROWS = 7                                   # saved kits shown at once (the layout's set_value1-7)
 
 
@@ -51,8 +54,7 @@ class KitMenu(menu.Menu):
         self.kits = []
         self.pick = 0                      # the kit chosen in the LOAD list
         self.replace = None                # a name that's already saved: PLAY again replaces it
-        self.copy_to = 1                   # COPY PATTERN: where to (0-15)
-        self.confirm = None                # a copy waiting for PLAY again (it would replace a pattern)
+        self.pattern_clip = None           # COPY PATTERN: (machine, pattern number, the pattern)
         self.machines = []                 # MACHINE: [(id, title)] to pick from
 
     @property
@@ -72,14 +74,14 @@ class KitMenu(menu.Menu):
         return self.engine.seq
 
     def key(self, name):
-        if self.mode in ("load", "copy", "clear", "machine") and not isinstance(name, tuple):
+        if self.mode in ("load", "paste", "clear", "clear_all", "machine") and not isinstance(name, tuple):
             if name in ("UP", "LEFT", "BAR_LEFT"):
                 self.turn(-1)
             elif name in ("DOWN", "RIGHT", "BAR_RIGHT"):
                 self.turn(1)
             elif name in menu.CONFIRM:
-                {"load": self.load, "copy": self.copy_pattern, "clear": self.clear_locks,
-                 "machine": self.switch_machine}[self.mode]()
+                {"load": self.load, "paste": self.paste_pattern, "clear": self.clear_locks,
+                 "clear_all": self.clear_pattern, "machine": self.switch_machine}[self.mode]()
             elif name == "FILE":
                 self.mode, self.msg = "list", ""
             self.refresh()
@@ -87,11 +89,7 @@ class KitMenu(menu.Menu):
         super().key(name)
 
     def turn(self, delta):
-        if self.mode == "copy":
-            self.copy_to = (self.copy_to + (1 if delta > 0 else -1)) % 16
-            self.confirm, self.msg = None, ""
-            return
-        if self.mode == "clear":
+        if self.mode in ("clear", "clear_all", "paste"):
             return
         if self.mode in ("load", "machine"):
             n = len(self.kits if self.mode == "load" else self.machines)
@@ -140,9 +138,29 @@ class KitMenu(menu.Menu):
             self.cursor = len(self.name)
             self.msg, self.replace = "", None
         elif what == "COPY":
-            self.mode, self.msg, self.confirm = "copy", "", None
-            if self.copy_to == self.seq.current:
-                self.copy_to = (self.seq.current + 1) % 16
+            if self.seq.pattern.empty():
+                self.say("PATTERN %d IS EMPTY: NOTHING TO COPY" % (self.seq.current + 1))
+                return
+            self.pattern_clip = (self.drums.machine, self.seq.current, copy.deepcopy(self.seq.pattern))
+            self.close()
+            self.transport.say("PATTERN %d COPIED: GO TO ANOTHER WITH KNOB 10, THEN FILE > PASTE" %
+                               (self.seq.current + 1), 4)
+        elif what == "PASTE":
+            if not self.pattern_clip:
+                self.say("NOTHING COPIED YET: COPY A PATTERN FIRST")
+                return
+            if self.pattern_clip[0] != self.drums.machine:
+                self.say("THAT PATTERN IS FROM ANOTHER DRUM MACHINE")
+                return
+            if self.seq.pattern.empty():
+                self.paste_pattern()
+                return
+            self.mode, self.msg = "paste", ""
+        elif what == "CLEAR_ALL":
+            if self.seq.pattern.empty():
+                self.say("PATTERN %d IS ALREADY EMPTY" % (self.seq.current + 1))
+                return
+            self.mode, self.msg = "clear_all", ""
         elif what == "CLEAR":
             if not self.lock_count()[1]:
                 self.say("THIS PATTERN HAS NO LOCKS OR CHANGED STEPS")
@@ -204,10 +222,9 @@ class KitMenu(menu.Menu):
         self.transport.say("KIT LOADED: %s" % name.upper(), 3)
 
     def item_y(self, item):
-        """Where a menu item sits in the layout (menu_more is the drums menu's own extra row)."""
-        if item not in self.ys:
-            self.ys[item] = (self.s.get(item) or {}).get("y", 0)
-        return self.ys[item]
+        """Where a menu item sits: the drums menu's 7 rows, evenly spaced."""
+        names = [n for _, n in ITEMS]
+        return ITEM_TOP + ITEM_GAP * names.index(item) if item in names else 0
 
     def switch_machine(self):
         """This song's drum machine. Each one keeps its own kit and its own patterns in the song."""
@@ -226,21 +243,25 @@ class KitMenu(menu.Menu):
         self.close()
         t.say("DRUMS: %s  (ITS OWN KIT AND PATTERNS)" % title, 4)
 
-    def copy_pattern(self):
-        src, dst = self.seq.current, self.copy_to
-        if dst == src:
-            self.say("THAT'S THIS PATTERN: PICK ANOTHER")
-            return
-        if not self.seq.patterns[dst].empty() and self.confirm != dst:
-            self.confirm = dst
-            self.say("PATTERN %d ISN'T EMPTY: PLAY AGAIN TO REPLACE IT" % (dst + 1))
-            return
+    def paste_pattern(self):
+        """The copied pattern onto the current one (SHIFT+CUT on the sequencer undoes it)."""
+        _, src, pat = self.pattern_clip
+        dst = self.seq.current
+        self.seq.snapshot()
         with self.seq.lock:
-            self.seq.undo_stack.append((dst, copy.deepcopy(self.seq.patterns[dst])))   # key 8 undoes it
-            self.seq.patterns[dst] = copy.deepcopy(self.seq.patterns[src])
+            self.seq.patterns[dst] = copy.deepcopy(pat)
         self.engine.seq_changed()
         self.close()
-        self.transport.say("PATTERN %d COPIED TO %d  (KNOB 10 TO GO THERE)" % (src + 1, dst + 1), 4)
+        self.transport.say("PATTERN %d PASTED ONTO PATTERN %d" % (src + 1, dst + 1), 3)
+
+    def clear_pattern(self):
+        """The current pattern back to empty, like a new one (SHIFT+CUT on the sequencer undoes it)."""
+        self.seq.snapshot()
+        with self.seq.lock:
+            self.seq.patterns[self.seq.current] = sequencer.Pattern(self.seq.new_length())
+        self.engine.seq_changed()
+        self.close()
+        self.transport.say("PATTERN %d CLEARED" % (self.seq.current + 1), 3)
 
     def lock_count(self):
         """(locks, steps with locks or changed velocity / chance / ratchets) in the current pattern."""
@@ -300,13 +321,15 @@ class KitMenu(menu.Menu):
             s.set("name_text", t="")
             hint = ("LOAD A KIT     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK" if self.mode == "load" else
                     "DRUM MACHINE FOR THIS SONG     BIG KNOB: PICK ONE     PLAY: SWITCH     FILE: BACK")
-        elif self.mode == "copy":
-            dst = self.seq.patterns[self.copy_to]
-            s.set("prompt", t="COPY PATTERN %d TO" % (self.seq.current + 1), y=self.prompt_y)
-            s.set("name_text", t="PATTERN %d" % (self.copy_to + 1))
-            if not self.msg:
-                s.set("menu_msg", t="IT'S EMPTY" if dst.empty() else "IT HAS STEPS: COPYING REPLACES THEM")
-            hint = "BIG KNOB: PICK A PATTERN     PLAY: COPY     FILE: BACK"
+        elif self.mode == "paste":
+            s.set("prompt", t="PASTE PATTERN %d ONTO" % (self.pattern_clip[1] + 1), y=self.prompt_y)
+            s.set("name_text", t="PATTERN %d?" % (self.seq.current + 1))
+            hint = "IT HAS STEPS: PASTING REPLACES THEM     PLAY: PASTE     FILE: BACK"
+        elif self.mode == "clear_all":
+            on = sum(st.on for ln in self.seq.pattern.lanes for st in ln.steps)
+            s.set("prompt", t="CLEAR PATTERN %d?" % (self.seq.current + 1), y=self.prompt_y)
+            s.set("name_text", t="%d STEP%s ON" % (on, "" if on == 1 else "S"))
+            hint = "PLAY: CLEAR (STEPS, LOCKS, LENGTHS AND RATES, LIKE A NEW PATTERN)     FILE: BACK"
         elif self.mode == "clear":
             locks, steps = self.lock_count()
             s.set("prompt", t="CLEAR THE LOCKS AND STEP SETTINGS IN PATTERN %d?" % (self.seq.current + 1), y=self.prompt_y)
@@ -317,8 +340,7 @@ class KitMenu(menu.Menu):
             s.set("name_text", t="".join(self.name) or " ")
             hint = "BIG KNOB: LETTER   ARROW KEYS: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
         s.set("menu_hint", t=hint)
-        if self.msg or self.mode != "copy":
-            s.set("menu_msg", t=self.msg)
+        s.set("menu_msg", t=self.msg)
 
     def draw(self, surf):
         self.s.draw(surf)

@@ -459,11 +459,20 @@ picked lane's beats.
 white outline = where each lane is playing (lanes of different lengths are
 at different places).
 
-**FILE on the drum or sequencer page** opens the DRUMS menu: SAVE Kit, LOAD
-Kit, **COPY Pattern** (the big knob picks where to; copying onto a pattern
-with steps asks first) and **CLEAR Locks + Steps** (every lock in the
-current pattern, and every step's velocity, chance and ratchets back to
-100, 100% and none; the steps stay on or off).
+**FILE on the drum or sequencer page** opens the DRUMS menu: DRUM MACHINE,
+SAVE Kit, LOAD Kit, and for the sequencer's current pattern:
+
+- **COPY Pattern**: keeps a copy of it.
+- **PASTE Pattern**: puts the copy onto the current pattern. Go to another
+  pattern with knob 10 first. Pasting onto a pattern with steps asks first.
+  (A copy only pastes on the same drum machine.)
+- **CLEAR Pattern**: empties it, like a new pattern: every step off, no
+  locks, each lane back to one bar at 1/16. It asks first.
+- **CLEAR Locks + Steps**: every lock in the pattern, and every step's
+  velocity, chance and ratchets back to 100, 100% and none; the steps stay
+  on or off.
+
+SHIFT+CUT on the sequencer undoes a paste or a clear.
 
 **Velocity** changes a drum's loudness only while its VEL>VOL setting is ON
 (PITCH + VELOCITY or VELOCITY + CLICK page). Console's starting kit has it

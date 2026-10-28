@@ -139,7 +139,8 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   key 1-8 toggles that step of it on the picked lane. The 808's drums 9-16 are SHIFT + knob 1
   (the keys' bank). Brian's design, Oct 2026 (after trying and dropping a keys-are-steps version).
 - Key 8 is undo (10 levels).
-- 16 patterns, with copy pattern and "clear locks + step settings". Each lane has its own
+- 16 patterns. DRUMS menu (FILE): COPY / PASTE Pattern (the copy lives in `KitMenu.pattern_clip`,
+  same machine only), CLEAR Pattern (a new empty one) and "clear locks + step settings". Each lane has its own
   rate (triplets too). Length follows bars and the time signature.
 - While playing, the cursor is hidden and drum keys place steps live at the playhead.
 - It's locked to the tape, so recording the sequencer onto tracks lands exactly in time.

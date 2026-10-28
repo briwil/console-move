@@ -379,6 +379,22 @@ class SeqPage:
         grid_bottom = top + len(shown) * row_h
         sig = tuple(e.time_sig)
         groups = {l: sequencer.group_steps(seq.lane(l).steps_per_beat(), sig) for l in shown}
+        # each lane's 8-step box: a filled block under its steps (brighter on the picked lane), drawn
+        # first so the cursor column and the steps go on top
+        for row, lane in enumerate(shown):
+            b = self.box_start(lane)
+            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(lane).length)
+            if c0 < c1:
+                y = top + row * row_h
+                bx = col_x(c0 - first)
+                rect = (bx - 4, y - 4, col_x(c1 - first) - bx + 8 - (pitch - cw), ch + 8)
+                picked = lane == self.lane
+                colour = ui.rgb(self.t.tab_colours.get(lane % 8 + 1) or "#7D838C")
+                if picked:                               # the lane's own colour, dimmed, with a bright edge
+                    pygame.draw.rect(surf, tuple(round(c * 0.38) for c in colour), rect, border_radius=7)
+                    pygame.draw.rect(surf, tuple(round(c * 0.9) for c in colour), rect, 2, border_radius=7)
+                else:
+                    pygame.draw.rect(surf, (36, 40, 48), rect, border_radius=7)
         if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
             cx = col_x(self.cursor - first)
             pygame.draw.rect(surf, cursor_col, (cx - 3, top - 6, cw + 6, len(shown) * row_h + 4), border_radius=5)
@@ -401,15 +417,6 @@ class SeqPage:
             surf.blit(t, (20 + (42 - t.get_width()) // 2, y + (ch - t.get_height()) // 2))
             if lane == self.lane:
                 pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)
-            # the lane's 8-step box (outlined on the picked lane)
-            b = self.box_start(lane)
-            c0, c1 = max(b, first), min(b + BOX, first + VISIBLE, seq.lane(lane).length)
-            if c0 < c1:
-                bx = col_x(c0 - first)
-                rect = (bx - 3, y - 3, col_x(c1 - first) - bx + 6 - (pitch - cw), ch + 6)
-                # outlines only, so the cursor column still shows through
-                pygame.draw.rect(surf, (96, 196, 210) if lane == self.lane else (46, 70, 76), rect,
-                                 2 if lane == self.lane else 1, border_radius=6)
             lane_steps = seq.lane(lane)
             # a grey line between the lane's beats: every 4 steps at 1/16, 3 at 1/8T, by its time signature
             for c in range(1, VISIBLE):

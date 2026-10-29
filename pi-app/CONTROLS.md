@@ -292,19 +292,21 @@ shows it too.
 
 ## Drum synth (the MIDI key)
 
-**Three drum machines.** On the drum page or the sequencer, press **FILE → DRUM
+**Four drum machines.** On the drum page or the sequencer, press **FILE → DRUM
 MACHINE** and pick one. The song remembers it, and new songs start with the one you
 used last.
 - **LXR-02** is the one described below.
 - **TR-606** (6W6) and **TR-808** (8W8) are from Schwung on the Ableton Move.
+- **MACHINEDRUM** is the Elektron Machinedrum's TRX, EFM, P-I and GND machines, as
+  OP-XY-MNMD rewrote them from scratch for the OP-XY (no ROM needed).
 
 How they differ:
 
-| | LXR-02 | TR-606 | TR-808 |
-|---|---|---|---|
-| Keys 1–8 | 7 drums (key 7: open hat) | BD SD LT HT CH OH CY CP | BD SD LT MT HT CP CH OH |
-| SHIFT + keys 1–8 | arm tracks | arm tracks | LC MC HC RS CL MA CB CY |
-| Pages per drum | 6 (knob 9) | SOUND | SOUND |
+| | LXR-02 | TR-606 | TR-808 | MACHINEDRUM |
+|---|---|---|---|---|
+| Keys 1–8 | 7 drums (key 7: open hat) | BD SD LT HT CH OH CY CP | BD SD LT MT HT CP CH OH | BD SD HT MT LT CP RS CB |
+| SHIFT + keys 1–8 | arm tracks | arm tracks | LC MC HC RS CL MA CB CY | CH OH RC CC M1 M2 M3 M4 |
+| Pages per drum | 6 (knob 9) | SOUND | SOUND | SOUND, MACHINE |
 
 - **SOUND page:** each drum's own settings (TUNE, DECAY, DRIVE, DIST, LEVEL…), plus
   REVERB and DELAY, which send it to Console's effects.
@@ -315,8 +317,17 @@ How they differ:
 - **Each machine has its own sequencer.** Switching to another machine gives you its
   own patterns, empty the first time. Switching back finds the previous machine's
   patterns, kit and locks just as you left them, and the song saves them all.
-- **MULTI with the 808:** key n records onto track n, and SHIFT + key n records
-  onto the same track.
+- **MULTI with the 808 and MACHINEDRUM:** key n records onto track n, and SHIFT +
+  key n records onto the same track.
+- **MACHINEDRUM's 16 lanes** start as the Machinedrum's default kit. Each lane can be
+  any of its 33 machines (TRX-BD, EFM-SD, PI-MT, GND-NS…): on the drum page, knob 9 to
+  the **MACHINE** page, then turn MACHINE. The lane's 8 controls on its SOUND page
+  become that machine's (as on the original: PTCH, DEC, RAMP… or CLPY, TONE, HARD…),
+  starting from its own settings. MACHINE also has LEVEL, REVERB and DELAY. Every
+  control can be locked to a step except MACHINE. Each lane plays one hit at a time,
+  as on the Machinedrum, and the closed and open hats cut each other off. Not
+  included: the E12 machines (they need samples from a Machinedrum ROM) and velocity
+  changing the sound (it changes the level).
 
 Console has a drum machine built in: the six drum voices of the Erica Synths
 LXR-02, running on the Pi from its open-source firmware. It's an input, like

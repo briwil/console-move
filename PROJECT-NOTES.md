@@ -114,6 +114,18 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - The machine is picked from the drums menu (FILE on the drum page, `kitmenu.py`: DRUM MACHINE).
 - Built by `setup.sh` (needs g++), or by `drums.py` in the background at start.
 
+### MACHINEDRUM (Oct 2026)
+
+- `drums/md/`: mmockett/OP-XY-MNMD's Machinedrum voices (TRX, EFM, P-I, GND; 33 machines; MIT), vendored
+  by `drums/md/vendor.py` with three Open-XY SDK headers (MIT). `md_catalog.h` and `md_dispatch.h` are
+  generated from its catalog. `glue_md.cpp` makes 16 lanes, each one voice of any machine, 64-sample
+  blocks (hits land on the next block, <=1.5 ms), Q31 half scale = 1.0 at LEVEL 127.
+- `drums.Machinedrum` (id `md`) subclasses `Schwung`: 12 settings per lane (MACHINE, 8 controls,
+  LEVEL, REVERB, DELAY); labels and pages follow the lane's machine; changing MACHINE loads its
+  defaults. All 16 lanes cost about 1.5% of a core here.
+- Not done: E12 (needs ROM captures via OP-XY-MNMD's tools/capture_e12.py) and the Monomachine synths
+  (need synth tracks).
+
 ### Lifting several tracks (Oct 2026)
 
 - LIFT / CUT take the selected track's outline span from every audible track with a box there

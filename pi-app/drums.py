@@ -634,7 +634,193 @@ class Schwung:
         return out
 
 
-MACHINES = [("lxr", "LXR-02"), ("606", "TR-606"), ("808", "TR-808")]
+# ---------------------------------------------------------------- the Machinedrum (OP-XY-MNMD)
+
+MD_DIR = os.path.join(DIR, "md")
+MD_PER_LANE = 12                     # MACHINE, the 8 controls, LEVEL, REVERB, DELAY
+MD_MACHINE, MD_LEVEL, MD_REV, MD_DLY = 0, 9, 10, 11
+_md_building = threading.Lock()
+
+
+def _md_build():
+    """drums/md/libmd.so, built with g++ if it's missing or older than its code."""
+    with _md_building:
+        lib = os.path.join(MD_DIR, "libmd.so")
+        srcs = glob.glob(os.path.join(MD_DIR, "*.*")) + glob.glob(os.path.join(MD_DIR, "vendor", "*.hpp"))
+        newest = max((os.path.getmtime(f) for f in srcs if not f.endswith(".so")), default=0)
+        if os.path.exists(lib) and os.path.getmtime(lib) >= newest:
+            return lib
+        try:
+            r = subprocess.run(["g++", "-O2", "-std=c++11", "-shared", "-fPIC", "-w", "-I" + os.path.join(MD_DIR, "vendor"),
+                                "-I" + MD_DIR, "-o", lib + ".tmp", os.path.join(MD_DIR, "glue_md.cpp")],
+                               capture_output=True, text=True, timeout=600)
+            if r.returncode == 0:
+                os.replace(lib + ".tmp", lib)
+            else:
+                print("Drums: couldn't build the Machinedrum (%s)" % r.stderr.strip()[-400:])
+        except (OSError, subprocess.SubprocessError) as e:
+            print("Drums: couldn't build the Machinedrum (%s)" % e)
+        return lib if os.path.exists(lib) else None
+
+
+def _md_load(path):
+    try:
+        lib = ctypes.CDLL(path)
+    except OSError as e:
+        print("Drums: couldn't load %s: %s" % (path, e))
+        return None
+    i, v, s = ctypes.c_int, None, ctypes.c_char_p
+    for name, args, res in [("sw_init", [ctypes.c_float], i), ("sw_voices", [], i), ("sw_trigger", [i, i], v),
+                            ("sw_render", [ctypes.POINTER(ctypes.c_float), i], v), ("md_set", [i, i, i], v),
+                            ("md_count", [], i), ("md_name", [i], s), ("md_short", [i], s), ("md_label", [i, i], s),
+                            ("md_default", [i, i], i), ("md_kit_machine", [i], i), ("md_kit_value", [i, i], i),
+                            ("md_kit_role", [i], s)]:
+        fn = getattr(lib, name)
+        fn.argtypes, fn.restype = args, res
+    return lib
+
+
+class Machinedrum(Schwung):
+    """The Elektron Machinedrum, as OP-XY-MNMD wrote its sounds from scratch (drums/md, MIT): 16 lanes, each
+    any TRX, EFM, P-I or GND machine with that machine's eight controls, starting as the Machinedrum's own
+    default kit (BD SD HT MT LT CP RS CB CH OH RC CC M1-M4). Each lane is one voice, as on the original.
+
+    Settings: each lane has 12, at lane * 12: MACHINE, the machine's 8 controls (labelled as its page on the
+    original; a machine with fewer leaves the rest unused), LEVEL, REVERB and DELAY. Changing the machine
+    puts its controls at its own defaults. Everything else (hits, locks, the two engines) is as the 606/808."""
+
+    def __init__(self):
+        self.id, self.title = "md", "MACHINEDRUM"
+        self.available = False
+        lib = _md_build()
+        self._lib = _md_load(lib) if lib else None
+        live_path = lib[:-3] + "_live.so" if lib else None
+        if self._lib and live_path:
+            try:
+                if not os.path.exists(live_path) or os.path.getmtime(live_path) < os.path.getmtime(lib):
+                    shutil.copyfile(lib, live_path + ".tmp")
+                    os.replace(live_path + ".tmp", live_path)
+            except OSError:
+                live_path = None
+        self._live = (_md_load(live_path) if live_path else None) or self._lib
+        if not self._lib:
+            return
+        L = self._lib
+        self.voices = L.sw_init(44100.0)
+        if self._live is not L:
+            self._live.sw_init(44100.0)
+        self.available = self.voices == 16
+        n = L.md_count()
+        self.machines = [L.md_name(m).decode() for m in range(n)]
+        self._short = [L.md_short(m).decode() for m in range(n)]
+        self._labels = [[L.md_label(m, s).decode() for s in range(8)] for m in range(n)]
+        self._defaults = [[L.md_default(m, s) for s in range(8)] for m in range(n)]
+        self.roles = [L.md_kit_role(lane).decode() for lane in range(self.voices)]
+        self.params = []
+        for lane in range(self.voices):
+            self.params.append({"key": "machine", "label": "MACHINE", "voice": lane, "kind": "menu",
+                                "options": self.machines, "default": L.md_kit_machine(lane)})
+            for s in range(8):
+                self.params.append({"key": "c%d" % s, "label": "", "voice": lane, "kind": "num", "options": [],
+                                    "default": L.md_kit_value(lane, s)})
+            for key, label, default in (("level", "LEVEL", 100), ("rev", "REVERB", 0), ("dly", "DELAY", 0)):
+                self.params.append({"key": key, "label": label, "voice": lane, "kind": "num", "options": [],
+                                    "default": default})
+        self.index = {}
+        self.lane_voice = list(range(self.voices))
+        self.lanes = self.voices
+        self.param_count = self.engine_params = len(self.params)
+        self.init_values = [p["default"] for p in self.params]
+        self.values = list(self.init_values)
+        self._send_keys = [(lane * MD_PER_LANE + MD_REV, lane * MD_PER_LANE + MD_DLY) for lane in range(self.voices)]
+        self._lock = threading.Lock()
+        self._pending = []
+        self._locked = [set() for _ in range(self.voices)]
+        self.load_kit(self.init_values)
+
+    # ------------------------------------------------------------ names follow each lane's machine
+    def machine_of(self, lane):
+        return max(0, min(len(self.machines) - 1, self.values[lane * MD_PER_LANE + MD_MACHINE]))
+
+    @property
+    def names(self):
+        return [self.machines[self.machine_of(v)] for v in range(self.voices)]
+
+    @property
+    def short(self):
+        """Each lane's tag: the kit's name for it (HT, MT, LT, RC, CC, M1...) while it has the kit's machine,
+        else its machine's (BD, XT, CY...)."""
+        kit = self.init_values
+        return [self.roles[v] if self.machine_of(v) == kit[v * MD_PER_LANE + MD_MACHINE]
+                else self._short[self.machine_of(v)] for v in range(self.voices)]
+
+    lane_names = names
+    lane_short = short
+
+    def pages(self, voice):
+        base = voice * MD_PER_LANE
+        labels = self._labels[self.machine_of(voice)]
+        sound = [base + 1 + s for s in range(8) if labels[s]]
+        return [("SOUND", sound), ("MACHINE", [base + MD_MACHINE, base + MD_LEVEL, base + MD_REV, base + MD_DLY])]
+
+    def label(self, param):
+        if not 0 <= param < self.param_count:
+            return "?"
+        lane, k = divmod(param, MD_PER_LANE)
+        if 1 <= k <= 8:
+            return self._labels[self.machine_of(lane)][k - 1] or "-"
+        return self.params[param]["label"]
+
+    @staticmethod
+    def lockable(param):
+        return param % MD_PER_LANE != MD_MACHINE        # a step can't change the machine, only its settings
+
+    # ------------------------------------------------------------ settings
+    def set_param(self, index, value):
+        if not 0 <= index < self.param_count:
+            return
+        lane, k = divmod(index, MD_PER_LANE)
+        if k != MD_MACHINE:
+            super().set_param(index, value)
+            return
+        m = max(0, min(len(self.machines) - 1, int(value)))
+        with self._lock:
+            changed = m != self.values[index]
+            self.values[index] = m
+            self._pending.append(("param", index, m))
+            if changed:                                     # a new machine starts from its own settings
+                for s in range(8):
+                    self.values[index + 1 + s] = self._defaults[m][s]
+                    self._pending.append(("param", index + 1 + s, self._defaults[m][s]))
+
+    def load_kit(self, values):
+        values = [int(v) for v in list(values)[:self.param_count]]
+        values += self.init_values[len(values):]
+        with self._lock:
+            self.values = values
+            # each lane's machine first, then its settings
+            order = sorted(range(len(values)), key=lambda i: i % MD_PER_LANE != MD_MACHINE)
+            self._pending.extend(("param", i, values[i]) for i in order)
+
+    def _set(self, lib, index, value):
+        lane, k = divmod(index, MD_PER_LANE)
+        if k == MD_MACHINE:
+            lib.md_set(lane, 8, int(value))
+        elif 1 <= k <= 8:
+            lib.md_set(lane, k - 1, int(value))
+        elif k == MD_LEVEL:
+            lib.md_set(lane, 9, int(value))
+        # REVERB and DELAY are Console's sends, read by sends()
+
+    def multi(self, voices):
+        """Voices -> 8 channels for MULTI: lane n and lane n + 8 onto track n."""
+        out = np.zeros((len(voices), self.channels), np.float32)
+        for lane in range(self.lanes):
+            out[:, lane % self.channels] += voices[:, lane]
+        return out
+
+
+MACHINES = [("lxr", "LXR-02"), ("606", "TR-606"), ("808", "TR-808"), ("md", "MACHINEDRUM")]
 
 
 def _prebuild():
@@ -642,6 +828,7 @@ def _prebuild():
     picking one in SETTINGS doesn't wait for the compiler."""
     for mid in SPECS:
         _sw_build(mid)
+    _md_build()
 
 
 threading.Thread(target=_prebuild, daemon=True, name="drum builds").start()
@@ -658,11 +845,11 @@ class Drums:
             self.use("lxr")
 
     def use(self, machine):
-        """Switch to a machine ("lxr", "606", "808"). Returns True if it's there (built and working)."""
+        """Switch to a machine ("lxr", "606", "808", "md"). Returns True if it's there (built and working)."""
         ms = self._machines
         if machine not in ms:
             try:
-                ms[machine] = LXR() if machine == "lxr" else Schwung(machine)
+                ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
             except Exception as e:
                 print("Drums: the %s isn't available: %s" % (machine, e))
                 return False
@@ -723,4 +910,6 @@ def available_machines():
         lib = os.path.join(SW_DIR, "lib%s.so" % mid)
         if os.path.exists(lib) or os.path.exists(os.path.join(SW_DIR, "glue%s.cpp" % mid)):
             out.append((mid, spec["title"]))
+    if os.path.exists(os.path.join(MD_DIR, "libmd.so")) or os.path.exists(os.path.join(MD_DIR, "glue_md.cpp")):
+        out.append(("md", "MACHINEDRUM"))
     return out

@@ -24,3 +24,4 @@ Thumbs.db
 # Simulator output (tools/sim)
 sim-data/
 sim-shots/
+*.so.tmp

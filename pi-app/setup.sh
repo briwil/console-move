@@ -12,4 +12,6 @@ echo "Building the drum synth..."
 bash drums/build.sh
 # the TR-606 and TR-808 (Schwung), one library each
 for m in 606 808; do g++ -O2 -shared -fPIC -w -o drums/schwung/lib$m.so drums/schwung/glue$m.cpp; done
+# the Machinedrum (OP-XY-MNMD's sounds)
+g++ -O2 -std=c++11 -shared -fPIC -w -Idrums/md/vendor -Idrums/md -o drums/md/libmd.so drums/md/glue_md.cpp
 echo "Done. Start the app with: ~/console/pi-app/run.sh"

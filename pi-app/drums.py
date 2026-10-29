@@ -114,7 +114,7 @@ class LXR:
         return dp.KINDS.get(param, ("num",))[0]
 
     def multi(self, voices):
-        """Voices -> the input channels MULTI records (one per track): the voices as they are."""
+        """Voices -> its DRUM n input channels (one per drum): the voices as they are."""
         return voices
 
     def channel_sends(self):
@@ -420,7 +420,7 @@ def _sw_load(path):
 class Schwung:
     """The TR-606 (6W6) or TR-808 (8W8), each voice coming out on its own (see drums/schwung/glue*.cpp)."""
 
-    channels = 8                     # MULTI: lanes 1-8 onto tracks 1-8; with 16, lanes 9-16 share them
+    channels = 8                     # DRUM 1-8 inputs: lanes 1-8; with 16, lanes 9-16 share them
 
     def __init__(self, mid):
         spec = SPECS[mid]
@@ -627,7 +627,7 @@ class Schwung:
         return voices @ self.pans()
 
     def multi(self, voices):
-        """Voices -> 8 channels for MULTI: lane n (and with SHIFT, lane n + 8) onto track n."""
+        """Voices -> the 8 DRUM n input channels: lane n (and with SHIFT, lane n + 8) on channel n."""
         out = np.zeros((len(voices), self.channels), np.float32)
         for lane, v in enumerate(self.lane_voice):
             out[:, lane % self.channels] += voices[:, v]
@@ -813,7 +813,7 @@ class Machinedrum(Schwung):
         # REVERB and DELAY are Console's sends, read by sends()
 
     def multi(self, voices):
-        """Voices -> 8 channels for MULTI: lane n and lane n + 8 onto track n."""
+        """Voices -> the 8 DRUM n input channels: lane n and lane n + 8 on channel n."""
         out = np.zeros((len(voices), self.channels), np.float32)
         for lane in range(self.lanes):
             out[:, lane % self.channels] += voices[:, lane]

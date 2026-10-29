@@ -2,14 +2,11 @@
 
 - Finds the first USB audio device (an OP-XY, a UCA202, ...) and keeps retrying
   if none is plugged in, so you can plug one in while the app runs.
-- Input modes (shown on screen as MULTI, STEREO and MONO):
-    "all"  input channel N goes to track N, on every armed track (an OP-XY in
-           8-channel mode can record all 8 tracks at once)
-    "stereo" input 1 (left) and 2 (right) go to pairs of neighbouring armed
-           tracks (e.g. 7 and 8), which become a stereo pair: panned left
-           and right, and exported as one stereo file. An armed track
-           without a neighbour gets the mix.
-    "mix"  every input channel mixed together goes to the armed track(s)
+- Each track is MONO or STEREO (self.stereo) and has its own input (self.inputs): a mono track
+  records one input channel (or "mix", all of them mixed); a stereo track records two, left and
+  right. A new song has track N on input N, so an OP-XY in 8-channel mode records all 8 at once.
+  A stereo track keeps its right channel at self.tracks[t + RIGHT] (with its own boxes in
+  self.regions[t + RIGHT], kept in step with the left's); everything that edits a track edits both.
 - One track is selected (self.armed: editing works on it, and it always
   records); more can be armed with it (self.arm_extra).
 - Plays the tape out of the same device, if it has an output (the OP-XY does,
@@ -17,9 +14,9 @@
   says: the screen's headphone jack (sound over HDMI) or another USB device.
   Those run on their own clock, so OutPort resamples to keep them in step.
   With no input device plugged in, the tape still plays on the headphones.
-- Tracks are mono, 32-bit float in memory. Projects are saved as 24-bit WAVs
-  (track1.wav ... track8.wav) in ~/console-data/projects/<song>/; exports
-  (stems plus a stereo mix) go to ~/console-data/exports/.
+- Tracks are 32-bit float in memory. Projects are saved as 24-bit WAVs (track1.wav ... track8.wav,
+  2 channels for a stereo track) in ~/console-data/projects/<song>/; exports (stems plus a stereo
+  mix) go to ~/console-data/exports/.
 
 Needs python3-numpy and python3-alsaaudio (installed by setup.sh).
 """
@@ -56,6 +53,9 @@ import drumparams
 import sequencer
 
 TRACKS = 8
+RIGHT = TRACKS           # a stereo track's right channel is at track index + RIGHT
+CHANNELS = 2 * TRACKS
+DRUM_KIT = 8             # the drum synth as an input: channels 0-7 are its lanes, 8-9 the kit in stereo
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
 PERIODS = 8              # blocks queued in the output buffer (about 90 ms: room for the screen drawing)
@@ -71,7 +71,7 @@ DRUMS_MONITOR = 0.8      # how loud you hear the drum synth as you play it (a tr
 
 
 def drum_device(channels=None):
-    """The drum synth, as an input device (one channel per drum, for MULTI), or None if it isn't available."""
+    """The drum synth, as an input device (channels 0-7 one per drum, 8-9 the kit in stereo), or None."""
     if not (drums and drums.AVAILABLE):
         return None
     return {"id": DRUMS_ID, "name": "Drum Synth", "virtual": True,
@@ -382,15 +382,17 @@ def write_wav(path, x, rate):
     os.replace(tmp, path)
 
 
-def read_wav(path):
-    """Read a WAV file -> (float32 mono array, rate). Stereo files are mixed to mono."""
+def read_wav(path, mono=True):
+    """Read a WAV file -> (float32 array, rate): mono (stereo files mixed down), or with mono=False
+    (frames, channels)."""
     with wave.open(path, "rb") as w:
         ch, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
         data = w.readframes(w.getnframes())
     fmt = {2: "S16_LE", 3: "S24_3LE", 4: "S32_LE"}.get(width)
     if not fmt:
         raise ValueError("unsupported WAV sample size")
-    return decode(data, fmt, ch).mean(axis=1), rate
+    x = decode(data, fmt, ch)
+    return (x.mean(axis=1) if mono else x), rate
 
 
 # ---------------------------------------------------------------- a second output
@@ -498,6 +500,11 @@ class OutPort(threading.Thread):
 
 # ---------------------------------------------------------------- the engine
 
+def default_inputs():
+    """A new song's inputs: track N on input N (as an OP-XY in 8-channel mode sends them)."""
+    return list(range(TRACKS))
+
+
 class Engine:
     """Everything that touches the audio. The app calls its methods; the audio thread runs process()."""
 
@@ -510,15 +517,16 @@ class Engine:
         self.lock = threading.Lock()
         self.save_lock = threading.Lock()       # one save (or rename) on disk at a time
         self.frames = int(float(self.settings.get("tape_seconds", 300)) * self.rate)
-        self.tracks = [np.zeros(self.frames, np.float32) for _ in range(TRACKS)]
-        self.levels = [None] * TRACKS
+        self.tracks = [np.zeros(self.frames, np.float32) for _ in range(TRACKS)] + [None] * TRACKS
+        self.levels = [None] * CHANNELS
         self.bpm = bpm
         self.time_sig = [4, 4]                  # beats in a bar, and which note is a beat (4/4, 6/8...)
         self.link_nudge = 0                     # Link: frames to move the tape by each block to stay on its beat
         self.tape_beats = 0.0
         self.volumes = [0.8] * TRACKS
         self.pans = [0.0] * TRACKS              # -1 left ... 0 centre ... 1 right
-        self.pairs = set()                      # t: tracks t and t+1 are a stereo pair (left, right)
+        self.stereo = set()                     # the stereo tracks (0-7); the others are mono
+        self.inputs = default_inputs()          # each track's input: a channel, "mix", or [left, right]
         self.mutes = set()
         self.solos = set()                      # if any track is soloed, only soloed tracks play
         self.rev_sends = [0.0] * TRACKS         # how much of each track goes to the reverb, 0..1
@@ -542,8 +550,7 @@ class Engine:
         self.rec_mode = "replace"               # "replace" writes over the tape, "overdub" adds to it
         self.armed = 4                          # the selected track, 1-8
         self.arm_extra = set()                  # other armed tracks (0-7), recording along with it
-        self.input_mode = None                  # set when a device is found
-        self.in_peaks = np.zeros(TRACKS, np.float32)
+        self.in_peaks = np.zeros(CHANNELS, np.float32)
         self.device = None                      # dict from find_device, while connected
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
@@ -564,7 +571,7 @@ class Engine:
         self.last_edit = None                   # (start, end) in frames of the last lift, cut or drop
         # the boxes on each track: [start, end, colour] in frames, sorted, never overlapping.
         # Recording makes a box; SPLICE splits one; CUT takes boxes away and leaves an empty space.
-        self.regions = [[] for _ in range(TRACKS)]
+        self.regions = [[] for _ in range(CHANNELS)]
         self.sel_anchor = None                  # while selecting several pieces: where the selection started
         self.undo_stack = []                    # each entry: list of (track, start, old samples)
         self._rec_undo = None                   # the undo entry the current recording pass adds to
@@ -663,7 +670,7 @@ class Engine:
     def find_input(self):
         """The input to use now: the chosen one if it's there, else the first USB device, else None."""
         if self.input_choice == DRUMS_ID and self.drums:
-            return drum_device(self.drums.channels)
+            return drum_device(DRUM_KIT + 2)
         return find_device(None if self.input_choice == DRUMS_ID else self.input_choice)
 
     @property
@@ -697,10 +704,10 @@ class Engine:
         return True
 
     def _drum_machine_changed(self):
-        """The input's channels follow the machine (MULTI: one per track it records onto)."""
+        """The drum synth's input channels (DRUM 1-8 and the KIT) stay the same whatever the machine."""
         dev = getattr(self, "device", None)
         if dev and dev.get("virtual"):
-            dev["capture"]["channels"] = self.drums.channels
+            dev["capture"]["channels"] = DRUM_KIT + 2
         self._seq_fifo = np.zeros((0, self.drums.voices), np.float32)
 
     def hit(self, lane, velocity=100):
@@ -884,14 +891,16 @@ class Engine:
         """Everything back to an empty song (the tempo and time signature stay)."""
         with self.lock:
             self.playing = self.recording = self.rec_ready = False
-            for x in self.tracks:
+            for x in self.tracks[:TRACKS]:
                 x[:] = 0
+            self.tracks[RIGHT:] = [None] * TRACKS
+            self.stereo = set()
+            self.inputs = default_inputs()
             self._set_beats_len()                       # fresh, empty waveforms
-            self.regions = [[] for _ in range(TRACKS)]
+            self.regions = [[] for _ in range(CHANNELS)]
             self.undo_stack = []
             self.volumes = [0.8] * TRACKS
             self.pans = [0.0] * TRACKS
-            self.pairs = set()
             self.mutes = set()
             self.solos = set()
             self.rev_sends = [0.0] * TRACKS
@@ -1037,7 +1046,7 @@ class Engine:
     def _set_beats_len(self):
         self.tape_beats = self.frames / self.frames_per_beat()
         n = int(np.ceil(self.tape_beats * RES)) + 1
-        for t in range(TRACKS):
+        for t in range(CHANNELS):
             self.levels[t] = np.zeros(n, np.float32)
 
     def bar_beats(self):
@@ -1058,7 +1067,7 @@ class Engine:
                 return False
             self.bpm = float(bpm)
             self._set_beats_len()
-            for t in range(TRACKS):
+            for t in self.channels_in_use():
                 self._update_levels(t, 0, self._extent(self.tracks[t]))
             self.dirty.add(-1)                  # -1: only project.json changed
         return True
@@ -1079,7 +1088,11 @@ class Engine:
         self.mutes = set(meta.get("mutes", []))
         self.solos = set(meta.get("solos", []))
         self.pans = ([float(v) for v in meta.get("pans", [])] + [0.0] * TRACKS)[:TRACKS]
-        self.pairs = {int(t) for t in meta.get("pairs", []) if 0 <= int(t) < TRACKS - 1}
+        self.stereo = {int(t) for t in meta.get("stereo", []) if 0 <= int(t) < TRACKS}
+        self.inputs = default_inputs()
+        for t, v in enumerate((meta.get("inputs") or [])[:TRACKS]):
+            self.inputs[t] = list(v) if isinstance(v, list) else v if (v == "mix" or isinstance(v, int)) else t
+        old_pairs = sorted(int(t) for t in meta.get("pairs", []) if 0 <= int(t) < TRACKS - 1)
         self.rev_sends = ([float(v) for v in meta.get("reverb_sends", [])] + [0.0] * TRACKS)[:TRACKS]
         self.dly_sends = ([float(v) for v in meta.get("delay_sends", [])] + [0.0] * TRACKS)[:TRACKS]
         if effects:
@@ -1110,23 +1123,47 @@ class Engine:
         self._meta_splices = meta.get("splices")       # from version 0.6-0.7, turned into boxes below
         if meta.get("loop"):
             self.loop_on, self.loop_a, self.loop_b = bool(meta["loop"][0]), int(meta["loop"][1]), int(meta["loop"][2])
-        self.regions = [[] for _ in range(TRACKS)]       # (the boxes come after the audio, below)
+        self.regions = [[] for _ in range(CHANNELS)]     # (the boxes come after the audio, below)
+        self.tracks[RIGHT:] = [None] * TRACKS
         for t in range(TRACKS):
             path = os.path.join(self.project_dir, "track%d.wav" % (t + 1))
             if not os.path.exists(path):
                 continue
             try:
-                x, rate = read_wav(path)
+                x, rate = read_wav(path, mono=False)
             except Exception as e:
                 print("Couldn't read %s: %s" % (path, e))
                 continue
             if rate != self.rate:
                 print("%s is %d Hz, the tape runs at %d Hz; it will play at the wrong speed" % (path, rate, self.rate))
             n = min(len(x), self.frames)
-            self.tracks[t][:n] = x[:n]
+            if x.shape[1] >= 2:
+                self.stereo.add(t)                      # a 2-channel file is a stereo track
+            self.tracks[t][:n] = x[:n, 0]
+            if t in self.stereo:
+                self.tracks[t + RIGHT] = np.zeros(self.frames, np.float32)
+                self.tracks[t + RIGHT][:n] = x[:n, 1] if x.shape[1] >= 2 else x[:n, 0]
+                self._update_levels(t + RIGHT, 0, n, reset=True)
             self._update_levels(t, 0, n, reset=True)
+        for t in list(self.stereo):
+            if self.tracks[t + RIGHT] is None:          # stereo with nothing recorded yet
+                self.tracks[t + RIGHT] = np.zeros(self.frames, np.float32)
         self._regions_from_meta()
-        for t in range(TRACKS):
+        for p in old_pairs:
+            # an older song's stereo pair (tracks p and p+1): now one stereo track, p, with p+1 empty
+            if p in self.stereo or p + 1 in self.stereo:
+                continue
+            self.stereo.add(p)
+            self.tracks[p + RIGHT] = self.tracks[p + 1].copy()
+            self.regions[p + RIGHT] = self.regions[p + 1]
+            self.tracks[p + 1][:] = 0
+            self.regions[p + 1] = []
+            self.levels[p + 1][:] = 0
+            self._update_levels(p + RIGHT, 0, self.frames, reset=True)
+            self.pans[p] = self.pans[p + 1] = 0.0
+            self.inputs[p] = [0, 1]
+            self.dirty |= {p, p + 1, -1}
+        for t in self.channels_in_use():
             for r in self.regions[t]:
                 if box_settings(r) != (0.0, 0, 0):
                     self._update_levels(t, r[0], r[1], reset=True)     # the waveform shows its gain and fades
@@ -1134,11 +1171,13 @@ class Engine:
     def save(self, wait=False):
         """Save changed tracks in the background. Returns False if there was nothing to save."""
         with self.lock:
-            todo = {t: self.tracks[t].copy() for t in self.dirty if t >= 0}
+            # a stereo track is saved as one 2-channel file
+            todo = {t: (np.stack([self.tracks[t], self.tracks[t + RIGHT]], axis=1) if t in self.stereo
+                        else self.tracks[t].copy()) for t in self.dirty if 0 <= t < TRACKS}
             changed = bool(self.dirty)
             self.dirty.clear()
             meta = {"bpm": self.bpm, "time_sig": self.time_sig, "rate": self.rate, "volumes": self.volumes,
-                    "pans": self.pans, "pairs": sorted(self.pairs),
+                    "pans": self.pans, "stereo": sorted(self.stereo), "inputs": self.inputs,
                     "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions],
                     "reverb_sends": self.rev_sends, "delay_sends": self.dly_sends, "fx": dict(self.fx)}
@@ -1179,7 +1218,13 @@ class Engine:
 
     @staticmethod
     def _extent(x):
-        nz = np.flatnonzero(np.abs(x) > 1e-6)
+        """Where the audio ends: frames (any channel, for a 2-channel array)."""
+        if x is None:
+            return 0
+        a = np.abs(x)
+        if a.ndim == 2:
+            a = a.max(axis=1)
+        nz = np.flatnonzero(a > 1e-6)
         return int(nz[-1]) + 1 if len(nz) else 0
 
     def export(self):
@@ -1189,13 +1234,15 @@ class Engine:
         reverb and delay (with their tails); those two are also written as stereo "return" stems, so the
         dry stems plus the returns rebuild the mix."""
         with self.lock:
-            tracks = [x.copy() for x in self.tracks]
+            tracks = [x.copy() if x is not None else None for x in self.tracks]
             boxes = [[list(r) for r in rs] for rs in self.regions]
-            vols, mutes, pans, pairs = list(self.volumes), set(self.mutes), list(self.pans), set(self.pairs)
+            vols, mutes, pans, stereo = list(self.volumes), set(self.mutes), list(self.pans), set(self.stereo)
             rev_sends, dly_sends, fx = list(self.rev_sends), list(self.dly_sends), dict(self.fx)
-        for t in range(TRACKS):
-            shape_range(boxes[t], tracks[t], 0, inplace=True)       # each box's gain and fades
-        ends = [self._extent(x) for x in tracks]
+        chans = lambda t: [t, t + RIGHT] if t in stereo else [t]
+        for c, x in enumerate(tracks):
+            if x is not None:
+                shape_range(boxes[c], x, 0, inplace=True)          # each box's gain and fades
+        ends = [max(self._extent(tracks[c]) for c in chans(t)) for t in range(TRACKS)]
         end = max(ends)
         if end == 0:
             return None
@@ -1221,7 +1268,7 @@ class Engine:
         for t in playing:
             gl, gr = pan_gains(pans[t])
             dry[:end, 0] += tracks[t][:end] * vols[t] * gl
-            dry[:end, 1] += tracks[t][:end] * vols[t] * gr
+            dry[:end, 1] += tracks[chans(t)[-1]][:end] * vols[t] * gr
         total = end
         if use_rev or use_dly:
             rev, dly = effects.Reverb(self.rate), effects.Delay(self.rate)
@@ -1237,13 +1284,14 @@ class Engine:
                         break
                     gl, gr = pan_gains(pans[t])
                     sig = tracks[t][a:min(b, end)] * vols[t]
+                    sig_r = tracks[chans(t)[-1]][a:min(b, end)] * vols[t]
                     k = len(sig)
                     if rev_sends[t]:
                         rev_in[:k, 0] += sig * gl * rev_sends[t]
-                        rev_in[:k, 1] += sig * gr * rev_sends[t]
+                        rev_in[:k, 1] += sig_r * gr * rev_sends[t]
                     if dly_sends[t]:
                         dly_in[:k, 0] += sig * gl * dly_sends[t]
-                        dly_in[:k, 1] += sig * gr * dly_sends[t]
+                        dly_in[:k, 1] += sig_r * gr * dly_sends[t]
                 level = 0.0
                 if use_rev:
                     rev_ret[a:b] = rev.process(rev_in) * (fx["rev_level"] * effects.REVERB_MAKEUP)
@@ -1254,16 +1302,14 @@ class Engine:
                 total = b
                 if a >= end and level < 1e-4:                   # the tails have died away (-80 dB)
                     break
-        done = set()
         pad = lambda x: np.concatenate([x[:end], np.zeros(total - end, np.float32)]) if total > end else x[:end]
         for t in range(TRACKS):
-            if t in done:
+            if not ends[t]:
                 continue
-            if t in pairs and (ends[t] or ends[t + 1]):           # a stereo pair: one stereo file
-                out(os.path.join(folder, "%s track%d-%d stereo" % (self.song_label, t + 1, t + 2)),
-                    np.stack([pad(tracks[t]), pad(tracks[t + 1])], axis=1), self.rate)
-                done |= {t, t + 1}
-            elif ends[t]:
+            if t in stereo:                                        # a stereo track: a stereo file
+                out(os.path.join(folder, "%s track%d stereo" % (self.song_label, t + 1)),
+                    np.stack([pad(tracks[t]), pad(tracks[t + RIGHT])], axis=1), self.rate)
+            else:
                 out(os.path.join(folder, "%s track%d" % (self.song_label, t + 1)), pad(tracks[t]), self.rate)
         mix = dry[:total].copy()
         if use_rev:
@@ -1333,27 +1379,83 @@ class Engine:
             self.pos = round(min(max(0.0, beats), self.tape_beats) * self.frames_per_beat())
 
     def targets(self):
-        """Which tracks the input records onto, as {track index: input channel, or None for the mix}."""
-        tracks = self.armed_tracks()
-        if self.input_mode == "all" and self.device:
-            ch = self.device["capture"]["channels"]
-            return {t: t for t in tracks if t < ch}
-        if self.input_mode == "stereo" and self.device and self.device["capture"]["channels"] >= 2:
-            out = {}
-            for t in tracks:
-                if t in out:
-                    continue
-                if t + 1 in tracks:
-                    out[t], out[t + 1] = 0, 1             # left input, right input
-                else:
-                    out[t] = None
-            return out
-        return {t: None for t in tracks}
+        """What each armed track records: {track index: channel, None for the mix, or (left, right)}."""
+        return {t: self.source(t) for t in self.armed_tracks()}
 
-    def stereo_pairs_armed(self):
-        """The armed pairs that stereo mode would record onto: [left track index, ...]."""
-        tg = self.targets()
-        return [t for t, ch in tg.items() if ch == 0 and tg.get(t + 1) == 1]
+    def in_channels(self):
+        return self.device["capture"]["channels"] if self.device else 0
+
+    def source(self, t):
+        """Track t's input as it can be used with this device: a channel, None (the mix) or (left, right).
+        A channel the device doesn't have falls back to the mix."""
+        ch = self.in_channels()
+        want = self.inputs[t]
+        ok = lambda c: isinstance(c, int) and 0 <= c < ch
+        if t in self.stereo:
+            if isinstance(want, (list, tuple)) and ok(want[0]) and ok(want[1]):
+                return (want[0], want[1])
+            return self.default_stereo_input(t)
+        return want if ok(want) else None
+
+    def default_stereo_input(self, t):
+        """A stereo track's input when it has none that works: the drum kit, or two channels in a row."""
+        ch = self.in_channels()
+        if self.drums_input:
+            return (DRUM_KIT, DRUM_KIT + 1)
+        if ch >= 2:
+            l = min(2 * (t // 2), ch - 2)
+            return (l, l + 1)
+        return (0, 0) if ch else None
+
+    def channel_name(self, c):
+        """An input channel's name: IN 3, or for the drum synth DRUM 3 / KIT L / KIT R."""
+        if c is None:
+            return "KIT" if self.drums_input else "MIX"
+        if self.drums_input:
+            return "KIT L" if c == DRUM_KIT else "KIT R" if c == DRUM_KIT + 1 else "DRUM %d" % (c + 1)
+        return "IN %d" % (c + 1)
+
+    def input_text(self, t):
+        """Track t's input for the screen: IN 3, MIX, IN 1+2, KIT L+R..."""
+        src = self.source(t)
+        if isinstance(src, tuple):
+            l, r = self.channel_name(src[0]), self.channel_name(src[1])
+            if l.split(" ")[0] == r.split(" ")[0] and " " in r:
+                return "%s+%s" % (l, r.split(" ")[1])
+            return "%s + %s" % (l, r)
+        return self.channel_name(src)
+
+    def input_choices(self):
+        """What a mono track can record: each channel, then the mix (or the whole kit)."""
+        return list(range(self.in_channels())) + [None]
+
+    def step_input(self, t, side, delta):
+        """Knobs in the zoomed view: side 0 is a mono track's input or a stereo track's left, 1 its right.
+        Returns the new input text, or None if there's no input device."""
+        with self.lock:
+            ch = self.in_channels()
+            if not ch:
+                return None
+            if t in self.stereo:
+                cur = list(self.source(t) or (0, 0))
+                cur[side] = max(0, min(ch - 1, cur[side] + (1 if delta > 0 else -1)))
+                self.inputs[t] = cur
+            else:
+                choices = self.input_choices()
+                cur = self.source(t)
+                i = choices.index(cur) if cur in choices else len(choices) - 1
+                self.inputs[t] = choices[max(0, min(len(choices) - 1, i + (1 if delta > 0 else -1)))]
+                if self.inputs[t] is None:
+                    self.inputs[t] = "mix"
+            self.dirty.add(-1)
+        return self.input_text(t)
+
+    def chans(self, t):
+        """Track t's channels: [t], or [t, t + RIGHT] for a stereo track."""
+        return [t, t + RIGHT] if t in self.stereo else [t]
+
+    def channels_in_use(self):
+        return list(range(TRACKS)) + [t + RIGHT for t in sorted(self.stereo)]
 
     def change_pan(self, track, delta):
         with self.lock:
@@ -1366,42 +1468,18 @@ class Engine:
         """The armed tracks, 0-7: the selected one plus any others."""
         return sorted({self.armed - 1} | self.arm_extra)
 
-    def cycle_input(self):
-        if not self.device:
-            return
-        ch = self.device["capture"]["channels"]
-        modes = ["all", "stereo", "mix"] if ch >= 3 else ["stereo", "mix"] if ch == 2 else ["mix"]
-        self.input_mode = modes[(modes.index(self.input_mode) + 1) % len(modes)] if self.input_mode in modes else modes[0]
 
     def start_recording(self):
         """Start a recording pass (call with the lock held or from set_recording)."""
         self._rec_undo = []
-        before_pairs, before_pans = set(self.pairs), list(self.pans)
-        stereo = self.stereo_pairs_armed() if self.input_mode == "stereo" else []
-        in_stereo = set(stereo) | {t + 1 for t in stereo}
-        for t in self.targets():
-            if t in in_stereo:
-                continue
-            for p in (t - 1, t):                             # recorded on its own: it's not part of a pair any more
-                if p in self.pairs:
-                    self.pairs.discard(p)
-                    self.pans[p] = self.pans[p + 1] = 0.0
-        for t in stereo:                                     # recording in stereo makes the pair
-            self.pairs -= {t - 1, t + 1}
-            self.pairs.add(t)
-            self.pans[t], self.pans[t + 1] = -1.0, 1.0
-        if self.pairs != before_pairs:
-            self._rec_undo.append(("pairs", None, before_pairs))
-            self._rec_undo += [("pan", t, before_pans[t]) for t in range(TRACKS) if self.pans[t] != before_pans[t]]
-            self.dirty.add(-1)
-        if self.drums_input and self.drums and self.input_mode == "all":
-            # each drum recorded onto its own track: give the track that drum's sends, so it plays back
-            # with the reverb and delay you heard
+        if self.drums_input and self.drums:
+            # a drum recorded onto its own track (a DRUM n input): give the track that drum's sends, so it
+            # plays back with the reverb and delay you heard (the KIT inputs have them printed in)
             rev_g, dly_g = self.drums.channel_sends()
-            for t in self.targets():
-                if t < len(rev_g):
-                    self.rev_sends[t], self.dly_sends[t] = round(float(rev_g[t]), 2), round(float(dly_g[t]), 2)
-            self.dirty.add(-1)
+            for t, src in self.targets().items():
+                if isinstance(src, int) and src < len(rev_g):
+                    self.rev_sends[t], self.dly_sends[t] = round(float(rev_g[src]), 2), round(float(dly_g[src]), 2)
+                    self.dirty.add(-1)
         self.recording = True
         self.playing = True
         self._rec_saved = {}
@@ -1525,8 +1603,14 @@ class Engine:
 
     def _regions_from_meta(self):
         """Boxes from project.json; older projects (splice points, or nothing) get boxes made from their audio."""
-        self.regions = [[] for _ in range(TRACKS)]
+        self.regions = [[] for _ in range(CHANNELS)]
         saved = self._meta_regions
+        for t in self.stereo:                       # a right channel's boxes: saved, or the left's
+            boxes = saved[t + RIGHT] if saved and t + RIGHT < len(saved) and saved[t + RIGHT] else (
+                saved[t] if saved and t < len(saved) else [])
+            self.regions[t + RIGHT] = sorted(box(r[0], r[1], int(r[2]) % len(REGION_COLOURS),
+                                                 *([float(r[3]), int(r[4]), int(r[5])] if len(r) >= 6 else []))
+                                             for r in boxes if int(r[1]) > int(r[0]))
         for t in range(TRACKS):
             if saved and t < len(saved):
                 self.regions[t] = sorted(box(r[0], r[1], int(r[2]) % len(REGION_COLOURS),
@@ -1614,41 +1698,34 @@ class Engine:
             own[1] = max(own[1], b)
             self.regions[t] = sorted(self.regions[t] + [own])
             return
-        partner = self._rec_boxes.get(t - 1) if (t - 1) in self.pairs else None
+        partner = self._rec_boxes.get(t - RIGHT) if t >= RIGHT else None     # a right channel: its left's colour
         self._rec_boxes[t] = self._add_region(t, a, b, partner[2] if partner else None)
 
     # ---- editing: SPLICE splits a box; LIFT, CUT and DROP work on whole boxes
 
     def track_end(self, t):
-        """Where the audio on track t ends, in frames (from the drawn levels, so it's quick)."""
-        lv = self.levels[t]
-        nz = np.flatnonzero(lv > 1e-6)
-        if not len(nz):
-            return 0
-        return int(min(self.frames, np.ceil((nz[-1] + 1) / RES * self.frames_per_beat())))
+        """Where the audio on track t ends, in frames (from the drawn levels, so it's quick). For a track
+        0-7 that's stereo, either side; t >= RIGHT is just that right channel."""
+        end = 0
+        for c in (self.chans(t) if t < TRACKS else [t]):
+            nz = np.flatnonzero(self.levels[c] > 1e-6)
+            if len(nz):
+                end = max(end, int(min(self.frames, np.ceil((nz[-1] + 1) / RES * self.frames_per_beat()))))
+        return end
 
     def edit_tracks(self):
-        """The track(s) LIFT, CUT and DROP work on: the selected track, or both tracks of its stereo pair."""
-        t = self.armed - 1
-        if t in self.pairs:
-            return [t, t + 1]
-        if t - 1 in self.pairs:
-            return [t - 1, t]
-        return [t]
+        """The channels LIFT, CUT and DROP work on: the selected track's (both sides of a stereo track)."""
+        return self.chans(self.armed - 1)
 
     def lift_tracks(self, a, b, base):
-        """The tracks LIFT and CUT take for [a, b): the selected track (or pair), and every other track
-        you hear (not muted, soloed if anything is soloed) with a box there. Stereo pairs stay whole."""
-        ts = set(base)
+        """The channels LIFT and CUT take for [a, b): the selected track's, and every other track's you hear
+        (not muted, soloed if anything is soloed) with a box there. A stereo track's right channel comes
+        straight after its left."""
+        ts = {c % RIGHT for c in base}
         for t in range(TRACKS):
             if self.audible(t) and any(r[0] < b and r[1] > a for r in self.regions[t]):
                 ts.add(t)
-        for t in list(ts):
-            if t in self.pairs:
-                ts.add(t + 1)
-            if t - 1 in self.pairs:
-                ts.add(t - 1)
-        return sorted(t for t in ts if 0 <= t < TRACKS)
+        return [c for t in sorted(ts) for c in self.chans(t)]
 
     def selection(self):
         """(track indexes, start, end) of what LIFT and CUT would take: the box under the playhead,
@@ -1670,15 +1747,15 @@ class Engine:
         """Fill the clipboard from tracks ts, [a, b)."""
         self.clip = [shape_range(self.regions[t], self.tracks[t][a:b], a).copy() for t in ts]
         self.clip_tracks = list(ts)
-        self.clip_pairs = {i for i, t in enumerate(ts) if t in self.pairs and i + 1 < len(ts) and ts[i + 1] == t + 1}
-        self.clip_vols = [self.volumes[t] for t in ts]
+        self.clip_pairs = {i for i, t in enumerate(ts) if t < RIGHT and i + 1 < len(ts) and ts[i + 1] == t + RIGHT}
+        self.clip_vols = [self.volumes[t % RIGHT] for t in ts]
 
     def clip_parts(self):
-        """How many tracks the clipboard drops onto as separate tracks counting a stereo pair as one, or 0."""
+        """How many tracks the clipboard came from (a stereo track's two channels count as one), or 0."""
         return 0 if self.clip is None else len(self.clip) - len(self.clip_pairs)
 
     def clip_stereo(self):
-        """True if the clipboard is one stereo pair."""
+        """True if the clipboard is one stereo track."""
         return self.clip is not None and len(self.clip) == 2 and 0 in self.clip_pairs
 
     def begin_selection(self):
@@ -1692,7 +1769,7 @@ class Engine:
 
     def _changed(self, t, a, b):
         self._update_levels(t, a, b, reset=True)
-        self.dirty.add(t)
+        self.dirty.add(t % RIGHT)                    # (a right channel is saved with its track)
 
     def splice(self, all_tracks=False):
         """Split the box under the playhead in two (the right half gets a new colour), on every armed
@@ -1702,8 +1779,7 @@ class Engine:
             f = int(self.pos)
             t0 = self.armed - 1
             ts = list(range(TRACKS)) if all_tracks else self.armed_tracks()
-            ts = sorted(set(ts) | {p for t in ts for p in (t - 1, t + 1)
-                                   if 0 <= p < TRACKS and (min(t, p) in self.pairs)})    # stereo pairs split together
+            ts = [c for t in ts for c in self.chans(t)]      # a stereo track splits on both sides
             tol = self.frames_per_beat() / 16
 
             def join_at(t):
@@ -1866,91 +1942,97 @@ class Engine:
             self._push_undo(entries)
             return (b - a) / self.frames_per_beat()
 
+    def clip_pieces(self):
+        """The clipboard as one piece per track it came from: [(left or mono, right or None)]."""
+        out, i = [], 0
+        while i < len(self.clip):
+            if i in self.clip_pairs:
+                out.append((self.clip[i], self.clip[i + 1]))
+                i += 2
+            else:
+                out.append((self.clip[i], None))
+                i += 1
+        return out
+
     def drop(self, insert=False, merged=False):
-        """Put the clipboard down at the playhead as a new box. A stereo piece goes onto two tracks (the
-        selected track's pair, or the selected track and the one below it) and makes them a pair.
-        Several tracks go onto the selected track and the ones below it, in order (pairs stay pairs);
-        merged=True mixes them (as you heard them, in mono) onto the selected track instead.
+        """Put the clipboard down at the playhead as a new box, on the selected track; several tracks go onto
+        the selected track and the ones below it, in order (merged=True mixes them, as you heard them, onto
+        the selected track instead). Each lands as its track is set: a stereo piece on a mono track is
+        folded to mono, a mono piece on a stereo track goes on both sides.
         insert=False covers what's there; insert=True pushes the rest of the track(s) later.
-        Returns the tracks it dropped onto, or a reason it couldn't."""
+        Returns the tracks (0-7) it dropped onto, or a reason it couldn't."""
         with self.lock:
             if self.clip is None:
                 return "NOTHING TO DROP: CUT OR COPY SOMETHING FIRST"
             a = int(self.pos)
-            pair_starts = set()
+            pieces = self.clip_pieces()
+            base = self.armed - 1
             if merged and len(self.clip) > 1:
-                ts = [self.armed - 1]
                 # mixed at the volumes you heard them at, allowing for the volume of the track it lands on
-                mix = sum(x * v for x, v in zip(self.clip, self.clip_vols)) / max(0.1, self.volumes[ts[0]])
-                parts = [saturate(mix).astype(np.float32)]
-            elif self.clip_stereo():
-                base = self.edit_tracks()[0]
-                if base + 1 >= TRACKS:
-                    return "A STEREO PIECE NEEDS TWO TRACKS: SELECT TRACK 7 OR LOWER"
-                ts, parts, pair_starts = [base, base + 1], self.clip, {0}
-            elif len(self.clip) > 1:
-                base = self.armed - 1
-                if base + len(self.clip) > TRACKS:
-                    return "%d TRACKS DON'T FIT BELOW TRACK %d: SELECT TRACK %d OR LOWER" % (
-                        len(self.clip), base + 1, TRACKS - len(self.clip) + 1)
-                ts, parts, pair_starts = list(range(base, base + len(self.clip))), self.clip, set(self.clip_pairs)
-            else:
-                ts, parts = [self.armed - 1], self.clip
-            n = min(len(parts[0]), self.frames - a)
+                k, left, right = 0, 0, 0
+                for l, r in pieces:
+                    v = self.clip_vols[k]
+                    left = left + l * v
+                    right = right + (r if r is not None else l) * v
+                    k += 2 if r is not None else 1
+                g = 1.0 / max(0.1, self.volumes[base])
+                pieces = [(saturate(left * g).astype(np.float32), saturate(right * g).astype(np.float32))]
+            elif len(pieces) > 1 and base + len(pieces) > TRACKS:
+                return "%d TRACKS DON'T FIT BELOW TRACK %d: SELECT TRACK %d OR LOWER" % (
+                    len(pieces), base + 1, TRACKS - len(pieces) + 1)
+            ts = list(range(base, base + len(pieces)))
+            n = min(len(pieces[0][0]), self.frames - a)
             if n <= 0:
                 return "NO ROOM LEFT ON THE TAPE"
-            entries = [("pairs", None, set(self.pairs))]
-            colour = None
-            for i, (t, x) in enumerate(zip(ts, parts)):
-                if i - 1 not in pair_starts:
-                    colour = None                       # a new colour, unless it's the right side of a pair
-                self._regions_changed(t, entries)
-                a0 = max(0, a - GUARD)
-                if insert:
-                    entries.append((t, a0, self.tracks[t][a0:a].copy()))
-                    entries.append((t, a, self.tracks[t][a:].copy()))
-                    tail = self.tracks[t][a:self.frames - n].copy()
-                    self.tracks[t][a + n:] = tail
-                    self.tracks[t][a:a + n] = x[:n]
-                    moved = []
-                    for r in self.regions[t]:
-                        if r[1] <= a:
-                            moved.append(r)
-                        elif r[0] >= a:
-                            moved.append([r[0] + n, r[1] + n] + list(r[2:]))
-                        else:                               # a box across the playhead splits around the new one
-                            moved.append([r[0], a] + list(r[2:5]) + [0])
-                            moved.append([a + n, r[1] + n] + list(r[2:4]) + [0, r[5]])
-                    self.regions[t] = sorted([r[0], min(r[1], self.frames)] + list(r[2:])
-                                             for r in moved if r[0] < self.frames)
-                    self._seam(t, a)
-                    self._seam(t, a + n)
-                    self._changed(t, a0, self.frames)
+            writes = []                                     # (channel, audio): both sides of a stereo track
+            for t, (l, r) in zip(ts, pieces):
+                if t in self.stereo:
+                    writes.append([(t, l), (t + RIGHT, r if r is not None else l)])
                 else:
-                    b1 = min(self.frames, a + n + GUARD)
-                    entries.append((t, a0, self.tracks[t][a0:b1].copy()))
-                    self.tracks[t][a:a + n] = x[:n]
-                    self._seam(t, a)
-                    self._seam(t, a + n)
-                    self._changed(t, a0, b1)
-                box = self._add_region(t, a, a + n, colour)
-                colour = box[2] if box else colour             # both sides of a stereo piece share a colour
-            for i in sorted(pair_starts):
-                l, r = ts[i], ts[i + 1]
-                if l in self.pairs:
-                    continue
-                entries += [("pan", l, self.pans[l]), ("pan", r, self.pans[r])]
-                self.pairs -= {l - 1, r}
-                self.pairs.add(l)
-                self.pans[l], self.pans[r] = -1.0, 1.0
-                self.dirty.add(-1)
+                    writes.append([(t, l if r is None else (l + r) * 0.5)])
+            entries = []
+            for group in writes:
+                colour = None                               # both sides of a stereo track share a colour
+                for c, x in group:
+                    self._regions_changed(c, entries)
+                    a0 = max(0, a - GUARD)
+                    if insert:
+                        entries.append((c, a0, self.tracks[c][a0:a].copy()))
+                        entries.append((c, a, self.tracks[c][a:].copy()))
+                        tail = self.tracks[c][a:self.frames - n].copy()
+                        self.tracks[c][a + n:] = tail
+                        self.tracks[c][a:a + n] = x[:n]
+                        moved = []
+                        for rg in self.regions[c]:
+                            if rg[1] <= a:
+                                moved.append(rg)
+                            elif rg[0] >= a:
+                                moved.append([rg[0] + n, rg[1] + n] + list(rg[2:]))
+                            else:                           # a box across the playhead splits around the new one
+                                moved.append([rg[0], a] + list(rg[2:5]) + [0])
+                                moved.append([a + n, rg[1] + n] + list(rg[2:4]) + [0, rg[5]])
+                        self.regions[c] = sorted([rg[0], min(rg[1], self.frames)] + list(rg[2:])
+                                                 for rg in moved if rg[0] < self.frames)
+                        self._seam(c, a)
+                        self._seam(c, a + n)
+                        self._changed(c, a0, self.frames)
+                    else:
+                        b1 = min(self.frames, a + n + GUARD)
+                        entries.append((c, a0, self.tracks[c][a0:b1].copy()))
+                        self.tracks[c][a:a + n] = x[:n]
+                        self._seam(c, a)
+                        self._seam(c, a + n)
+                        self._changed(c, a0, b1)
+                    b = self._add_region(c, a, a + n, colour)
+                    colour = b[2] if b else colour
             self.last_edit = (a, a + n)
             self._push_undo(entries)
             return ts
 
     def bounce(self, sources, dest):
         """Mix tracks (0-7) down onto track dest, as you hear them (at their volumes), and empty the
-        others. dest's volume goes to 100% so it sounds the same. Returns the length in beats, or None."""
+        others. dest's volume goes to 100% so it sounds the same. A stereo dest gets a stereo mix (each
+        track at its pan or balance); a mono one, a mono mix in the centre. Returns the length in beats."""
         with self.lock:
             if self.playing or self.recording:
                 return None
@@ -1958,24 +2040,34 @@ class Engine:
             end = max(self.track_end(t) for t in ts)
             if len(ts) < 2 or not end:
                 return None
-            entries = [("pairs", None, set(self.pairs))]
+            entries = []
             for t in ts:
                 entries.append(("volume", t, self.volumes[t]))
                 entries.append(("pan", t, self.pans[t]))
-                self._regions_changed(t, entries)
-                entries.append((t, 0, self.tracks[t][:end].copy()))
-            mix = np.zeros(end, np.float32)
+                for c in self.chans(t):
+                    self._regions_changed(c, entries)
+                    entries.append((c, 0, self.tracks[c][:end].copy()))
+            left = np.zeros(end, np.float32)
+            right = np.zeros(end, np.float32)
             spans = []
             for t in ts:
-                mix += shape_range(self.regions[t], self.tracks[t][:end], 0) * self.volumes[t]
+                sides = [shape_range(self.regions[c], self.tracks[c][:end], 0) * self.volumes[t] for c in self.chans(t)]
+                if dest in self.stereo:
+                    gl, gr = pan_gains(self.pans[t])
+                    left += sides[0] * gl
+                    right += sides[-1] * gr
+                else:
+                    left += sum(sides) / len(sides)
                 spans += [(r[0], r[1]) for r in self.regions[t]]
             for t in ts:
-                self.tracks[t][:end] = 0
-                self.regions[t] = []
-            self.tracks[dest][:end] = saturate(mix)
+                for c in self.chans(t):
+                    self.tracks[c][:end] = 0
+                    self.regions[c] = []
+            self.tracks[dest][:end] = saturate(left)
+            if dest in self.stereo:
+                self.tracks[dest + RIGHT][:end] = saturate(right)
             self.volumes[dest] = 1.0
-            self.pans[dest] = 0.0                        # a bounce is mono, in the centre
-            self.pairs -= {p for p in self.pairs if p in ts or p + 1 in ts}
+            self.pans[dest] = 0.0
             merged = []                                  # where any of the tracks had a box, the bounce has one
             for a, b in sorted(spans):
                 if merged and a <= merged[-1][1]:
@@ -1983,11 +2075,48 @@ class Engine:
                 else:
                     merged.append([a, b])
             for a, b in merged:
-                self._add_region(dest, a, b)
+                r = self._add_region(dest, a, b)
+                if dest in self.stereo:
+                    self._add_region(dest + RIGHT, a, b, r[2] if r else None)
             for t in ts:
-                self._changed(t, 0, end)
+                for c in self.chans(t):
+                    self._changed(c, 0, end)
             self._push_undo(entries)
             return end / self.frames_per_beat()
+
+    def set_stereo(self, t, on):
+        """Make track t (0-7) stereo or mono. Going stereo, what's on it is on both sides; going mono, the
+        two sides are mixed together. Undoable. Returns True if it changed."""
+        with self.lock:
+            if (t in self.stereo) == bool(on) or self.recording:
+                return False
+            entries = [("stereo", t, t in self.stereo, self.tracks[t + RIGHT],
+                        [list(r) for r in self.regions[t + RIGHT]], self.inputs[t])]
+            if on:
+                self.tracks[t + RIGHT] = self.tracks[t].copy()
+                self.regions[t + RIGHT] = [list(r) for r in self.regions[t]]
+                self.stereo.add(t)
+                if not isinstance(self.inputs[t], (list, tuple)):
+                    src = self.default_stereo_input(t)
+                    self.inputs[t] = list(src) if src else [0, 1]
+                end = self._extent(self.tracks[t])
+                self._update_levels(t + RIGHT, 0, end, reset=True)
+                self.dirty.add(t)
+            else:
+                end = max(self._extent(self.tracks[t]), self._extent(self.tracks[t + RIGHT]))
+                self._regions_changed(t, entries)
+                entries.append((t, 0, self.tracks[t][:end].copy()))
+                self.tracks[t][:end] = (self.tracks[t][:end] + self.tracks[t + RIGHT][:end]) * 0.5
+                self.stereo.discard(t)
+                self.tracks[t + RIGHT] = None
+                self.regions[t + RIGHT] = []
+                self.levels[t + RIGHT][:] = 0
+                if isinstance(self.inputs[t], (list, tuple)):
+                    self.inputs[t] = self.inputs[t][0]
+                self._changed(t, 0, end)
+            self.dirty.add(-1)
+            self._push_undo(entries)
+            return True
 
     def _push_undo(self, entries):
         if entries:
@@ -2009,16 +2138,27 @@ class Engine:
                         self._update_levels(t, a, b, reset=True)
                     self.dirty.add(-1)
                     continue
-                if item[0] in ("volume", "pan", "pairs"):
+                if item[0] in ("volume", "pan"):
                     if item[0] == "volume":
                         self.volumes[item[1]] = item[2]
-                    elif item[0] == "pan":
-                        self.pans[item[1]] = item[2]
                     else:
-                        self.pairs = set(item[2])
+                        self.pans[item[1]] = item[2]
                     self.dirty.add(-1)
                     continue
+                if item[0] == "stereo":                     # a track made stereo or mono: put its right side back
+                    _, t, was, right, rregions, inputs = item
+                    (self.stereo.add if was else self.stereo.discard)(t)
+                    self.inputs[t] = inputs
+                    self.tracks[t + RIGHT] = right
+                    self.regions[t + RIGHT] = rregions
+                    self.levels[t + RIGHT][:] = 0
+                    if right is not None:
+                        self._update_levels(t + RIGHT, 0, self._extent(right), reset=True)
+                    self.dirty |= {t, -1}
+                    continue
                 t, a, old = item
+                if self.tracks[t] is None:
+                    continue                                # a right channel that's gone (the track went mono)
                 self.tracks[t][a:a + len(old)] = old
                 self._changed(t, a, a + len(old))
             return True
@@ -2064,9 +2204,6 @@ class Engine:
                 self._dev_open = (name, rate, period, periods)
                 self._route_due = 0.0                # work out the output again with these sizes
                 self.device = dev
-                if self.input_mode is None:
-                    ch = dev["capture"]["channels"]
-                    self.input_mode = "all" if ch >= 8 else "stereo" if ch == 2 else "mix"
                 self.status = ""
                 print("Audio: %s, %d in / %d out, %d Hz" % (dev["name"], dev["capture"]["channels"],
                                                           play["channels"] if play else 0, rate))
@@ -2191,8 +2328,6 @@ class Engine:
         """The drum synth as the input: no device to read, so the output sets the pace (or the clock, if
         there's nowhere to play). Runs until another input is chosen."""
         self.device, self.in_period = dev, PERIOD
-        if self.input_mode is None:
-            self.input_mode = "all"
         self.status = ""
         self._route_due = 0.0
         log("Input: drum synth")
@@ -2275,12 +2410,11 @@ class Engine:
                 self.recording = False
 
     def _drum_input(self, m, voices, rev_g, dly_g):
-        """What the drum synth puts on tape: each voice (MULTI: each track then plays back that drum's
-        reverb and delay through its own sends), or the kit panned in stereo (STEREO, and MONO mixes
-        it) with its reverb and delay printed in, from effects of its own so the tape tracks' sends
-        don't get in."""
-        if self.input_mode == "all":
-            return m.multi(voices)
+        """What the drum synth puts on tape, as 10 input channels: 0-7 each drum on its own (DRUM 1-8: the
+        track then plays back that drum's reverb and delay through its own sends), and 8-9 the whole kit
+        panned in stereo (KIT L / KIT R) with its reverb and delay printed in, from effects of its own so
+        the tape tracks' sends don't get in."""
+        lanes = m.multi(voices)
         p = m.pans()
         x = voices @ p
         if effects and effects.AVAILABLE and (rev_g.any() or dly_g.any() or self._drum_fx_ringing > 0):
@@ -2290,7 +2424,11 @@ class Engine:
             x = x + wet
             # keep running a while after the sends go to 0, so a tail isn't cut off
             self._drum_fx_ringing = 10 * self.rate if (rev_g.any() or dly_g.any()) else self._drum_fx_ringing - len(x)
-        return x
+        out = np.zeros((len(voices), DRUM_KIT + 2), np.float32)
+        n = min(DRUM_KIT, lanes.shape[1])
+        out[:, :n] = lanes[:, :n]
+        out[:, DRUM_KIT:] = x
+        return out
 
     def _heard_frame(self):
         """Where the sequencer is as you hear it (its own clock: frames since PLAY, plus read_ahead)."""
@@ -2325,7 +2463,7 @@ class Engine:
         with self.lock:
             peaks = np.abs(x).max(axis=0) if n else np.zeros(1)
             self.in_peaks[:] = 0
-            self.in_peaks[:min(TRACKS, len(peaks))] = peaks[:TRACKS]
+            self.in_peaks[:min(CHANNELS, len(peaks))] = peaks[:CHANNELS]
             done = 0
             while self.playing and done < n:
                 loop = self.loop_region() if self.loop_on else None
@@ -2379,12 +2517,15 @@ class Engine:
         overdub = self.rec_mode == "overdub"
         for t in range(TRACKS):
             if (overdub or t not in targets) and self.audible(t):
-                sig = self.tracks[t][idx] * self.volumes[t]
-                env = envelope(self.regions[t], idx)
-                if env is not None:
-                    sig *= env                               # each box's gain and fades
-                gl, gr = pan_gains(self.pans[t])
-                stereo = np.stack([sig * gl, sig * gr], axis=1)
+                sides = []
+                for c in self.chans(t):
+                    sig = self.tracks[c][idx] * self.volumes[t]
+                    env = envelope(self.regions[c], idx)
+                    if env is not None:
+                        sig *= env                           # each box's gain and fades
+                    sides.append(sig)
+                gl, gr = pan_gains(self.pans[t])             # on a stereo track, the balance
+                stereo = np.stack([sides[0] * gl, sides[-1] * gr], axis=1)
                 mix += stereo
                 if self.rev_sends[t]:
                     rev_in += stereo * self.rev_sends[t]     # sends are after the volume and pan
@@ -2398,24 +2539,32 @@ class Engine:
             if region:                               # in/out points set: only record between them (punch in)
                 a, b = max(a, region[0]), min(b, region[1])
             if b > a:
-                for t, ch in targets.items():
-                    src = (x.mean(axis=1) if ch is None else x[:, ch])[a - w0:b - w0]
-                    ta = a
-                    own = self._rec_boxes.get(t)
-                    if own is not None and 0 < a - own[1] <= 64:
-                        # the tape was nudged a frame or two ahead (Link keeping time): fill the gap with
-                        # the first new sample, so the recording stays one piece
-                        ta = own[1]
-                        src = np.concatenate([np.full(a - ta, src[0] if len(src) else 0.0, np.float32), src])
-                    self._save_for_undo(t, ta, b)
-                    self._rec_region(t, ta, b)
-                    a_t = ta
-                    if overdub:
-                        self.tracks[t][a_t:b] = saturate(self.tracks[t][a_t:b] + src)
-                    else:
-                        self.tracks[t][a_t:b] = src
-                    self._update_levels(t, a_t, b, reset=True)
-                    self.dirty.add(t)
+                for t, spec in targets.items():
+                    # a stereo track records two channels (left, right); a mono one, one channel or the mix
+                    srcs = list(spec) if isinstance(spec, tuple) else [spec]
+                    for c, ch in zip(self.chans(t), srcs if t in self.stereo else srcs[:1]):
+                        src = (self._mix(x) if ch is None else x[:, ch])[a - w0:b - w0]
+                        ta = a
+                        own = self._rec_boxes.get(c)
+                        if own is not None and 0 < a - own[1] <= 64:
+                            # the tape was nudged a frame or two ahead (Link keeping time): fill the gap with
+                            # the first new sample, so the recording stays one piece
+                            ta = own[1]
+                            src = np.concatenate([np.full(a - ta, src[0] if len(src) else 0.0, np.float32), src])
+                        self._save_for_undo(c, ta, b)
+                        self._rec_region(c, ta, b)
+                        if overdub:
+                            self.tracks[c][ta:b] = saturate(self.tracks[c][ta:b] + src)
+                        else:
+                            self.tracks[c][ta:b] = src
+                        self._update_levels(c, ta, b, reset=True)
+                        self.dirty.add(t)
+
+    def _mix(self, x):
+        """A mono track's "mix" input: every channel mixed (for the drum synth, the kit's two)."""
+        if self.drums_input and x.shape[1] > DRUM_KIT + 1:
+            return x[:, DRUM_KIT:DRUM_KIT + 2].mean(axis=1)
+        return x.mean(axis=1)
 
     def _save_for_undo(self, t, a, b):
         """Keep what a recording pass overwrites, the first time it overwrites it."""

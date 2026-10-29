@@ -73,7 +73,6 @@ for _n in range(1, 9):
 CHAR_ACTIONS.update({"\r": "ENTER", "\n": "ENTER", "\t": "FILE"})
 ESCAPES = {"\x1b[C": "RIGHT", "\x1b[D": "LEFT", "\x1b[1;2C": "BAR_RIGHT", "\x1b[1;2D": "BAR_LEFT",
            "\x1b[A": "UP", "\x1b[B": "DOWN", "\x1b": "FILE"}
-MODE_NAMES = {"all": "MULTI", "stereo": "STEREO", "mix": "MONO"}     # input modes as shown on screen
 TEXT_INPUT = {"on": False}      # while typing a name, keys arrive as ("CHAR", letter) instead of commands
 
 
@@ -362,8 +361,10 @@ class Transport:
             t.zoom = tape.ZOOMS.index(4)
         elif name == "INPUT":
             if e:
-                e.cycle_input()
-                self.say("INPUT: %s" % MODE_NAMES.get(e.input_mode, "NO AUDIO DEVICE"), 2)
+                n = self.armed
+                self.say("TRACK %d: %s  %s   ·   PRESS %d AGAIN TO ZOOM IN, THEN KNOBS 4-6 TO CHANGE" % (
+                    n, "STEREO" if (n - 1) in e.stereo else "MONO",
+                    e.input_text(n - 1) if e.device else "NO INPUT DEVICE", n), 5)
         elif name in ("PAN_LEFT", "PAN_RIGHT"):
             self.pan(self.armed, -0.1 if name == "PAN_LEFT" else 0.1)
         elif name == "EXPORT":
@@ -546,6 +547,8 @@ class Transport:
             what = ("gain", "in", "out")[number - 1]
             steps = self.knob_clicks(number, delta, shift)
             self.box_edit(what, steps * 0.5 if what == "gain" else steps)
+        elif self.focus.active and self.engine and number <= 6:
+            self.track_setup(number, delta)          # knobs 4-6: mono / stereo, and its input(s)
         elif number <= 8:
             if shift:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
@@ -814,45 +817,40 @@ class Transport:
         self.say("VOLUME %d%%%s" % (round(v * 100), note), 2)
 
     def clip_text(self):
-        """Where the clipboard came from: TRACK 3, TRACKS 3+4 (STEREO) or TRACKS 1, 3, 4."""
-        ts = self.engine.clip_tracks
+        """Where the clipboard came from: TRACK 3, TRACK 3 (STEREO) or TRACKS 1, 3, 4."""
+        ts = [t for t in self.engine.clip_tracks if t < 8]      # (8 and up: right channels)
         if len(ts) == 1:
-            return "TRACK %d" % (ts[0] + 1)
-        if self.engine.clip_stereo():
-            return "TRACKS %d+%d (STEREO)" % (ts[0] + 1, ts[1] + 1)
+            return "TRACK %d%s" % (ts[0] + 1, " (STEREO)" if self.engine.clip_stereo() else "")
         return "TRACKS " + ", ".join(str(t + 1) for t in ts)
 
     def say_drop_ask(self):
         n = self.engine.clip_parts()
         merged = self.drop_ask["merged"]
         self.say("DROP %d TRACKS AS:  %s  /  %s   ·   KNOB 1 CHANGES   ·   DROP AGAIN TO DROP" % (
-            len(self.engine.clip), "SEPARATE" if merged else "[SEPARATE]", "[MERGED]" if merged else "MERGED"), 60)
+            n, "SEPARATE" if merged else "[SEPARATE]", "[MERGED]" if merged else "MERGED"), 60)
 
     def edit_text(self):
-        ts = self.engine.edit_tracks()
-        return "TRACKS %d+%d (STEREO)" % (ts[0] + 1, ts[1] + 1) if len(ts) == 2 else "TRACK %d" % (ts[0] + 1)
+        t = self.engine.armed - 1
+        return "TRACK %d%s" % (t + 1, " (STEREO)" if t in self.engine.stereo else "")
 
     def draw_num(self, surf, it):
-        """The track number, plus a bracket joining a stereo pair's two tabs."""
+        """The track number, and a small ST beside a stereo track's."""
         self.s.draw_default(surf, it)
         e = self.engine
         n = int(it["name"][5:it["name"].index("_")])
-        if not e or (n - 1) not in e.pairs or self.focus.active:
+        if not e or (n - 1) not in e.stereo:
             return
-        a, b = self.s.get("track%d_tab" % n), self.s.get("track%d_tab" % (n + 1))
-        if not a or not b:
-            return
-        x = a["x"] - 6
-        y0, y1 = a["y"] + 4, b["y"] + b["h"] - 4
-        col = (205, 210, 218)
-        pygame.draw.line(surf, col, (x, y0), (x, y1), 2)
-        pygame.draw.line(surf, col, (x, y0), (x + 3, y0), 2)
-        pygame.draw.line(surf, col, (x, y1), (x + 3, y1), 2)
+        tab = self.s.get("track%d_tab" % n) or it
+        font = self.s.font("mono", 700, 9)
+        img = font.render("ST", True, (12, 13, 16))
+        x = tab["x"] + tab["w"] - img.get_width() - 3
+        surf.blit(img, (x, tab["y"] + 2))
 
     def pan(self, track, delta):
         if not self.engine:
             return
-        self.say("TRACK %d  PAN %s" % (track, self.pan_text(self.engine.change_pan(track, delta))), 2)
+        word = "BALANCE" if (track - 1) in self.engine.stereo else "PAN"
+        self.say("TRACK %d  %s %s" % (track, word, self.pan_text(self.engine.change_pan(track, delta))), 2)
 
     @staticmethod
     def pan_text(p):
@@ -948,8 +946,6 @@ class Transport:
                 self.glide_to_edit(1)
                 if len(done) == 1:
                     where = "TRACK %d" % (done[0] + 1)
-                elif len(done) == 2 and e.clip_stereo():
-                    where = "TRACKS %d+%d" % (done[0] + 1, done[1] + 1)
                 else:
                     where = "TRACKS %d-%d" % (done[0] + 1, done[-1] + 1)
                 self.say("DROPPED%s ON %s AT %s%s" % (" (MERGED)" if merged else "", where, pos,
@@ -959,7 +955,6 @@ class Transport:
         elif name in ("SPLICE", "SPLICE_ALL"):
             done = e.splice(name == "SPLICE_ALL")
             ts = set(e.armed_tracks())
-            ts |= {p for t in ts for p in (t - 1, t + 1) if 0 <= p < 8 and min(t, p) in e.pairs}
             where = "ALL TRACKS" if name == "SPLICE_ALL" else self.armed_text(sorted(t + 1 for t in ts))
             self.say("SPLIT %s AT %s" % (where, pos) if done == "added"
                      else "JOINED BACK TOGETHER ON %s" % where if done == "removed"
@@ -1105,7 +1100,8 @@ class Transport:
         e, n = self.engine, self.focus.shown
         if not e:
             return ["DEMO MODE", "NO AUDIO ENGINE"]
-        vol = "VOLUME %d%%  PAN %s%s" % (round(e.volumes[n - 1] * 100), self.pan_text(e.pans[n - 1]),
+        vol = "VOLUME %d%%  %s %s%s" % (round(e.volumes[n - 1] * 100), "BALANCE" if (n - 1) in e.stereo else "PAN",
+                                        self.pan_text(e.pans[n - 1]),
                                          "  MUTED" if (n - 1) in e.mutes else "  SOLO" if (n - 1) in e.solos else "")
         mode = "REC: OVERDUB" if e.rec_mode == "overdub" else "REC: REPLACE"
         r = e.loop_region()
@@ -1118,7 +1114,37 @@ class Transport:
             clip = "CLIPBOARD EMPTY"
         info = e.box_info()
         box = ("BOX: " + self.box_text(info)) if info else "NO BOX AT THE PLAYHEAD"
-        return [vol, mode, inout, clip, box]
+        st = (n - 1) in e.stereo
+        track = "%s  %s  (KNOBS 4-%d)" % ("STEREO" if st else "MONO", e.input_text(n - 1) if e.device else "NO INPUT",
+                                        6 if st else 5)
+        # the panel: [the track, volume / its column, ...] two columns of two lines, and the box beside the title
+        return [track, vol, "%s  ·  %s" % (mode, inout), clip, box]
+
+    def track_setup(self, number, delta):
+        """The zoomed track view's knobs 4-6: 4 MONO / STEREO, 5 the input (a stereo track's left),
+        6 a stereo track's right input."""
+        e, n = self.engine, self.focus.shown
+        t = n - 1
+        if self.recording:
+            self.say("STOP RECORDING FIRST", 2)
+            return
+        if number == 4:
+            on = delta > 0
+            if e.set_stereo(t, on):
+                self.say("TRACK %d: %s%s" % (n, "STEREO" if on else "MONO",
+                                             "  (BOTH SIDES MIXED TOGETHER; SHIFT+CUT UNDOES)" if not on and e.track_end(t)
+                                             else ""), 3)
+            else:
+                self.say("TRACK %d IS %s (KNOB 4: LEFT MONO, RIGHT STEREO)" % (n, "STEREO" if t in e.stereo else "MONO"), 2)
+            return
+        if number == 6 and t not in e.stereo:
+            self.say("TRACK %d IS MONO: ONE INPUT, ON KNOB 5" % n, 2)
+            return
+        text = e.step_input(t, number - 5, delta)
+        if text is None:
+            self.say("NO INPUT DEVICE", 2)
+        else:
+            self.say("TRACK %d%s  INPUT %s" % (n, " STEREO" if t in e.stereo else "", text), 2)
 
     def box_edit(self, what, delta=0):
         info = self.engine.change_box(what, delta)
@@ -1138,6 +1164,13 @@ class Transport:
     def box_text(self, info):
         return "GAIN %+.1f dB   FADE IN %s   FADE OUT %s" % (info["gain"], self.fade_text(info["in"]),
                                                                self.fade_text(info["out"]))
+
+    def routing_text(self, armed):
+        """What the armed tracks record: TRACK 4 < IN 4, or 1 < IN 1  ·  3 ST < IN 3+4."""
+        e = self.engine
+        parts = ["%s%s%s < %s" % ("TRACK " if len(armed) == 1 else "", n, " ST" if (n - 1) in e.stereo else "",
+                                 e.input_text(n - 1)) for n in armed]
+        return "  ·  ".join(parts) if len(parts) <= 4 else "%s (%d TRACKS)" % (parts[0], len(parts))
 
     def armed_text(self, armed):
         if len(armed) == 8:
@@ -1172,7 +1205,6 @@ class Transport:
         if self.linked:
             sync = "  LINK %d" % self.link.peers
         s.set("bpm", t="%.1f BPM  %s%s" % (bpm, tape.signature_text(), sync))
-        all_in = bool(e and e.device and e.input_mode == "all")
         armed = [t + 1 for t in e.armed_tracks()] if e else [self.armed]
         first, last, lane = s.get("track1_lane"), s.get("track8_lane"), s.get("track%d_lane" % self.armed)
         if self.focus.active:
@@ -1202,28 +1234,15 @@ class Transport:
         elif self.drum_page and not (e.device and e.drums_input):
             hint = "DRUM SYNTH STARTING..."
         elif self.seq_page:
-            mode = MODE_NAMES.get(e.input_mode, "")
-            where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
-                     if e.input_mode == "stereo" else self.armed_text(armed))
-            hint = "SEQUENCER  \u00b7  %s > %s  \u00b7  MIDI KEY: BACK TO THE TAPE" % (mode, where)
+            hint = "SEQUENCER  \u00b7  THE TAPE PLAYS BUT DOESN'T RECORD HERE  \u00b7  MIDI KEY: BACK TO THE TAPE"
         elif self.drum_page:
-            mode = MODE_NAMES.get(e.input_mode, "")
-            where = (", ".join("%d+%d" % (t + 1, t + 2) for t in e.stereo_pairs_armed()) or "ARM 2 TRACKS SIDE BY SIDE"
-                     if e.input_mode == "stereo" else self.armed_text(armed))
-            hint = "DRUMS  ·  %s > %s  ·  MIDI KEY TO LEAVE" % (mode, where)
+            hint = "DRUMS  ·  %s  ·  MIDI KEY TO LEAVE" % self.routing_text(armed)
         elif self.fx_page:
             hint = "FX: %s  \u00b7  PRESS FX FOR %s" % (self.fx_page.upper(), "DELAY" if self.fx_page == "reverb" else "THE TRACKS")
         elif not e.device:
             hint = e.status or "NO AUDIO DEVICE"
-        elif all_in:
-            hint = "%s  MULTI > %s" % (e.device["name"].upper(), self.armed_text(armed))
-        elif e.input_mode == "stereo":
-            pairs = e.stereo_pairs_armed()
-            hint = "%s  STEREO > %s" % (e.device["name"].upper(),
-                                        ", ".join("%d+%d" % (t + 1, t + 2) for t in pairs) if pairs
-                                        else "ARM 2 TRACKS SIDE BY SIDE")
         else:
-            hint = "%s  MONO > %s" % (e.device["name"].upper(), self.armed_text(armed))
+            hint = "%s  ·  %s" % (e.device["name"].upper(), self.routing_text(armed))
         s.set("hint", t=hint)
 
         targets = e.targets() if (e and e.device) else {}
@@ -1233,7 +1252,8 @@ class Transport:
                 s.set("track%d_tab" % n, c="#2A2D33" if muted else self.tab_colours[n])
             if e and (n - 1) in targets and (self.recording or ready or not self.playing):
                 ch = targets[n - 1]
-                peak = float(e.in_peaks.max() if ch is None else e.in_peaks[ch])
+                peak = float(e.in_peaks.max() if ch is None else max(e.in_peaks[c] for c in ch)
+                             if isinstance(ch, tuple) else e.in_peaks[ch])
                 level = min(1.0, peak ** 0.5)
             elif self.playing and not muted:
                 level = t.level_at(n, t.pos - 1 / tape.RES) * (e.volumes[n - 1] / 0.8 if e else 1)

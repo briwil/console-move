@@ -102,7 +102,7 @@ stereo mix) in the Exports folder.
 
 | Key | Press | With SHIFT held |
 |---|---|---|
-| AUDIO | Input: MULTI / STEREO / MONO (see Input modes below) | Arm all 8 tracks / back to just the selected one |
+| AUDIO | Shows the selected track's input (mono or stereo, and which inputs); change it in the zoomed view (see Inputs below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | FX | Effects pages: REVERB, then DELAY, then back to the tape (see Effects below) | |
 | MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Again: the sequencer. Again: back to the tape (see Drum synth and Drum sequencer below) | |
@@ -125,9 +125,9 @@ The selected track (thick outline) always records. Hold SHIFT and press
 other track keys to arm them too (thin outline); SHIFT+AUDIO arms all 8.
 Pressing a track key without SHIFT goes back to just that track.
 
-In MULTI mode (the OP-XY in 8-channel mode), each armed track records its own input:
-input 1 to track 1, input 2 to track 2, and so on. In MONO mode (AUDIO
-switches), every armed track records all the inputs mixed together.
+Each armed track records its own input (see Inputs below): to start with,
+input 1 onto track 1, input 2 onto track 2 and so on, so an OP-XY in its
+8-channel mode can record all 8 at once.
 
 Editing (splice, lift, cut, drop) always works on the selected track.
 
@@ -163,7 +163,8 @@ When the clipboard has more than one track, DROP asks how to put it down:
 
 - **SEPARATE**: each track on its own, onto the selected track and the ones
   below it, in order (tracks 1, 2 and 4 lifted, track 5 selected: they land
-  on 5, 6 and 7). A stereo pair stays a pair. They have to fit above track 8.
+  on 5, 6 and 7), each as that track is set (mono or stereo). They have to
+  fit above track 8.
 - **MERGED**: all of them mixed onto the selected track, in mono, at the
   volumes you heard them at.
 
@@ -176,42 +177,38 @@ Turn knob 1 to choose (left: separate, right: merged), then press DROP again
 The boxes are only how the tape is divided up; what you hear is the audio on
 the track. EXPORT writes each track as a plain WAV.
 
-## Input modes
+## Inputs, mono and stereo tracks
 
-AUDIO (I on a keyboard) switches between them; the bottom right shows which.
+Each track is **MONO** or **STEREO**, and has its own input. Set them in the
+zoomed view (press the selected track's key again):
 
-| Mode | What the armed tracks record |
-|---|---|
-| MULTI | Each its own input: input 1 onto track 1, input 2 onto track 2… (the OP-XY's 8-channel USB mode) |
-| STEREO | Left and right onto two tracks side by side, as a stereo pair |
-| MONO | All the inputs mixed together, in mono |
+| Knob | Mono track | Stereo track |
+|---|---|---|
+| 4 | Left: mono, right: stereo | |
+| 5 | Its input: IN 1, IN 2 … or MIX (all the inputs mixed together) | Its left input |
+| 6 | | Its right input |
 
-## Stereo
-
-Tracks are mono, and any two neighbouring tracks (1+2, 4+5, 7+8…) can be a
-stereo pair.
-
-1. Press AUDIO until the bottom right says STEREO (it starts in STEREO when
-   the OP-XY is in its 2-channel USB mode).
-2. Select a track and SHIFT+arm the one below it, e.g. 7 and SHIFT+8. The
-   bottom right shows "STEREO > 7+8".
-3. Record. Left goes onto 7, right onto 8. They become a pair: a bracket
-   joins their numbers, they're panned left and right, and EXPORT writes them
-   as one stereo file ("track7-8 stereo.wav").
-
-A pair edits together: SPLICE splits both, and LIFT / CUT take both sides
-(with either track of the pair selected). A stereo piece drops onto the
-selected track and the one below it, which become a pair. An armed track
-without a neighbour records left and right mixed, in mono.
-
-Recording onto either track of a pair on its own (in MONO or MULTI mode,
-or in STEREO with only that one armed) splits the pair back into two normal
-mono tracks, panned to the centre. SHIFT+CUT undoes that along with the
-recording.
+- A new song has every track mono, track N on input N (an OP-XY in 8-channel
+  mode records all 8 tracks at once). With a 2-channel device (an OP-XY in
+  stereo mode, a UCA202), a track set to input 3 or more records the MIX.
+- A stereo track shows **ST** on its number, and its left and right
+  waveforms stacked in its lane (left on top).
+- Making a mono track stereo puts what's on it on both sides. Making a stereo
+  track mono mixes its two sides together; SHIFT+CUT undoes that.
+- Everything edits both sides of a stereo track together: SPLICE, LIFT, CUT,
+  DROP, the box gain and fades.
+- **DROP:** a stereo piece on a mono track is mixed to mono; a mono piece on a
+  stereo track goes on both sides.
+- **BOUNCE** onto a stereo track makes a stereo mix (each track at its pan);
+  onto a mono track, a mono one.
+- **EXPORT** writes a stereo track as one stereo file ("track3 stereo.wav").
+- Songs from before this, with two tracks as a stereo pair, open with the
+  pair as one stereo track (the second track left empty).
+- The bottom right shows what the armed tracks record, e.g. `3 ST < IN 3+4`.
 
 **Pan:** SHIFT + turn a track's knob, or `,` / `.` on a keyboard for the
-selected track. Any track can be panned; the stereo mix and what you hear
-follow it. A bounce is mono, in the centre.
+selected track. On a mono track it pans; on a stereo track it's the balance
+between left and right. The stereo mix and what you hear follow it.
 
 ## Mute and solo
 
@@ -260,15 +257,16 @@ were, and the playhead goes back to where it started. A sweep turns LOOP on.
 
 Press the armed track's key again (or `F` on a keyboard) and that track grows
 to fill the screen while the others slide away. Underneath it, a pair of
-tape reels turn while it plays, with the track's volume, record mode, in/out
-points and what's on the clipboard. Everything works the same in this view.
+tape reels turn while it plays, with the track's input (mono or stereo),
+volume, record mode, in/out points and what's on the clipboard. Everything works the same in this view.
 Press the track's key again to go back to all 8; press a different track's
 key to zoom to that one instead.
 
 ### Gain, normalize and fades (in the zoomed view)
 
 Here knobs 1–3 work on the box under the playhead (both sides of a stereo
-pair). What they're set to shows next to the track name, and the waveform
+track), and knobs 4–6 set the track to mono or stereo and pick its input(s)
+(see Inputs above). What they're set to shows next to the track name, and the waveform
 shows it too.
 
 | Knob | Turn | Push |
@@ -317,8 +315,8 @@ How they differ:
 - **Each machine has its own sequencer.** Switching to another machine gives you its
   own patterns, empty the first time. Switching back finds the previous machine's
   patterns, kit and locks just as you left them, and the song saves them all.
-- **MULTI with the 808 and MACHINEDRUM:** key n records onto track n, and SHIFT +
-  key n records onto the same track.
+- **DRUM 1-8 with the 808 and MACHINEDRUM:** input DRUM n has drum key n and
+  SHIFT + key n together.
 - **MACHINEDRUM's 16 lanes** start as the Machinedrum's default kit. Each lane can be
   any of its 33 machines (TRX-BD, EFM-SD, PI-MT, GND-NS…): on the drum page, knob 9 to
   the **MACHINE** page, then turn MACHINE. The lane's 8 controls on its SOUND page
@@ -333,8 +331,7 @@ Console has a drum machine built in: the six drum voices of the Erica Synths
 LXR-02, running on the Pi from its open-source firmware. It's an input, like
 the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
 
-1. Select the track to record onto first (for MULTI, that's any track; see
-   below), then press the **MIDI** key (`D` on a keyboard). The bottom right
+1. Select the track to record onto first, then press the **MIDI** key (`D` on a keyboard). The bottom right
    shows the drum page. The first time, this also sets SETTINGS > INPUT to
    DRUM SYNTH; set it back there to record from the OP-XY again.
 2. Track keys **1–7** play the drums (no velocity yet, every hit is the same):
@@ -343,11 +340,11 @@ the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
    |---|---|---|---|---|---|---|---|
    | Voice | Drum 1 (kick) | Drum 2 | Drum 3 | Snare | Cymbal | Hi-hat closed | Hi-hat open |
 
-3. AUDIO picks how it records, as with any input:
-   - **MULTI**: each voice onto its own track, drum 1 onto track 1 … hi-hat
-     onto track 6. SHIFT+AUDIO arms them all.
-   - **STEREO**: the whole kit, panned, onto a pair (select 7, SHIFT+8).
-   - **MONO**: the whole kit onto the selected track.
+3. Each track's input says what it records (set in the zoomed view, knobs
+   4-6; see Inputs above). The drum synth's inputs are **DRUM 1-8**, each
+   drum on its own (drum 1 onto track 1 …, as a new song starts), and the
+   whole kit: **KIT L / KIT R** on a stereo track, or **KIT** (the MIX choice)
+   on a mono one. SHIFT+AUDIO arms all 8 tracks.
 4. RECORD, play, RECORD again to stop, as usual. Hits land on the tape where
    you pressed the key.
 
@@ -377,13 +374,13 @@ tracks' sends and the reverb and delay settings, then press FX until it's
 off to get back. **FX SENDS** (each drum's last page): REVERB and DELAY, how much of that
 drum goes to Console's reverb and delay (set their sound on the FX key's
 pages). They work on the drums as you hear them live; the tape tracks have
-their own sends (the FX key). **Recording in STEREO or MONO prints them**:
+their own sends (the FX key). **Recording the KIT prints them**:
 the kit's reverb and delay go into the recording as you hear them, tails
 included (the drums have a reverb and delay of their own for this, with the
-FX key's settings, so the tape tracks' effects don't get in). Recording in
-MULTI keeps each drum dry on its own track and copies the drum's sends onto
-that track instead, so it plays back with the same reverb and delay and you
-can still change them.
+FX key's settings, so the tape tracks' effects don't get in). Recording a
+single drum (DRUM 1-8) keeps it dry on its track and copies the drum's sends
+onto that track instead, so it plays back with the same reverb and delay and
+you can still change them.
 
 Turn a knob quickly to move further; hold SHIFT for one step at a time.
 The kit is saved with the song, and a new song starts from the LXR's Init
@@ -407,8 +404,8 @@ The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
 plays whenever the tape plays, but on its own clock: every PLAY starts the
 pattern from step 1, wherever the tape is, and tape loops and moving the
 playhead don't touch it (a 24-step lane keeps going through a 1-bar loop). It
-records like playing the keys does: MULTI, STEREO or MONO
-onto the armed tracks, exactly on the beat. The 4×4 keys keep their normal
+records like playing the keys does: onto the armed tracks, each from its
+input, exactly on the beat. The 4×4 keys keep their normal
 jobs here.
 
 **The grid.** The 7 drums are rows (D1, D2, D3, SN, CY, HHc closed hat, HHo
@@ -513,7 +510,7 @@ On a keyboard, **W** does the same as FX.
   sends nothing, and a track panned left echoes on the left.
 - The tracks' effects are never recorded onto the tracks, so you can change
   them any time. They keep ringing after you stop. (The drum synth's own
-  sends are the exception: in STEREO and MONO they're printed, see above.)
+  sends are the exception: recording the KIT prints them, see above.)
 - Everything is saved with the song.
 - **EXPORT** puts the effects in the mix (with their tails) and also writes
   `reverb return` and `delay return` as stereo files. The dry stems plus

@@ -114,6 +114,18 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - The machine is picked from the drums menu (FILE on the drum page, `kitmenu.py`: DRUM MACHINE).
 - Built by `setup.sh` (needs g++), or by `drums.py` in the background at start.
 
+### Stereo tracks and per-track inputs (Oct 2026)
+
+- Each track is mono or stereo (`Engine.stereo`) with its own input (`Engine.inputs`: a channel,
+  "mix", or [left, right]); the AUDIO key's MULTI/STEREO/MONO modes and the two-track stereo pairs
+  are gone (Brian's choice). Set in the zoomed view, knobs 4-6.
+- A stereo track's right channel is `tracks[t + RIGHT]` (RIGHT = 8) with its own boxes
+  `regions[t + RIGHT]`, kept in step: `chans(t)` is [t] or [t, t + 8], and edits, recording,
+  undo and levels work on channels. Saved as a 2-channel track N.wav; old songs' pairs convert to one
+  stereo track. DROP folds stereo to mono / doubles mono; bounce onto a stereo track is stereo.
+- The drum synth as an input has 10 channels: 0-7 its lanes (DRUM n, dry with sends copied), 8-9 the
+  kit in stereo with its reverb and delay printed (KIT L/R; a mono track's MIX is the kit).
+
 ### MACHINEDRUM (Oct 2026)
 
 - `drums/md/`: mmockett/OP-XY-MNMD's Machinedrum voices (TRX, EFM, P-I, GND; 33 machines; MIT), vendored

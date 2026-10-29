@@ -236,7 +236,20 @@ class Tape:
 
     def draw_wave(self, surf, it):
         track = int(it["name"][5:it["name"].index("_")])
-        lv = self.levels[track - 1]
+        e = self.engine
+        if e and (track - 1) in e.stereo:
+            # a stereo track: left on the top half, right on the bottom, with a thin line between
+            top, bottom = dict(it), dict(it)
+            half = it["h"] // 2
+            top["h"], bottom["y"], bottom["h"] = half, it["y"] + half, it["h"] - half
+            self._wave(surf, top, self.levels[track - 1], track)
+            self._wave(surf, bottom, self.levels[track - 1 + 8], track)
+            pygame.draw.line(surf, (40, 43, 50), (it["x"] + 2, it["y"] + half), (it["x"] + it["w"] - 3, it["y"] + half), 1)
+        else:
+            self._wave(surf, it, self.levels[track - 1], track)
+        self.draw_selection(surf, track)
+
+    def _wave(self, surf, it, lv, track):
         cy = it["y"] + it["h"] / 2
         ppb = self.ppb
         span = max(1, int(3 / ppb * RES))          # level values covered by one 3-pixel column
@@ -258,7 +271,6 @@ class Tape:
                 a = self.shape(a)
                 bh = max(1, round(a * (it["h"] - 4)))
                 surf.fill(col, (px, round(cy - bh / 2), 2, bh))
-        self.draw_selection(surf, track)
 
     def draw_selection(self, surf, track):
         """An outline round the box(es) that LIFT and CUT would take, on the selected track."""

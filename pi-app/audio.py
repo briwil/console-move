@@ -1425,7 +1425,7 @@ class Engine:
             return "%s + %s" % (l, r)
         return self.channel_name(src)
 
-    def input_choices(self):
+    def track_input_choices(self):
         """What a mono track can record: each channel, then the mix (or the whole kit)."""
         return list(range(self.in_channels())) + [None]
 
@@ -1441,7 +1441,7 @@ class Engine:
                 cur[side] = max(0, min(ch - 1, cur[side] + (1 if delta > 0 else -1)))
                 self.inputs[t] = cur
             else:
-                choices = self.input_choices()
+                choices = self.track_input_choices()
                 cur = self.source(t)
                 i = choices.index(cur) if cur in choices else len(choices) - 1
                 self.inputs[t] = choices[max(0, min(len(choices) - 1, i + (1 if delta > 0 else -1)))]

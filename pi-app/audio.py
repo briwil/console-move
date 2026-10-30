@@ -540,6 +540,7 @@ class Engine:
         self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song) ...
         self.seqs = {}                          # ... one sequencer per drum machine: {machine: Sequencer}
         self.seq_hits = [0.0] * sequencer.MAX_LANES  # when each lane's last sequencer hit is heard (for the screen)
+        self._auditions = []                         # hits asked for by audition(), for the next block
         self.loop_on = False
         self.loop_a = self.loop_b = 0           # loop start and end, in frames
         self.dirty = set()
@@ -715,6 +716,12 @@ class Engine:
         while the drum synth is the input."""
         if self.drums:
             self.drums.hit(lane, velocity)
+
+    def audition(self, lane, velocity=100, locks=None):
+        """Play one hit of a lane as a sequencer step would, its locks included (to hear a lock while
+        setting it). Only while stopped: playing, the sequencer plays the step anyway."""
+        if self.drums and not self.playing:
+            self._auditions.append((0, lane, velocity, dict(locks or {})))
 
     def _set_latency(self):
         # an outside device: what you played reached us in_period (plus the measured extra) after you heard
@@ -2375,6 +2382,8 @@ class Engine:
                 elif was_playing:
                     was_playing = False
                     self.seq.stop()
+                if self._auditions and not self.playing:
+                    events, self._auditions = self._auditions, []
                 if events:
                     soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
                     for offset, lane, _vel, _locks in events:

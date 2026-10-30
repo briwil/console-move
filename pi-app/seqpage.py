@@ -10,7 +10,8 @@
   chance and ratchets of the step under the cursor, its Euclidean fill and shift, and its rate.
 - Push knob 1 for the next mode: the drum's sound pages. There, holding a track key locks the
   setting to the step under the cursor (a parameter lock); with no key held, the knobs change the
-  drum's own sound.
+  drum's own sound. Stopped, the sound plays as a knob turns (then once a second, and once more
+  when it stops).
 - Track key 8 undoes (10 steps). Knob 10 picks the pattern.
 - Each lane has a box of 8 steps. ← / → move the picked lane's box 8 steps; SHIFT + track key 1-8
   puts that step of the box on (or off) on the picked lane. On the TR-808, SHIFT + knob 1 switches
@@ -24,6 +25,8 @@ import drumparams
 import sequencer
 import ui
 
+HEAR_EVERY = 1.0                 # turning a sound page's knob while stopped plays the sound this often (s)
+HEAR_AFTER = 0.5                 # and once more this long after the knob stops
 VISIBLE = 32                     # steps on screen at once
 FOLLOW_AT = 15                   # the cursor's column (from 0) while the steps scroll under it
 STEP_PARAMS = ["length", "vel", "chance", "ratchet", "hits", "rotate", "rate"]       # knobs 2-8 in STEP mode
@@ -50,6 +53,10 @@ class SeqPage:
         self.box = {}                # lane -> the first step of its 8-step box (0, 8, 16...)
         self._box_until = 0.0        # the grid shows the picked lane's box until then
         self._bright_until = 0.0     # the box is drawn at full strength until then (just after the arrows)
+        self._hear = None            # (lane, step or None): the sound being turned, to play it while stopped
+        self._heard_at = 0.0         # when it last played
+        self._turned_at = 0.0        # when its knob last turned
+        self._hear_due = False       # turned since it last played
 
     @property
     def e(self):
@@ -287,11 +294,48 @@ class SeqPage:
             seq.set_lock(lane, i, param, e.drums.stepped(param, base, clicks))
             e.seq_changed()
             v = seq.step(lane, i).locks[param]
+            self.audition(lane, i)
             self.t.say("%s STEP %d  %s  %s  (LOCKED)" % (self.short(lane), i + 1, e.drums.label(param),
                                                          e.drums.value_text(param, v)), 2)
             return
         e.change_drum(param, clicks)
+        self.audition(self.lane, None)
         self.t.say("%s  %s  %s" % (self.short(self.lane), e.drums.label(param), e.drums.value_text(param)), 2)
+
+    def audition(self, lane, step):
+        """A sound page's knob turned while stopped: play the sound (a locked step as the step plays, with
+        its velocity and locks) now, then at most once a second while it keeps turning, and once more
+        when it stops."""
+        if self.e.playing:
+            return
+        now = time.monotonic()
+        if self._hear != (lane, step):
+            self._hear, self._heard_at = (lane, step), 0.0
+        self._turned_at = now
+        if now - self._heard_at >= HEAR_EVERY:
+            self._play_heard(now)
+        else:
+            self._hear_due = True
+
+    def _play_heard(self, now):
+        lane, step = self._hear
+        if step is None:
+            self.e.audition(lane, sequencer.DEFAULT_VELOCITY)
+        else:
+            st = self.seq.step(lane, step)
+            self.e.audition(lane, st.vel, st.locks)
+        self._heard_at, self._hear_due = now, False
+
+    def tick(self):
+        """Every frame: the last turn's sound, once the knob has stopped (or a second has gone by)."""
+        if not self._hear_due:
+            return
+        if self.e.playing:
+            self._hear_due = False
+            return
+        now = time.monotonic()
+        if now - self._turned_at >= HEAR_AFTER or now - self._heard_at >= HEAR_EVERY:
+            self._play_heard(now)
 
     # ------------------------------------------------------------ values for the screen
 
@@ -349,6 +393,7 @@ class SeqPage:
 
     def draw(self, surf):
         s, e, seq = self.t.s, self.e, self.seq
+        self.tick()
         tiny, small, mid = s.font("mono", 600, 11), s.font("mono", 600, 14), s.font("mono", 700, 15)
         grey, white, dark, purple = (125, 131, 140), (242, 243, 245), (12, 13, 16), (178, 120, 255)
         green, cursor_col = (60, 203, 127), (28, 78, 86)

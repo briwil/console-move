@@ -459,6 +459,11 @@ the big knob do, with their values. **Push knob 1** for the next mode:
   its drum key and turn: the setting is **locked** to the step under the
   cursor (a p-lock; the box shows it in green). The velocity and LFO
   destinations can't be locked.
+  While the sequencer is stopped, turning a knob here plays the sound so you
+  hear the change: right away, then once a second while you keep turning,
+  and once more half a second after you stop. A locked step plays as it
+  will in the pattern (its velocity and all its locks). Playing, you hear
+  it as the pattern comes round instead.
 
 **Beats and bars.** Each lane has a grey line between its beats: every 4
 steps at 1/16, 3 at 1/8T, 6 at 1/16T, 2 at 1/8, 8 at 1/32 (in 4/4). They
@@ -486,6 +491,13 @@ SAVE Kit, LOAD Kit, and for the sequencer's current pattern:
   on or off.
 
 SHIFT+CUT on the sequencer undoes a paste or a clear.
+
+The project menu's **NEW Project, SAVE Project, LOAD Project and SETTINGS**
+are in a second column on the right of the DRUMS menu. LEFT / RIGHT go
+across to the other column; the big knob goes down the left column, on to
+the top of the right one, and from its bottom back to the top of the left.
+Choosing one opens the project menu there; FILE from that goes back to the
+drums.
 
 **Velocity** changes a drum's loudness only while its VEL>VOL setting is ON
 (PITCH + VELOCITY or VELOCITY + CLICK page). Console's starting kit has it

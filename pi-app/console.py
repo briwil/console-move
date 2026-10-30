@@ -1331,6 +1331,7 @@ def main():
             board.heard = lambda: engine.seq_clock        # where the sequencer is (for live steps)
     project_menu = menu.Menu(os.path.join(HERE, "layouts", "menu.ui"), transport)
     project_menu.kits = kitmenu.KitMenu(os.path.join(HERE, "layouts", "menu.ui"), transport)
+    project_menu.kits.main = project_menu        # the drums menu's right column opens the project menu
     restore_terminal = start_terminal_keys(keys)
     fps = pygame.time.Clock()
     startup("controls and menus ready")

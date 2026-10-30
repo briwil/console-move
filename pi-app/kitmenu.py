@@ -9,6 +9,10 @@
 - CLEAR PATTERN empties the current pattern (like a new one); CLEAR LOCKS + STEPS takes every
   parameter lock off it and puts the steps' velocity, chance and ratchets back.
 
+The project menu's NEW, SAVE, LOAD and SETTINGS are in a second column on the right: ← / → go across,
+the big knob goes down the left column and on to the top of the right one (and round again at the end).
+Choosing one of those opens the project menu there; FILE from it goes back to the drums.
+
 It looks and works like the project menu (same layout, same naming: the big knob picks the letter,
 ← / → move, CUT deletes, PLAY is OK, FILE goes back).
 """
@@ -25,6 +29,10 @@ ITEMS = [("MACHINE", "menu_more"), ("SAVE", "menu_new"), ("LOAD", "menu_save"), 
          ("PASTE", "menu_settings"), ("CLEAR_ALL", "menu_more2"), ("CLEAR", "menu_more3")]
 TEXTS = {"MACHINE": "DRUM MACHINE", "SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern",
          "PASTE": "PASTE Pattern", "CLEAR_ALL": "CLEAR Pattern", "CLEAR": "CLEAR Locks + Steps"}
+MAIN = [("NEW", "menu_r1"), ("SAVE", "menu_r2"), ("LOAD", "menu_r3"), ("SETTINGS", "menu_r4")]   # right column
+MAIN_TEXTS = {"NEW": "NEW Project", "SAVE": "SAVE Project", "LOAD": "LOAD Project", "SETTINGS": "SETTINGS"}
+ALL = len(ITEMS) + len(MAIN)                 # choice 0-6: the left column; 7-10: the right
+LEFT_X, RIGHT_X = 600, 700                  # the columns' inside edges
 ITEM_TOP, ITEM_GAP = 84, 30                # the drums menu's 7 rows, closer together than the project menu's
 ROWS = 7                                   # saved kits shown at once (the layout's set_value1-7)
 
@@ -56,6 +64,7 @@ class KitMenu(menu.Menu):
         self.replace = None                # a name that's already saved: PLAY again replaces it
         self.pattern_clip = None           # COPY PATTERN: (machine, pattern number, the pattern)
         self.machines = []                 # MACHINE: [(id, title)] to pick from
+        self.main = None                   # the project menu (console.py sets it), for the right column
 
     @property
     def drums(self):
@@ -64,7 +73,7 @@ class KitMenu(menu.Menu):
 
     def show(self):
         self.open, self.mode, self.msg, self.replace = True, "list", "", None
-        self.choice = min(self.choice, len(ITEMS) - 1)
+        self.choice = min(self.choice, ALL - 1)
         self.refresh()
 
     # ------------------------------------------------------------ keys
@@ -86,7 +95,20 @@ class KitMenu(menu.Menu):
                 self.mode, self.msg = "list", ""
             self.refresh()
             return
+        if self.mode == "list" and name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
+            self.across()
+            self.refresh()
+            return
         super().key(name)
+
+    def across(self):
+        """← / →: the other column, on the same row (or the right column's last)."""
+        n = len(ITEMS)
+        if self.choice < n:
+            self.choice = n + min(self.choice, len(MAIN) - 1)
+        else:
+            self.choice -= n
+        self.msg = ""
 
     def turn(self, delta):
         if self.mode in ("clear", "clear_all", "paste"):
@@ -98,7 +120,7 @@ class KitMenu(menu.Menu):
             self.msg = ""
             return
         if self.mode == "list":
-            self.choice = max(0, min(len(ITEMS) - 1, self.choice + delta))
+            self.choice = (self.choice + delta) % ALL          # down the left, on to the right, round again
             self.msg = ""
             return
         self.replace = None
@@ -117,6 +139,9 @@ class KitMenu(menu.Menu):
     # ------------------------------------------------------------ actions
 
     def choose(self):
+        if self.choice >= len(ITEMS):
+            self.open_main(MAIN[self.choice - len(ITEMS)][0])
+            return
         if not self.drums:
             self.say("THE DRUM SYNTH ISN'T RUNNING")
             return
@@ -174,6 +199,17 @@ class KitMenu(menu.Menu):
             self.mode, self.msg = "load", ""
             self.pick = min(self.pick, len(self.kits) - 1)
 
+    def open_main(self, what):
+        """The right column: the project menu, doing what was chosen there."""
+        m = self.main
+        if not m:
+            return
+        self.close()
+        m.open, m.mode, m.msg, m.confirm_new = True, "list", "", False
+        m.choice = [w for w, _ in menu.ITEMS].index(what)
+        m.choose()
+        m.refresh()
+
     def create(self):
         """PLAY while naming: save the kit under that name."""
         name = "".join(self.name).strip()
@@ -224,7 +260,10 @@ class KitMenu(menu.Menu):
     def item_y(self, item):
         """Where a menu item sits: the drums menu's 7 rows, evenly spaced."""
         names = [n for _, n in ITEMS]
-        return ITEM_TOP + ITEM_GAP * names.index(item) if item in names else 0
+        if item in names:
+            return ITEM_TOP + ITEM_GAP * names.index(item)
+        right = [n for _, n in MAIN]
+        return ITEM_TOP + ITEM_GAP * right.index(item) if item in right else 0
 
     def switch_machine(self):
         """This song's drum machine. Each one keeps its own kit and its own patterns in the song."""
@@ -285,14 +324,18 @@ class KitMenu(menu.Menu):
     def refresh(self):
         s = self.s
         s.set("song", t="DRUMS")
-        self.choice = min(self.choice, len(ITEMS) - 1)
+        self.choice = min(self.choice, ALL - 1)
         listing, loading = self.mode == "list", self.mode in ("load", "machine")
         texts = TEXTS
         for label, item in menu.ITEMS:
             s.set(item, t="")
         for i, (label, item) in enumerate(ITEMS):
             on = i == self.choice
-            s.set(item, t=texts[label] if listing else "", c=menu.ON if on else menu.OFF,
+            s.set(item, t=texts[label] if listing else "", c=menu.ON if on else menu.OFF, x=LEFT_X,
+                  s=menu.SIZE_ON if on else menu.SIZE_OFF, y=self.item_y(item) - (2 if on else 0))
+        for i, (label, item) in enumerate(MAIN):
+            on = len(ITEMS) + i == self.choice
+            s.set(item, t=MAIN_TEXTS[label] if listing else "", c=menu.ON if on else menu.OFF, x=RIGHT_X,
                   s=menu.SIZE_ON if on else menu.SIZE_OFF, y=self.item_y(item) - (2 if on else 0))
         # the LOAD list, in the settings rows
         names = getattr(self, "kits", []) if self.mode == "load" else [
@@ -308,14 +351,18 @@ class KitMenu(menu.Menu):
         bar = s.get("menu_bar")
         if bar:
             if loading:
-                s.set("menu_bar", y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=bar["h"], w=1280 + 180)
-            else:
+                s.set("menu_bar", x=-180, y=self.bar_y("set_value%d" % (self.pick - top + 1)), h=bar["h"], w=1280 + 180)
+            elif self.choice < len(ITEMS):
                 item = ITEMS[self.choice][1]
-                s.set("menu_bar", y=self.bar_y(item), h=bar["h"] if listing else 0, w=self.bar_w)
+                s.set("menu_bar", x=-180, y=self.bar_y(item), h=bar["h"] if listing else 0, w=LEFT_X + 30 + 180)
+            else:
+                item = MAIN[self.choice - len(ITEMS)][1]
+                s.set("menu_bar", x=RIGHT_X - 30, y=self.bar_y(item), h=bar["h"] if listing else 0,
+                      w=1280 - RIGHT_X + 30 + 180)
         if listing:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = "BIG KNOB OR ARROW KEYS TO MOVE     PLAY TO CHOOSE     FILE: BACK TO THE DRUMS"
+            hint = "BIG KNOB: MOVE     LEFT / RIGHT: OTHER COLUMN     PLAY: CHOOSE     FILE: BACK TO THE DRUMS"
         elif loading:
             s.set("prompt", t="")
             s.set("name_text", t="")

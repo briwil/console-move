@@ -179,13 +179,16 @@ the track. EXPORT writes each track as a plain WAV.
 ## Inputs, mono and stereo tracks
 
 Each track is **MONO** or **STEREO**, and has its own input. Set them in the
-zoomed view (press the selected track's key again):
+zoomed view (press the selected track's key again). A strip of labels along the
+top of the screen sits above knobs 1-8 and shows what each one does right now
+(greyed out when it has nothing to act on, such as BOX GAIN with no box under
+the playhead):
 
 | Knob | Mono track | Stereo track |
 |---|---|---|
-| 4 | Left: mono, right: stereo | |
-| 5 | Its input: IN 1, IN 2 … or MIX (all the inputs mixed together) | Its left input |
-| 6 | | Its right input |
+| 1 | Left: mono, right: stereo | |
+| 2 | Its input: IN 1, IN 2 … or MIX (all the inputs mixed together) | Its left input |
+| 3 | | Its right input |
 
 - A new song has every track mono, track N on input N (an OP-XY in 8-channel
   mode records all 8 tracks at once). With a 2-channel device (an OP-XY in

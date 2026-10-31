@@ -1226,6 +1226,28 @@ class Transport:
         # the panel: [the track, volume / its column, ...] two columns of two lines, and the box beside the title
         return [track, vol, "%s  ·  %s" % (mode, inout), clip, box]
 
+    def knob_labels(self):
+        """The zoomed view's eight knob labels, left to right: (what it does, its value, in use right now)."""
+        e, n = self.engine, self.focus.shown
+        t = n - 1
+        st = t in e.stereo
+        src = e.source(t) if e.device else None
+        if st and isinstance(src, tuple):
+            left, right = e.channel_name(src[0]), e.channel_name(src[1])
+        else:
+            left, right = (e.input_text(t) if e.device else "NO INPUT"), "-"
+        info = e.box_info()
+        return [
+            ("MONO / STEREO", "STEREO" if st else "MONO", True),
+            ("LEFT IN" if st else "INPUT", left, True),
+            ("RIGHT IN", right, st),
+            ("BOX GAIN", "%+.1f dB" % info["gain"] if info else "NO BOX", bool(info)),
+            ("FADE IN", self.fade_text(info["in"]) if info else "NO BOX", bool(info)),
+            ("FADE OUT", self.fade_text(info["out"]) if info else "NO BOX", bool(info)),
+            ("TRACK 7 VOL", "%d%%" % round(e.volumes[6] * 100), True),
+            ("TRACK 8 VOL", "%d%%" % round(e.volumes[7] * 100), True),
+        ]
+
     def track_setup(self, number, delta):
         """The zoomed track view's knobs 1-3: 1 MONO / STEREO, 2 the input (a stereo track's left),
         3 a stereo track's right input."""
@@ -1327,6 +1349,7 @@ class Transport:
                                           "  OVERDUB" if overdub else "", "  SELECTING" if selecting else ""))
         if self.focus.active:
             self.focus.info["lines"] = self.panel_lines()
+            self.focus.info["knobs"] = self.knob_labels() if e else None
         red = "#FF5A4E" if (self.recording or ready) else "#7D838C"
         t.extra_armed = {n + 1 for n in e.arm_extra} if e else set()   # armed with SHIFT + key: outlined
         t.arm_colour = ui.rgb(red)

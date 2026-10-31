@@ -15,6 +15,7 @@ import ui
 TRACK_PARTS = ("tab", "num", "lane", "wave", "meter")
 PANEL_H = 96              # height of the reel panel under the focused track
 GAP = 6
+LABEL_H = 38             # the knob labels' strip above the big track (knobs 1-8 sit above the screen)
 SLIDE_SECONDS = 0.28
 
 
@@ -97,7 +98,7 @@ class Focus:
     def layout(self, e):
         n0 = self.shown
         span = self.bottom - self.top
-        lane_h = span - PANEL_H - GAP
+        lane_h = span - PANEL_H - GAP - LABEL_H
         home_lane = self.home.get((n0, "lane"))
         for (n, part), h in self.home.items():
             if e <= 0:
@@ -106,7 +107,7 @@ class Focus:
             if n == n0 and home_lane:
                 # grow the focused track from its own lane to the big lane
                 y0 = home_lane["y"]
-                ny = y0 + (self.top - y0) * e
+                ny = y0 + (self.top + LABEL_H - y0) * e
                 nh = home_lane["h"] + (lane_h - home_lane["h"]) * e
                 if part in ("lane", "wave"):
                     inset = h["y"] - y0
@@ -131,6 +132,7 @@ class Focus:
         x0, x1 = (lane["x"], lane["x"] + lane["w"]) if lane else (60, 1200)
         old = surf.get_clip()
         surf.set_clip(pygame.Rect(0, self.top, ui.WIDTH, self.bottom - self.top))
+        self.draw_knob_labels(surf, e)
         pygame.draw.rect(surf, (20, 22, 26), (x0, y, x1 - x0, PANEL_H), 0, 6)
 
         colour = ui.rgb((self.home.get((self.shown, "tab")) or {}).get("c", "#F2F3F5"))
@@ -170,3 +172,27 @@ class Focus:
             x = tx if i < 2 else tx + 330            # two columns of two lines
             surf.blit(small.render(text, True, col), (x, y + 46 + (i % 2) * 20))
         surf.set_clip(old)
+
+    def draw_knob_labels(self, surf, e):
+        """Eight labels along the top, one above each knob: what it does, and its value below.
+        The app fills self.info["knobs"] with eight (name, value, active) triples.
+        They appear once the track has mostly grown (no half-faded text while it slides)."""
+        knobs = self.info.get("knobs")
+        if not knobs or e < 0.6:
+            return
+        name_font, val_font = self.s.font("mono", 600, 13), self.s.font("mono", 500, 13)
+        colw = ui.WIDTH / len(knobs)
+        top = self.top
+        for i, (name, value, active) in enumerate(knobs):
+            cx = round((i + 0.5) * colw)
+            if i:
+                x = round(i * colw)
+                pygame.draw.line(surf, (40, 43, 50), (x, top + 3), (x, top + LABEL_H - 3), 1)
+            a = (242, 243, 245) if active else (80, 85, 92)
+            b = (125, 131, 140) if active else (62, 66, 72)
+            while len(value) > 1 and val_font.size(value)[0] > colw - 12:
+                value = value[:-1]                       # too long for its column: cut the end
+            n = name_font.render(name, True, a)
+            v = val_font.render(value, True, b)
+            surf.blit(n, (cx - n.get_width() // 2, top + 2))
+            surf.blit(v, (cx - v.get_width() // 2, top + 18))

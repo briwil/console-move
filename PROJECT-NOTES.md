@@ -42,7 +42,7 @@ Track8:
 | `console.py` | The app: main loop, key and knob routing (`Transport.key`, `Transport.knob`), status line, the drum page and the zoomed view's panel text. `Board` turns MIDI from the control board into key names. |
 | `audio.py` | The engine (`Engine`): ALSA in and out (pyalsaaudio), the 8 tracks, recording, playback, loop, boxes and editing, undo, save and load, export, bounce, and the output resampler (`OutPort`). |
 | `tape.py` | Draws the tape: lanes, waveforms (from `engine.levels`), boxes, ruler, grid and zoom. |
-| `focus.py` | The one-track zoomed view (press the selected track's key again), with the tape reels panel. |
+| `focus.py` | The one-track zoomed view (press the selected track's key again), with the tape reels panel and a strip of labels above knobs 1-8 (`knob_labels()` in console.py fills them). |
 | `menu.py` + `layouts/menu.ui` | Project menu: NEW, LOAD (open, rename, delete), SAVE, SETTINGS (Link/sync, tempo, time signature, export format, input, output, Wi-Fi, software update). |
 | `wifi.py` | Wi-Fi scan, connect and forget, through NetworkManager's `nmcli` (run with `sudo -n`). |
 | `drums.py`, `drumparams.py`, `drums/` | The drum synth: Erica Synths LXR-02 firmware compiled for the Pi (`drums/build.sh` makes `libdrums.so` and `libdrums_live.so`). `drumparams.py` lists every page, knob, label and range. |

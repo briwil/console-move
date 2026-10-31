@@ -118,7 +118,7 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 
 - Each track is mono or stereo (`Engine.stereo`) with its own input (`Engine.inputs`: a channel,
   "mix", or [left, right]); the AUDIO key's MULTI/STEREO/MONO modes and the two-track stereo pairs
-  are gone (Brian's choice). Set in the zoomed view, knobs 4-6.
+  are gone (Brian's choice). Set in the zoomed view, knobs 1-3 (box gain / fades on 4-6).
 - A stereo track's right channel is `tracks[t + RIGHT]` (RIGHT = 8) with its own boxes
   `regions[t + RIGHT]`, kept in step: `chans(t)` is [t] or [t, t + 8], and edits, recording,
   undo and levels work on channels. Saved as a 2-channel track N.wav; old songs' pairs convert to one

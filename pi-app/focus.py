@@ -163,7 +163,7 @@ class Focus:
         title = big.render("TRACK %d" % self.shown, True, colour)
         surf.blit(title, (tx, y + 12))
         lines = self.info.get("lines", [])
-        if len(lines) > 4:                       # the box under the playhead: knobs 1-3 change it
+        if len(lines) > 4:                       # the box under the playhead: knobs 4-6 change it
             surf.blit(small.render(lines[4], True, (242, 243, 245)), (tx + title.get_width() + 24, y + 18))
         for i, text in enumerate(lines[:4]):
             col = (242, 243, 245) if i == 0 else (125, 131, 140)

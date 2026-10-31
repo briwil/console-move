@@ -374,7 +374,7 @@ class Transport:
         elif name == "INPUT":
             if e:
                 n = self.armed
-                self.say("TRACK %d: %s  %s   ·   PRESS %d AGAIN TO ZOOM IN, THEN KNOBS 4-6 TO CHANGE" % (
+                self.say("TRACK %d: %s  %s   ·   PRESS %d AGAIN TO ZOOM IN, THEN KNOBS 1-3 TO CHANGE" % (
                     n, "STEREO" if (n - 1) in e.stereo else "MONO",
                     e.input_text(n - 1) if e.device else "NO INPUT DEVICE", n), 5)
         elif name in ("PAN_LEFT", "PAN_RIGHT"):
@@ -423,10 +423,10 @@ class Transport:
             self.drum_reset(int(name[4:]))        # the drum page: push a knob, its setting goes back to default
         elif name == "MUTE1" and self.seq_page:
             self.sp().cycle_mode()                # push knob 1 on the sequencer: the next knob mode
-        elif name in ("MUTE1", "MUTE2", "MUTE3", "SOLO1", "SOLO2", "SOLO3") and self.focus.active and e \
+        elif name in ("MUTE4", "MUTE5", "MUTE6", "SOLO4", "SOLO5", "SOLO6") and self.focus.active and e \
                 and not self.drum_page and not self.fx_page:
-            # the zoomed view: push knob 1 normalizes the box (SHIFT: gain back to 0 dB); 2 and 3: no fade
-            self.box_edit({"MUTE1": "normalize", "SOLO1": "reset_gain"}.get(name, "reset_" + ("in" if name[-1] == "2" else "out")))
+            # the zoomed view: push knob 4 normalizes the box (SHIFT: gain back to 0 dB); 5 and 6: no fade
+            self.box_edit({"MUTE4": "normalize", "SOLO4": "reset_gain"}.get(name, "reset_" + ("in" if name[-1] == "5" else "out")))
         elif name.startswith("MUTE"):
             self.mute(int(name[4:]) if name[4:] else self.armed)
         elif name.startswith("SOLO"):
@@ -644,12 +644,12 @@ class Transport:
         elif self.drum_page and self.engine and self.engine.drums and number <= 9:
             self.drum_knob(number, delta, shift)
         elif self.focus.active and self.engine and number <= 3:
-            # the zoomed track view: knobs 1-3 work on the box under the playhead
-            what = ("gain", "in", "out")[number - 1]
+            self.track_setup(number, delta)          # the zoomed view: knobs 1-3 mono / stereo, its input(s)
+        elif self.focus.active and self.engine and number <= 6:
+            # knobs 4-6 work on the box under the playhead: gain, fade in, fade out
+            what = {4: "gain", 5: "in", 6: "out"}[number]
             steps = self.knob_clicks(number, delta, shift)
             self.box_edit(what, steps * 0.5 if what == "gain" else steps)
-        elif self.focus.active and self.engine and number <= 6:
-            self.track_setup(number, delta)          # knobs 4-6: mono / stereo, and its input(s)
         elif number <= 8:
             if shift:
                 self.pan(number, delta * 0.05)          # SHIFT + a track knob: pan
@@ -1221,32 +1221,32 @@ class Transport:
         info = e.box_info()
         box = ("BOX: " + self.box_text(info)) if info else "NO BOX AT THE PLAYHEAD"
         st = (n - 1) in e.stereo
-        track = "%s  %s  (KNOBS 4-%d)" % ("STEREO" if st else "MONO", e.input_text(n - 1) if e.device else "NO INPUT",
-                                        6 if st else 5)
+        track = "%s  %s  (KNOBS 1-%d)" % ("STEREO" if st else "MONO", e.input_text(n - 1) if e.device else "NO INPUT",
+                                        3 if st else 2)
         # the panel: [the track, volume / its column, ...] two columns of two lines, and the box beside the title
         return [track, vol, "%s  ·  %s" % (mode, inout), clip, box]
 
     def track_setup(self, number, delta):
-        """The zoomed track view's knobs 4-6: 4 MONO / STEREO, 5 the input (a stereo track's left),
-        6 a stereo track's right input."""
+        """The zoomed track view's knobs 1-3: 1 MONO / STEREO, 2 the input (a stereo track's left),
+        3 a stereo track's right input."""
         e, n = self.engine, self.focus.shown
         t = n - 1
         if self.recording:
             self.say("STOP RECORDING FIRST", 2)
             return
-        if number == 4:
+        if number == 1:
             on = delta > 0
             if e.set_stereo(t, on):
                 self.say("TRACK %d: %s%s" % (n, "STEREO" if on else "MONO",
                                              "  (BOTH SIDES MIXED TOGETHER; SHIFT+CUT UNDOES)" if not on and e.track_end(t)
                                              else ""), 3)
             else:
-                self.say("TRACK %d IS %s (KNOB 4: LEFT MONO, RIGHT STEREO)" % (n, "STEREO" if t in e.stereo else "MONO"), 2)
+                self.say("TRACK %d IS %s (KNOB 1: LEFT MONO, RIGHT STEREO)" % (n, "STEREO" if t in e.stereo else "MONO"), 2)
             return
-        if number == 6 and t not in e.stereo:
-            self.say("TRACK %d IS MONO: ONE INPUT, ON KNOB 5" % n, 2)
+        if number == 3 and t not in e.stereo:
+            self.say("TRACK %d IS MONO: ONE INPUT, ON KNOB 2" % n, 2)
             return
-        text = e.step_input(t, number - 5, delta)
+        text = e.step_input(t, number - 2, delta)
         if text is None:
             self.say("NO INPUT DEVICE", 2)
         else:

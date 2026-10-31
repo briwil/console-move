@@ -263,16 +263,17 @@ key to zoom to that one instead.
 
 ### Gain, normalize and fades (in the zoomed view)
 
-Here knobs 1–3 work on the box under the playhead (both sides of a stereo
-track), and knobs 4–6 set the track to mono or stereo and pick its input(s)
+Here knobs 1–3 set the track to mono or stereo and pick its input(s): 1 MONO /
+STEREO, 2 the input (a stereo track's left), 3 a stereo track's right. Knobs 4–6
+work on the box under the playhead (both sides of a stereo track)
 (see Inputs above). What they're set to shows next to the track name, and the waveform
 shows it too.
 
 | Knob | Turn | Push |
 |---|---|---|
-| 1 | Gain, ½ dB a click (−40 to +24 dB) | Normalize: the box's loudest peak to −1 dB (SHIFT+push: gain back to 0 dB) |
-| 2 | Fade in (5 ms up to 30 s) | Fade in off |
-| 3 | Fade out | Fade out off |
+| 4 | Gain, ½ dB a click (−40 to +24 dB) | Normalize: the box's loudest peak to −1 dB (SHIFT+push: gain back to 0 dB) |
+| 5 | Fade in (5 ms up to 30 s) | Fade in off |
+| 6 | Fade out | Fade out off |
 
 - Nothing is written into the recording: the gain and fades stay with the
   box, so you can always change them back. UNDO (SHIFT+CUT) takes back a
@@ -314,7 +315,7 @@ PLAY plays the tape, and only the instruments that a track armed with SHIFT + it
 **Recording one.** Each instrument has its own inputs, named after it: **606 DRUM 1-8**
 (each drum on its own), **606 KIT L / KIT R** (the whole kit in stereo, for a stereo
 track) and **606 KIT** (the kit in mono). Set a track's input in the zoomed view
-(knobs 4-6); only loaded slots are offered. Mono tracks also have **ALL KITS**. Then
+(knobs 1-3); only loaded slots are offered. Mono tracks also have **ALL KITS**. Then
 RECORD and PLAY on the tape page: that instrument's pattern starts from step 1 and
 goes onto the track.
 
@@ -411,7 +412,7 @@ the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
    | Voice | Drum 1 (kick) | Drum 2 | Drum 3 | Snare | Cymbal | Hi-hat closed | Hi-hat open |
 
 3. Each track's input says what it records (set in the zoomed view, knobs
-   4-6; see Inputs above). Each instrument's inputs are **DRUM 1-8**, each
+   1-3; see Inputs above). Each instrument's inputs are **DRUM 1-8**, each
    drum on its own (slot 1's drum 1 onto track 1 …, as a new song starts), and
    the whole kit: **KIT L / KIT R** on a stereo track, or **KIT** on a mono one
    (see Instruments above). SHIFT+AUDIO arms all 8 tracks.

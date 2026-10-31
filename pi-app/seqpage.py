@@ -14,8 +14,8 @@
   when it stops).
 - Track key 8 undoes (10 steps). Knob 10 picks the pattern.
 - Each lane has a box of 8 steps. ← / → move the picked lane's box 8 steps; SHIFT + track key 1-8
-  puts that step of the box on (or off) on the picked lane. On the TR-808, SHIFT + knob 1 switches
-  the drum keys and the grid between drums 1-8 and 9-16.
+  puts that step of the box on (or off) on the picked lane. On a machine with more than 8 drums
+  (TR-808, MACHINEDRUM), SHIFT + knob 1 switches the drum keys and the grid between drums 1-8 and 9-16.
 """
 import time
 
@@ -109,7 +109,7 @@ class SeqPage:
         return "%d-%d" % (b + 1, b + BOX)
 
     def bank(self):
-        """0: drums 1-8 on the keys and the grid; 1: drums 9-16 (the TR-808)."""
+        """0: drums 1-8 on the keys and the grid; 1: drums 9-16 (machines with more than 8)."""
         return self.lane // 8
 
     def move_box(self, way):
@@ -228,7 +228,7 @@ class SeqPage:
         e, seq = self.e, self.seq
         clicks = self.t.knob_clicks(number, delta, shift)
         if number == 1 and shift and self.d.lanes > 8:
-            # SHIFT + knob 1 on the TR-808: the keys and the grid switch between drums 1-8 and 9-16
+            # SHIFT + knob 1 with more than 8 drums (TR-808, MACHINEDRUM): the keys and grid go 1-8 / 9-16
             bank = 1 if delta > 0 else 0
             if bank != self.bank():
                 self.lane = min(self.d.lanes - 1, bank * 8 + self.lane % 8)

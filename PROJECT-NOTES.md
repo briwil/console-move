@@ -123,8 +123,27 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   `regions[t + RIGHT]`, kept in step: `chans(t)` is [t] or [t, t + 8], and edits, recording,
   undo and levels work on channels. Saved as a 2-channel track N.wav; old songs' pairs convert to one
   stereo track. DROP folds stereo to mono / doubles mono; bounce onto a stereo track is stereo.
-- The drum synth as an input has 10 channels: 0-7 its lanes (DRUM n, dry with sends copied), 8-9 the
-  kit in stereo with its reverb and delay printed (KIT L/R; a mono track's MIX is the kit).
+- The instruments as an input: SLOT_CH = 11 channels per slot (88 in all): 0-7 its lanes (DRUM n, dry
+  with sends copied), 8-9 the kit in stereo with its reverb and delay printed (KIT L/R), 10 the kit mono
+  (KIT). Slot 1's are 0-10, so older songs' drum inputs still point at the same things. A mono track's
+  MIX is ALL KITS. Names say the machine: 606 DRUM 3, MD KIT L+R.
+
+### INSTRUMENTS page (Oct 2026)
+
+- Brian's design: the MIDI key from the tape opens `instpage.py`, 8 slots (`Engine.slots`, machine ids
+  or None; `slot` = the one the drum and sequencer pages show; `slot_mutes`). Push knob 1 opens or
+  picks, SHIFT+push changes / removes, track keys mute, SHIFT+MIDI (`DRUMS_BACK`) goes back a page.
+  MIDI on the drum page toggles drum page / sequencer. Each machine in one slot only (each library is
+  one engine). Arranging is done on the tape (record each pattern, then edit), not on this page.
+- `Drums.get(machine)` starts a machine without switching to it; `use()` is the shown one. A machine's
+  `render(with_live=False)` still applies settings changes (only hits by hand wait).
+- `Engine._instruments_block`: each sounding slot renders its own sequencer (shared `seq_clock`) into
+  its 11 channels, with its own printed FX (`_slot_fx`) and read-ahead FIFO (`_seq_fifos`).
+  `sounding_slots()`: on the instrument pages (`inst_view`, set each tick) every unmuted slot, and the
+  tape isn't mixed; on the tape page only the slots armed tracks record from. The shown slot also
+  renders its live engine (hits by hand) on the instrument pages.
+- Saved as "slots", "slot", "slot_mutes"; songs without them get their drum_machine in slot 1. Kits
+  and patterns stay per machine (drum_kits / drum_seqs), so a removed machine comes back as it was.
 
 ### MACHINEDRUM (Oct 2026)
 
@@ -150,7 +169,7 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 ### Drum effects printed (Oct 2026)
 
 - Recording the drum synth in STEREO or MONO prints its reverb and delay sends into the take
-  (`Engine._drum_input`, with its own `_drum_rev` / `_drum_dly` at the FX page's settings). MULTI
+  (`Engine._drum_input`, each instrument with its own reverb and delay at the FX page's settings). MULTI
   stays dry and copies each drum's sends onto its track (as before). Brian asked for printed.
 
 ### Sequencer (grid)

@@ -272,15 +272,17 @@ class KitMenu(menu.Menu):
         mid, title = self.machines[self.pick]
         e, t = self.engine, self.transport
         if mid == self.drums.machine:
-            self.say("THIS SONG IS ALREADY ON THE %s" % title)
+            self.say("THIS SLOT IS ALREADY THE %s" % title)
+            return
+        if e.slot_of(mid) is not None:
+            self.say("THE %s IS IN SLOT %d ALREADY (EACH MACHINE CAN BE IN ONE SLOT)" % (title, e.slot_of(mid) + 1))
             return
         if not e.set_drum_machine(mid):
             self.say("THE %s ISN'T BUILT YET: RUN ~/console/pi-app/setup.sh ONCE" % title)
             return
-        t.drum_voice, t.drum_key, t.drum_tab = 0, 1, 0
-        t.seqp.lane, t.seqp.mode, t.seqp.box = 0, 0, {}
+        t.reset_drum_view()
         self.close()
-        t.say("DRUMS: %s  (ITS OWN KIT AND PATTERNS)" % title, 4)
+        t.say("SLOT %d: %s  (ITS OWN KIT AND PATTERNS)" % (e.slot + 1, title), 4)
 
     def paste_pattern(self):
         """The copied pattern onto the current one (SHIFT+CUT on the sequencer undoes it)."""
@@ -339,7 +341,8 @@ class KitMenu(menu.Menu):
                   s=menu.SIZE_ON if on else menu.SIZE_OFF, y=self.item_y(item) - (2 if on else 0))
         # the LOAD list, in the settings rows
         names = getattr(self, "kits", []) if self.mode == "load" else [
-            title + ("   (THIS SONG)" if self.drums and mid == self.drums.machine else "")
+            title + ("   (THIS SLOT)" if self.drums and mid == self.drums.machine else
+                     "   (SLOT %d)" % (self.engine.slot_of(mid) + 1) if self.engine.slot_of(mid) is not None else "")
             for mid, title in getattr(self, "machines", [])]
         top = max(0, min(self.pick - ROWS // 2, len(names) - ROWS)) if loading else 0
         for r in range(ROWS):
@@ -367,7 +370,7 @@ class KitMenu(menu.Menu):
             s.set("prompt", t="")
             s.set("name_text", t="")
             hint = ("LOAD A KIT     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK" if self.mode == "load" else
-                    "DRUM MACHINE FOR THIS SONG     BIG KNOB: PICK ONE     PLAY: SWITCH     FILE: BACK")
+                    "DRUM MACHINE FOR THIS SLOT     BIG KNOB: PICK ONE     PLAY: SWITCH     FILE: BACK")
         elif self.mode == "paste":
             s.set("prompt", t="PASTE PATTERN %d ONTO" % (self.pattern_clip[1] + 1), y=self.prompt_y)
             s.set("name_text", t="PATTERN %d?" % (self.seq.current + 1))

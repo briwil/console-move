@@ -48,8 +48,8 @@ FILE (Tab or Esc on a keyboard) goes back to the song.
     the bar lines, the clock (bar.beat.16th), SHIFT+arrow bar moves and the
     first loop. The tempo is always in quarter notes. Saved with the song.
   - **INPUT:** which USB audio device Console records from (the OP-XY, a
-    RØDE, an audio interface…), or DRUM SYNTH, the built-in drums (see Drum
-    synth below). Until you pick one, it uses the first one it
+    RØDE, an audio interface…), or INSTRUMENTS, the built-in drum machines (see
+    Instruments below). Until you pick one, it uses the first one it
     finds. If the one you picked is unplugged, it records from another one
     and says so here, and switches back by itself when it's plugged in again.
     The tape runs at 44.1 kHz, so record from devices that can do 44.1 kHz
@@ -105,7 +105,7 @@ stereo mix) in the Exports folder.
 | AUDIO | Shows the selected track's input (mono or stereo, and which inputs); change it in the zoomed view (see Inputs below) | Arm all 8 tracks / back to just the selected one |
 | FILE | Open / close the project menu | |
 | FX | Effects pages: REVERB, then DELAY, then back to the tape (see Effects below) | |
-| MIDI | The drum synth: opens the drum page (track keys 1–7 play the drums) and makes it the input. Again: the sequencer. Again: back to the tape (see Drum synth and Drum sequencer below) | |
+| MIDI | The INSTRUMENTS page (and makes the instruments the input). There: opens the picked slot's drum page; then it goes between the drum page and its sequencer (see Instruments below) | Back: drum page or sequencer → INSTRUMENTS → the tape |
 | IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
 | CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space, from every track you hear that has a box there. Hold to take several boxes (see below) | Undo |
@@ -288,11 +288,41 @@ shows it too.
 - Every box edge with nothing right next to it gets a tiny 1 ms fade, and so
   do the joins where DROP puts something down, so edits don't click.
 
-## Drum synth (the MIDI key)
+## Instruments (the MIDI key)
 
-**Four drum machines.** On the drum page or the sequencer, press **FILE → DRUM
-MACHINE** and pick one. The song remembers it, and new songs start with the one you
-used last.
+The MIDI key from the tape opens the **INSTRUMENTS** page: 8 slots, each empty or
+one of the drum machines below (synths come in a later version). It's where you
+choose what's loaded; you make each one's patterns on its drum and sequencer pages,
+then record them onto the tape and cut and move them there like any recording.
+
+- **Knob 1** (or the big knob) picks a slot.
+- **Push knob 1** on an empty slot: pick an instrument for it. On a loaded slot: open
+  it, on its drum page. Then **MIDI** goes between the drum page and its sequencer.
+- **SHIFT + push knob 1** on a loaded slot: CHANGE INSTRUMENT or REMOVE. A removed
+  machine's kit and patterns stay in the song, so putting it back finds them.
+- **Track keys 1–8** mute and unmute slots 1–8.
+- **SHIFT+MIDI** goes back: from the drum page or sequencer to INSTRUMENTS, and from
+  there to the tape. (FILE also closes the pick list.)
+- Each drum machine can be in **one slot** at a time.
+- Each row shows the instrument, its current pattern at a glance and which pattern
+  it is, and MUTED, PLAYING or EDITING (the one the drum and sequencer pages show).
+
+**What you hear.** On the INSTRUMENTS, drum and sequencer pages, PLAY plays every
+loaded slot that isn't muted, all together, and **not the tape**. On the tape page,
+PLAY plays the tape, and only the instruments an armed track records from.
+
+**Recording one.** Each instrument has its own inputs, named after it: **606 DRUM 1-8**
+(each drum on its own), **606 KIT L / KIT R** (the whole kit in stereo, for a stereo
+track) and **606 KIT** (the kit in mono). Set a track's input in the zoomed view
+(knobs 4-6); only loaded slots are offered. Mono tracks also have **ALL KITS**. Then
+RECORD and PLAY on the tape page: that instrument's pattern starts from step 1 and
+goes onto the track.
+
+A new song starts with the drum machine you used last in slot 1. A song from before
+the INSTRUMENTS page opens with its drum machine, kit and patterns in slot 1.
+
+**Four drum machines.** Pick them on the INSTRUMENTS page, or change the open slot's
+with **FILE → DRUM MACHINE** on its drum page or sequencer.
 - **LXR-02** is the one described below.
 - **TR-606** (6W6) and **TR-808** (8W8) are from Schwung on the Ableton Move.
 - **MACHINEDRUM** is the Elektron Machinedrum's TRX, EFM, P-I and GND machines, as
@@ -331,9 +361,9 @@ Console has a drum machine built in: the six drum voices of the Erica Synths
 LXR-02, running on the Pi from its open-source firmware. It's an input, like
 the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
 
-1. Select the track to record onto first, then press the **MIDI** key (`D` on a keyboard). The bottom right
-   shows the drum page. The first time, this also sets SETTINGS > INPUT to
-   DRUM SYNTH; set it back there to record from the OP-XY again.
+1. Press the **MIDI** key (`D` on a keyboard) for the INSTRUMENTS page, then push
+   knob 1 on the slot to open its drum page. The first time, this also sets
+   SETTINGS > INPUT to INSTRUMENTS; set it back there to record from the OP-XY again.
 2. Track keys **1–7** play the drums (no velocity yet, every hit is the same):
 
    | Key | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
@@ -341,16 +371,16 @@ the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
    | Voice | Drum 1 (kick) | Drum 2 | Drum 3 | Snare | Cymbal | Hi-hat closed | Hi-hat open |
 
 3. Each track's input says what it records (set in the zoomed view, knobs
-   4-6; see Inputs above). The drum synth's inputs are **DRUM 1-8**, each
-   drum on its own (drum 1 onto track 1 …, as a new song starts), and the
-   whole kit: **KIT L / KIT R** on a stereo track, or **KIT** (the MIX choice)
-   on a mono one. SHIFT+AUDIO arms all 8 tracks.
+   4-6; see Inputs above). Each instrument's inputs are **DRUM 1-8**, each
+   drum on its own (slot 1's drum 1 onto track 1 …, as a new song starts), and
+   the whole kit: **KIT L / KIT R** on a stereo track, or **KIT** on a mono one
+   (see Instruments above). SHIFT+AUDIO arms all 8 tracks.
 4. RECORD, play, RECORD again to stop, as usual. Hits land on the tape where
    you pressed the key.
 
 On the drum page the track keys are drum pads, so they don't select tracks;
-SHIFT+track still arms one. Press MIDI (twice: it goes through the
-sequencer) to get the track keys back.
+SHIFT+track still arms one. SHIFT+MIDI twice (to INSTRUMENTS, then the tape)
+gets the track keys back.
 
 **Push a knob** on the drum page to put its setting back to where the Init Kit has it.
 
@@ -398,10 +428,11 @@ instead of the project menu:
 
 Kits are kept in `~/console-data/kits/`, so any song can load them.
 
-## Drum sequencer (MIDI key, second press)
+## Drum sequencer (MIDI key on the drum page)
 
-The MIDI key cycles: drum page → sequencer → back to the tape. The sequencer
-plays whenever the tape plays, but on its own clock: every PLAY starts the
+The MIDI key goes between the drum page and its sequencer; SHIFT+MIDI goes back to
+INSTRUMENTS. Each instrument has its own sequencer and patterns. A sequencer plays
+whenever PLAY is on and its instrument is sounding (see Instruments), on its own clock: every PLAY starts the
 pattern from step 1, wherever the tape is, and tape loops and moving the
 playhead don't touch it (a 24-step lane keeps going through a 1-bar loop). It
 records like playing the keys does: onto the armed tracks, each from its
@@ -570,7 +601,8 @@ On a keyboard, **W** does the same as FX.
 | 9 / 0 | Armed track volume down / up |
 | ( / ) | Headphone volume down / up |
 | W | FX: reverb page, delay page, back |
-| D | Drum synth page on / off (then 1–7 play the drums) |
+| D | The MIDI key: INSTRUMENTS, then a slot's drum page, then drum page / sequencer |
+| Shift+D | SHIFT+MIDI: back (drum pages → INSTRUMENTS → the tape) |
 | , / . | Pan the selected track left / right |
 | Tab or Esc | Project menu |
 | Q | Quit (ignored when the app starts at boot) |

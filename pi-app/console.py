@@ -64,7 +64,7 @@ CHAR_ACTIONS = {
     "s": "SPLICE", "S": "SPLICE_ALL", "a": "SELECT", "A": "SELECT", "u": "UNDO", "U": "UNDO", "m": "MUTE", "M": "SOLO",
     "o": "REC_MODE", "O": "REC_MODE", "f": "FOCUS", "F": "FOCUS",
     "9": "VOL_DOWN", "0": "VOL_UP", "(": "PHONES_DOWN", ")": "PHONES_UP", "h": "HOME", "H": "HOME", "`": "ARM_ALL", "~": "ARM_ALL",
-    "b": "BOUNCE", "B": "BOUNCE", "w": "FX", "W": "FX", "d": "DRUMS", "D": "DRUMS", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
+    "b": "BOUNCE", "B": "BOUNCE", "w": "FX", "W": "FX", "d": "DRUMS", "D": "DRUMS_BACK", ",": "PAN_LEFT", "<": "PAN_LEFT", ".": "PAN_RIGHT", ">": "PAN_RIGHT",
 }
 for _n, _ch in enumerate("!@#$%^&*", 1):              # Shift+1..8 on a US keyboard
     CHAR_ACTIONS[_ch] = "ARM%d" % _n
@@ -136,7 +136,7 @@ BOARD_KEYS = ["INPUT", "DRUMS", "FX", "FILE", "SPLICE", "CUT", "LIFT", "DROP",
 BOARD_KEYS[6] = "COPY"                # the LIFT key copies (lifts a copy off the tape)
 WITH_SHIFT = {"LEFT": "LOOP_IN", "RIGHT": "LOOP_OUT", "CUT": "UNDO", "COPY": "SELECT",
               "DROP": "DROP_INSERT", "SPLICE": "SPLICE_ALL", "PLAY": "HOME", "RECORD": "REC_MODE",
-              "LOOP": "CLEAR_REGION", "INPUT": "ARM_ALL", "EXPORT": "BOUNCE"}
+              "LOOP": "CLEAR_REGION", "INPUT": "ARM_ALL", "EXPORT": "BOUNCE", "DRUMS": "DRUMS_BACK"}
 # knob pushes: notes 32-42 = ENC1-ENC11
 HOLD_KEYS = ("COPY", "CUT")            # hold one and move to take several pieces; let go to copy / cut
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
@@ -228,8 +228,11 @@ class Transport:
         import drumpage
         self.drumpage = drumpage.DrumPage(self)
         self._knob_times = {}                     # knob -> when it last clicked, to speed up fast turns
-        self.seq_page = False                     # the MIDI key's second press: the sequencer
+        self.seq_page = False                     # the MIDI key on the drum page: its sequencer
         self.seqp = seqpage.SeqPage(self)
+        import instpage
+        self.inst_page = False                    # the MIDI key from the tape: the INSTRUMENTS page
+        self.instp = instpage.InstPage(self)
         screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
@@ -373,6 +376,17 @@ class Transport:
             self.bounce()
         elif name == "DRUMS":
             self.drums_key()
+        elif name == "DRUMS_BACK":
+            self.back_key()
+        elif self.inst_page and not self.fx_page and (name.startswith("TRACK") or name.startswith("ARM")
+                                                       or name.startswith("MUTE") or name.startswith("SOLO")):
+            # the INSTRUMENTS page: track keys mute slots, push knob 1 opens / picks (SHIFT: change, remove)
+            if name.startswith("TRACK"):
+                self.instp.mute(int(name[5:]))
+            elif name == "MUTE1":
+                self.instp.push()
+            elif name == "SOLO1":
+                self.instp.shift_push()
         elif name.startswith("TRACK") and self.pad(int(name[5:])):
             pass                                  # a keyboard number key on the drum page: played
         elif name.startswith("TRACK"):
@@ -428,28 +442,54 @@ class Transport:
     PAD_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
 
     def drums_key(self):
-        """The MIDI key: the drum page, then the sequencer, then back to the tape. Over an FX page it
-        closes the FX page first (showing the drum page or sequencer that was under it, or opening it)."""
+        """The MIDI key, forwards: the tape -> the INSTRUMENTS page -> the picked slot's drum page, then
+        between the drum page and its sequencer. Over an FX page it closes the FX page first."""
         e = self.engine
         if self.fx_page:
             self.fx_page = None
-            if self.drum_page:
+            if self.drum_page or self.inst_page:
                 return
-        if self.drum_page and not self.seq_page:
-            self.seq_page = True
-            return
         if self.drum_page:
-            self.drum_page = self.seq_page = False
+            self.seq_page = not self.seq_page
             self.seqp.held = {}
+            return
+        if self.inst_page:
+            self.instp.push()
             return
         if not e or not e.drums:
             import drums
             self.say(getattr(drums, "PROBLEM", "") or "THE DRUM SYNTH ISN'T AVAILABLE", 4)
             return
-        self.drum_page = True
+        self.inst_page = True
+        if e.slot is not None:
+            self.instp.row = e.slot
         if e.input_choice != "DRUMS":
-            e.set_input("DRUMS", "DRUM SYNTH")
-            self.say("INPUT: DRUM SYNTH  (SETTINGS > INPUT TO CHANGE BACK)", 4)
+            e.set_input("DRUMS", "INSTRUMENTS")
+            self.say("INPUT: INSTRUMENTS  (SETTINGS > INPUT TO CHANGE BACK)", 4)
+
+    def back_key(self):
+        """SHIFT+MIDI, back: the drum page or sequencer -> INSTRUMENTS -> the tape."""
+        if self.fx_page:
+            self.fx_page = None
+            return
+        if self.drum_page:
+            self.drum_page = self.seq_page = False
+            self.seqp.held = {}
+            self.inst_page = True
+            if self.engine and self.engine.slot is not None:
+                self.instp.row = self.engine.slot
+            return
+        if self.inst_page:
+            if self.instp.mode:
+                self.instp.cancel()
+                return
+            self.inst_page = False
+
+    def reset_drum_view(self):
+        """The drum and sequencer pages start at the first drum (another instrument is showing)."""
+        self.drum_voice, self.drum_key, self.drum_tab = 0, 1, 0
+        self.seqp.lane, self.seqp.mode, self.seqp.box = 0, 0, {}
+        self.seqp.held, self.seqp.placed = {}, {}
 
     def pad(self, n, shift=False):
         """Track key n on the drum page: play the drum on lane n (with SHIFT, lane n + 8 on a machine with
@@ -538,6 +578,8 @@ class Transport:
             return
         if self.fx_page and self.engine and not (number == 10 and shift):
             self.fx_knob(number, delta)           # the FX pages go over everything, the drum pages too
+        elif self.inst_page:
+            self.instp.knob(number, delta)
         elif self.seq_page and self.engine and self.engine.drums and number <= 10 and not (number == 10 and shift):
             self.seqp.knob(number, delta, shift)
         elif self.drum_page and self.engine and self.engine.drums and number <= 9:
@@ -668,6 +710,8 @@ class Transport:
         return "%d%%" % round(v * 100)
 
     def draw_page(self, surf, it=None):
+        if self.inst_page and not self.fx_page:
+            return                                # drawn over the whole screen at the end (draw_full_page)
         if self.fx_page:
             self.draw_fx(surf, it)
         elif self.seq_page and self.engine and self.engine.drums:
@@ -684,6 +728,8 @@ class Transport:
         """Pages that take the whole screen, drawn after everything else."""
         if self.full_drum_page():
             self.drumpage.draw(surf)
+        elif self.inst_page and not self.fx_page:
+            self.instp.draw(surf)
 
     def draw_drums(self, surf):
         """The drum page: knob n's setting across track n's lane, and the voices and pages on the right."""
@@ -994,6 +1040,7 @@ class Transport:
     def tick(self, seconds):
         t, e = self.tape, self.engine
         if e:
+            e.inst_view = bool(self.inst_page or self.drum_page)   # there every instrument plays, the tape doesn't
             self.update_glide(seconds)
             was = self._playing
             t.pos = e.beats()
@@ -1232,11 +1279,11 @@ class Transport:
         elif not e:
             hint = "DEMO: NO AUDIO ENGINE"
         elif self.drum_page and not (e.device and e.drums_input):
-            hint = "DRUM SYNTH STARTING..."
+            hint = "INSTRUMENTS STARTING..."
         elif self.seq_page:
-            hint = "SEQUENCER  \u00b7  THE TAPE PLAYS BUT DOESN'T RECORD HERE  \u00b7  MIDI KEY: BACK TO THE TAPE"
+            hint = "SEQUENCER  \u00b7  MIDI: DRUM PAGE  \u00b7  SHIFT+MIDI: INSTRUMENTS"
         elif self.drum_page:
-            hint = "DRUMS  ·  %s  ·  MIDI KEY TO LEAVE" % self.routing_text(armed)
+            hint = "DRUMS  ·  MIDI: SEQUENCER  ·  SHIFT+MIDI: INSTRUMENTS"
         elif self.fx_page:
             hint = "FX: %s  \u00b7  PRESS FX FOR %s" % (self.fx_page.upper(), "DELAY" if self.fx_page == "reverb" else "THE TRACKS")
         elif not e.device:
@@ -1411,6 +1458,8 @@ def run_loop(keys, screen, frame, display, transport, project_menu, fps, rotate,
                 project_menu.key(name)
             elif project_menu.kits.open:
                 project_menu.kits.key(name)
+            elif name == "FILE" and transport.inst_page and transport.instp.mode:
+                transport.instp.cancel()            # FILE closes the INSTRUMENTS page's list
             elif name == "FILE" and transport.drum_page:
                 project_menu.kits.show()            # on the drum page, FILE is the drum kit menu
             elif name == "FILE":

@@ -284,10 +284,9 @@ class LXR:
         """The next frames of sound (audio thread): (sequencer, by hand), each (frames, 6) float32, one mono
         channel per voice. events: the sequencer's hits in this block, [(offset, lane, velocity, locks)].
         With only one engine (the copy failed), everything is in the first and the second is silent."""
-        todo = []
-        if with_live:                        # False: only the sequencer's engine runs
-            with self._lock:
-                todo, self._pending = self._pending, []
+        with self._lock:                     # settings changes always; hits by hand only with_live
+            todo = [t for t in self._pending if with_live or t[0] != "hit"]
+            self._pending = [] if with_live else [t for t in self._pending if t[0] == "hit"]
         seq = np.zeros((frames, VOICES), np.float32)
         live = np.zeros((frames, VOICES), np.float32)
         if not AVAILABLE:
@@ -583,10 +582,9 @@ class Schwung:
 
     def render(self, frames, events=(), with_live=True):
         """As LXR.render: (sequencer, by hand), each (frames, voices)."""
-        todo = []
-        if with_live:
-            with self._lock:
-                todo, self._pending = self._pending, []
+        with self._lock:                     # settings changes always; hits by hand only with_live
+            todo = [t for t in self._pending if with_live or t[0] != "hit"]
+            self._pending = [] if with_live else [t for t in self._pending if t[0] == "hit"]
         seq = np.zeros((frames, self.voices), np.float32)
         live = np.zeros((frames, self.voices), np.float32)
         engines = (self._lib, self._live) if self.two_engines else (self._lib,)
@@ -835,7 +833,8 @@ threading.Thread(target=_prebuild, daemon=True, name="drum builds").start()
 
 
 class Drums:
-    """The song's drum machine. Everything is passed on to it (Drums().use() picks another)."""
+    """The song's drum machines. Everything is passed on to the one being edited (use() picks it); get()
+    gives any of them (each instrument slot plays its own)."""
 
     def __init__(self, machine="lxr"):
         self.__dict__["_machines"] = {}
@@ -844,21 +843,29 @@ class Drums:
         if not self.use(machine):
             self.use("lxr")
 
-    def use(self, machine):
-        """Switch to a machine ("lxr", "606", "808", "md"). Returns True if it's there (built and working)."""
+    def get(self, machine):
+        """A machine ("lxr", "606", "808", "md"), started if it isn't yet, without switching to it (each
+        instrument slot plays its own). None if it isn't there (not built or not working)."""
         ms = self._machines
         if machine not in ms:
             try:
                 ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
             except Exception as e:
                 print("Drums: the %s isn't available: %s" % (machine, e))
-                return False
+                return None
             if machine != "lxr" and not ms[machine].available:
                 del ms[machine]
-                return False
+                return None
             if machine in self.saved_kits:
                 ms[machine].load_kit(self.saved_kits[machine])
-        self.__dict__["m"] = ms[machine]
+        return ms[machine]
+
+    def use(self, machine):
+        """Switch to a machine: the one the drum and sequencer pages show. Returns True if it's there."""
+        m = self.get(machine)
+        if m is None:
+            return False
+        self.__dict__["m"] = m
         return True
 
     def restore(self, machine, kits, kit=None):

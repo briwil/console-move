@@ -55,7 +55,11 @@ import sequencer
 TRACKS = 8
 RIGHT = TRACKS           # a stereo track's right channel is at track index + RIGHT
 CHANNELS = 2 * TRACKS
-DRUM_KIT = 8             # the drum synth as an input: channels 0-7 are its lanes, 8-9 the kit in stereo
+DRUM_KIT = 8             # in each instrument's input channels: 0-7 its drums, 8-9 the kit in stereo, 10 the kit mono
+SLOTS = 8                # instrument slots (the INSTRUMENTS page)
+SLOT_CH = 11             # input channels per slot: slot n's are n * SLOT_CH ...
+INST_CHANNELS = SLOTS * SLOT_CH
+MACHINE_SHORT = {"lxr": "LXR", "606": "606", "808": "808", "md": "MD"}   # in input names: 606 KIT L+R
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
 PERIODS = 8              # blocks queued in the output buffer (about 90 ms: room for the screen drawing)
@@ -71,10 +75,11 @@ DRUMS_MONITOR = 0.8      # how loud you hear the drum synth as you play it (a tr
 
 
 def drum_device(channels=None):
-    """The drum synth, as an input device (channels 0-7 one per drum, 8-9 the kit in stereo), or None."""
+    """The instruments, as an input device (SLOT_CH channels for each slot: 0-7 one per drum, 8-9 the kit in
+    stereo, 10 the kit mono), or None."""
     if not (drums and drums.AVAILABLE):
         return None
-    return {"id": DRUMS_ID, "name": "Drum Synth", "virtual": True,
+    return {"id": DRUMS_ID, "name": "Instruments", "virtual": True,
             "capture": {"channels": channels or drums.VOICES, "format": "FLOAT", "rates": [44100]}}
 
 
@@ -534,11 +539,16 @@ class Engine:
         self.fx = dict(effects.DEFAULTS) if effects else {}
         self._rev = self._dly = None            # the effects, made by the audio thread
         self.seq_clock = 0                      # the sequencer's own clock: frames since PLAY (tape loops don't touch it)
-        self._drum_rev = self._drum_dly = None  # the drum synth's own reverb and delay, printed into STEREO/MONO takes
-        self._drum_fx_ringing = 0               # frames to keep them running after the sends go to 0
+        self._slot_fx = {}                      # machine -> [reverb, delay, frames to keep ringing]: each
+                                                # instrument's own effects, printed into its KIT inputs
+        self._seq_fifos = {}                    # machine -> its sequencer's sound waiting read_ahead frames
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
-        self.seq = sequencer.Sequencer()        # the drum sequencer's patterns (saved with the song) ...
+        self.seq = sequencer.Sequencer()        # the shown instrument's patterns (saved with the song) ...
         self.seqs = {}                          # ... one sequencer per drum machine: {machine: Sequencer}
+        self.slots = [None] * SLOTS             # the INSTRUMENTS page: each slot's machine ("606"...) or None
+        self.slot = None                        # the slot the drum and sequencer pages show
+        self.slot_mutes = set()                 # muted slots
+        self.inst_view = False                  # True on the instrument pages: every instrument plays, the tape doesn't
         self.seq_hits = [0.0] * sequencer.MAX_LANES  # when each lane's last sequencer hit is heard (for the screen)
         self._auditions = []                         # hits asked for by audition(), for the next block
         self.loop_on = False
@@ -551,7 +561,7 @@ class Engine:
         self.rec_mode = "replace"               # "replace" writes over the tape, "overdub" adds to it
         self.armed = 4                          # the selected track, 1-8
         self.arm_extra = set()                  # other armed tracks (0-7), recording along with it
-        self.in_peaks = np.zeros(CHANNELS, np.float32)
+        self.in_peaks = np.zeros(max(CHANNELS, INST_CHANNELS), np.float32)
         self.device = None                      # dict from find_device, while connected
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
@@ -662,7 +672,7 @@ class Engine:
         """[(card id, label)] for the SETTINGS page: every USB device with an input, then the drum synth."""
         choices = [(d["id"], d["name"].upper()) for d in self._inputs()]
         if self.drums:
-            choices.append((DRUMS_ID, "DRUM SYNTH"))
+            choices.append((DRUMS_ID, "INSTRUMENTS"))
         key = self.input_choice
         if key and key not in [k for k, _ in choices]:
             choices.append((key, self.settings.get("device_name", key).upper()))
@@ -671,7 +681,7 @@ class Engine:
     def find_input(self):
         """The input to use now: the chosen one if it's there, else the first USB device, else None."""
         if self.input_choice == DRUMS_ID and self.drums:
-            return drum_device(DRUM_KIT + 2)
+            return drum_device(INST_CHANNELS)
         return find_device(None if self.input_choice == DRUMS_ID else self.input_choice)
 
     @property
@@ -679,37 +689,99 @@ class Engine:
         """True while the drum synth is the input."""
         return bool(self.device and self.device.get("virtual"))
 
-    def set_drum_machine(self, machine):
-        """The drums menu (FILE on the drum page) > MACHINE: the song's drum machine. Each machine has its own
-        kit and its own sequencer patterns in the song, so switching back finds them as they were.
-        Returns True if it switched."""
-        if not self.drums or machine == self.drums.machine:
+    # ------------------------------------------------------------ the instrument slots
+
+    def slot_of(self, machine):
+        """The slot a machine is in, or None (each machine can be in one slot)."""
+        return self.slots.index(machine) if machine in self.slots else None
+
+    def loaded_slots(self):
+        return [i for i, m in enumerate(self.slots) if m]
+
+    def _seq_for(self, machine):
+        """A machine's sequencer (its patterns), made empty if it has none yet. Call with the lock held."""
+        s = self.seqs.get(machine)
+        if s is None:
+            s = sequencer.Sequencer()
+            s.bar_beats = self.bar_beats()
+            s.from_json(None)
+            self.seqs[machine] = s
+        return s
+
+    def set_slot(self, i, machine):
+        """The INSTRUMENTS page: put a machine in slot i (None empties it). Each machine has its own kit and
+        patterns in the song, so taking one out and putting it back finds them as they were. Returns True
+        if it's done (False if the machine is in another slot or isn't built)."""
+        if not self.drums or not 0 <= i < SLOTS:
             return False
-        old = self.drums.machine
-        if not self.drums.use(machine):
-            return False
+        if machine is not None:
+            if self.slot_of(machine) not in (None, i) or self.drums.get(machine) is None:
+                return False
         with self.lock:
-            self.seqs[old] = self.seq
-            new = self.seqs.get(machine)
-            if new is None:
-                new = sequencer.Sequencer()
-                new.bar_beats = self.bar_beats()
-                new.from_json(None)
-                self.seqs[machine] = new
-            new.anchor = self.seq.anchor          # playing on: the new patterns keep the same bar lines
-            self.seq.stop()
-            self.seq = new
-        self.remember("drum_machine", machine)
-        self._drum_machine_changed()
-        self.dirty.add(-1)
+            if machine is not None:
+                new = self._seq_for(machine)
+                old = self.slots[i]
+                if old and old in self.seqs:
+                    new.anchor = self.seqs[old].anchor      # playing on: keep the same bar lines
+            self.slots[i] = machine
+            if machine is None:
+                self.slot_mutes.discard(i)
+            self.dirty.add(-1)
+        if machine is not None and (self.slot is None or self.slot == i):
+            self.open_slot(i)
+        elif machine is None and self.slot == i:
+            loaded = self.loaded_slots()
+            self.open_slot(loaded[0] if loaded else None)
         return True
+
+    def open_slot(self, i):
+        """The drum and sequencer pages show slot i's instrument (None: there's none)."""
+        if i is None or not self.slots[i] or not self.drums:
+            self.slot = None
+            return
+        machine = self.slots[i]
+        if not self.drums.use(machine):
+            return
+        with self.lock:
+            self.seq = self._seq_for(machine)
+            self.slot = i
+        self.remember("drum_machine", machine)            # a new song starts with it
+        self._drum_machine_changed()
+
+    def mute_slot(self, i):
+        """Mute or unmute slot i. Returns True if it's muted now."""
+        with self.lock:
+            self.slot_mutes ^= {i}
+            self.dirty.add(-1)
+            return i in self.slot_mutes
+
+    def set_drum_machine(self, machine):
+        """The drums menu (FILE on the drum page) > MACHINE: change the shown slot's machine.
+        Returns True if it switched."""
+        if not self.drums or self.slot is None or machine == self.slots[self.slot]:
+            return False
+        return self.set_slot(self.slot, machine)
+
+    def sounding_slots(self):
+        """The slots playing now: on the instrument pages every one that isn't muted; on the tape page
+        only those an armed track records from (with the instruments as the input)."""
+        loaded = [i for i in self.loaded_slots() if i not in self.slot_mutes]
+        if self.inst_view:
+            return loaded
+        used = set()
+        for t in self.armed_tracks():
+            src = self.source(t)
+            chans = [src] if isinstance(src, int) else list(src) if isinstance(src, tuple) else None
+            if chans is None:
+                return loaded                              # the mix: every instrument
+            used |= {c // SLOT_CH for c in chans}
+        return [i for i in loaded if i in used]
 
     def _drum_machine_changed(self):
         """The drum synth's input channels (DRUM 1-8 and the KIT) stay the same whatever the machine."""
         dev = getattr(self, "device", None)
         if dev and dev.get("virtual"):
-            dev["capture"]["channels"] = DRUM_KIT + 2
-        self._seq_fifo = np.zeros((0, self.drums.voices), np.float32)
+            dev["capture"]["channels"] = INST_CHANNELS
 
     def hit(self, lane, velocity=100):
         """Play a drum: lane 0 up to the machine's lanes (on the LXR, 6 is the hi-hat open). Heard only
@@ -720,7 +792,7 @@ class Engine:
     def audition(self, lane, velocity=100, locks=None):
         """Play one hit of a lane as a sequencer step would, its locks included (to hear a lock while
         setting it). Only while stopped: playing, the sequencer plays the step anyway."""
-        if self.drums and not self.playing:
+        if self.drums and self.slot is not None and not self.playing:
             self._auditions.append((0, lane, velocity, dict(locks or {})))
 
     def _set_latency(self):
@@ -919,6 +991,10 @@ class Engine:
                 self._drum_machine_changed()
             self.seq.from_json(None)                    # ... and empty patterns
             self.seqs = {self.drums.machine if self.drums else "lxr": self.seq}
+            # its instruments: that machine in slot 1
+            self.slots = [self.drums.machine if self.drums else None] + [None] * (SLOTS - 1)
+            self.slot = 0 if self.drums else None
+            self.slot_mutes = set()
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -1124,6 +1200,25 @@ class Engine:
         if machine in self.seqs:
             self.seq = self.seqs[machine]
         self.seqs[machine] = self.seq
+        # the instrument slots (older songs: their drum machine in slot 1)
+        saved_slots = meta.get("slots")
+        if not isinstance(saved_slots, list):
+            saved_slots = [machine]
+        self.slots = [None] * SLOTS
+        for i, mid in enumerate(saved_slots[:SLOTS]):
+            if mid and mid not in self.slots and (not self.drums or self.drums.get(mid) is not None):
+                self.slots[i] = mid
+                self._seq_for(mid)
+        self.slot_mutes = {int(i) for i in meta.get("slot_mutes", []) if 0 <= int(i) < SLOTS and self.slots[int(i)]}
+        self.slot = None
+        want = meta.get("slot", self.slot_of(machine))
+        if not (isinstance(want, int) and 0 <= want < SLOTS and self.slots[want]):
+            loaded = self.loaded_slots()
+            want = loaded[0] if loaded else None
+        if self.drums and want is not None:
+            self.drums.use(self.slots[want])
+            self.seq = self.seqs[self.slots[want]]
+            self.slot = want
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
         self._meta_regions = meta.get("regions")
@@ -1195,6 +1290,9 @@ class Engine:
             meta["drum_seq"] = self.seq.to_json()
             current = self.drums.machine if self.drums else "lxr"
             meta["drum_seqs"] = {m: s.to_json() for m, s in self.seqs.items() if m != current}
+            meta["slots"] = list(self.slots)
+            meta["slot"] = self.slot
+            meta["slot_mutes"] = sorted(self.slot_mutes)
         if not changed:
             return False
 
@@ -1408,33 +1506,48 @@ class Engine:
         """A stereo track's input when it has none that works: the drum kit, or two channels in a row."""
         ch = self.in_channels()
         if self.drums_input:
-            return (DRUM_KIT, DRUM_KIT + 1)
+            loaded = self.loaded_slots()
+            first = self.slot if self.slot is not None else (loaded[0] if loaded else 0)
+            return (first * SLOT_CH + DRUM_KIT, first * SLOT_CH + DRUM_KIT + 1)
         if ch >= 2:
             l = min(2 * (t // 2), ch - 2)
             return (l, l + 1)
         return (0, 0) if ch else None
 
     def channel_name(self, c):
-        """An input channel's name: IN 3, or for the drum synth DRUM 3 / KIT L / KIT R."""
+        """An input channel's name: IN 3, or for the instruments the slot's machine and its channel:
+        606 DRUM 3, MD KIT L, LXR KIT (mono)."""
         if c is None:
-            return "KIT" if self.drums_input else "MIX"
+            return "ALL KITS" if self.drums_input else "MIX"
         if self.drums_input:
-            return "KIT L" if c == DRUM_KIT else "KIT R" if c == DRUM_KIT + 1 else "DRUM %d" % (c + 1)
+            slot, k = divmod(c, SLOT_CH)
+            m = self.slots[slot] if slot < SLOTS else None
+            who = MACHINE_SHORT.get(m, m.upper()) if m else "INST %d" % (slot + 1)
+            what = "KIT L" if k == DRUM_KIT else "KIT R" if k == DRUM_KIT + 1 else "KIT" if k == DRUM_KIT + 2 \
+                else "DRUM %d" % (k + 1)
+            return "%s %s" % (who, what) if m else "%s (EMPTY)" % who
         return "IN %d" % (c + 1)
 
     def input_text(self, t):
-        """Track t's input for the screen: IN 3, MIX, IN 1+2, KIT L+R..."""
+        """Track t's input for the screen: IN 3, MIX, IN 1+2, 606 KIT L+R..."""
         src = self.source(t)
         if isinstance(src, tuple):
             l, r = self.channel_name(src[0]), self.channel_name(src[1])
-            if l.split(" ")[0] == r.split(" ")[0] and " " in r:
-                return "%s+%s" % (l, r.split(" ")[1])
+            if " " in l and " " in r and l.rsplit(" ", 1)[0] == r.rsplit(" ", 1)[0]:
+                return "%s+%s" % (l, r.rsplit(" ", 1)[1])
             return "%s + %s" % (l, r)
         return self.channel_name(src)
 
-    def track_input_choices(self):
-        """What a mono track can record: each channel, then the mix (or the whole kit)."""
-        return list(range(self.in_channels())) + [None]
+    def track_input_choices(self, stereo=False):
+        """What a track can record: each channel, then (mono) the mix. For the instruments, only the loaded
+        slots' channels: each drum, and the kit (mono, or for a stereo track its left and right)."""
+        if not self.drums_input:
+            return list(range(self.in_channels())) + ([] if stereo else [None])
+        out = []
+        for i in self.loaded_slots():
+            ks = list(range(DRUM_KIT + 2)) if stereo else list(range(DRUM_KIT)) + [DRUM_KIT + 2]
+            out += [i * SLOT_CH + k for k in ks]
+        return out + ([] if stereo else [None])
 
     def step_input(self, t, side, delta):
         """Knobs in the zoomed view: side 0 is a mono track's input or a stereo track's left, 1 its right.
@@ -1445,7 +1558,9 @@ class Engine:
                 return None
             if t in self.stereo:
                 cur = list(self.source(t) or (0, 0))
-                cur[side] = max(0, min(ch - 1, cur[side] + (1 if delta > 0 else -1)))
+                choices = self.track_input_choices(stereo=True) or [0]
+                i = choices.index(cur[side]) if cur[side] in choices else 0
+                cur[side] = choices[max(0, min(len(choices) - 1, i + (1 if delta > 0 else -1)))]
                 self.inputs[t] = cur
             else:
                 choices = self.track_input_choices()
@@ -1482,10 +1597,16 @@ class Engine:
         if self.drums_input and self.drums:
             # a drum recorded onto its own track (a DRUM n input): give the track that drum's sends, so it
             # plays back with the reverb and delay you heard (the KIT inputs have them printed in)
-            rev_g, dly_g = self.drums.channel_sends()
             for t, src in self.targets().items():
-                if isinstance(src, int) and src < len(rev_g):
-                    self.rev_sends[t], self.dly_sends[t] = round(float(rev_g[src]), 2), round(float(dly_g[src]), 2)
+                if not isinstance(src, int):
+                    continue
+                slot, k = divmod(src, SLOT_CH)
+                m = self.drums.get(self.slots[slot]) if slot < SLOTS and self.slots[slot] else None
+                if m is None:
+                    continue
+                rev_g, dly_g = m.channel_sends()
+                if k < min(DRUM_KIT, len(rev_g)):
+                    self.rev_sends[t], self.dly_sends[t] = round(float(rev_g[k]), 2), round(float(dly_g[k]), 2)
                     self.dirty.add(-1)
         self.recording = True
         self.playing = True
@@ -2337,7 +2458,7 @@ class Engine:
         self.device, self.in_period = dev, PERIOD
         self.status = ""
         self._route_due = 0.0
-        log("Input: drum synth")
+        log("Input: instruments")
         if self._resume_recording:
             with self.lock:
                 if self.playing:
@@ -2347,7 +2468,7 @@ class Engine:
         look = time.monotonic() + 2.0
         bpm = None
         was_playing = False
-        self._seq_fifo = np.zeros((0, self.drums.voices), np.float32)
+        self._seq_fifos = {}
         try:
             while not self._stop:
                 self._update_route(None)
@@ -2364,42 +2485,11 @@ class Engine:
                     due = max(due, now - 0.1) + PERIOD / self.rate
                 if self.bpm != bpm:
                     bpm = self.bpm
-                    self.drums.set_bpm(bpm)     # the drum synth's tempo-synced LFOs follow the song
-                events = []
-                if self.playing and not was_playing:
-                    # just started: the pattern starts from step 1, wherever the tape is. The first
-                    # read_ahead frames go by before you hear anything, so make the sequencer's hits for
-                    # them now, straight into what gets recorded
-                    self.seq_clock = 0
-                    ahead = self.seq.events(0, self.read_ahead, self.frames_per_beat())
-                    self._seq_fifo = self.drums.render(self.read_ahead, ahead, with_live=False)[0]
-                if self.playing:
-                    was_playing = True
-                    # the sequencer runs on its own clock (frames since PLAY), so tape loops and moving the
-                    # playhead don't touch it: read_ahead frames on from where the tape is being recorded
-                    events = self.seq.events(self.seq_clock + self.read_ahead, PERIOD, self.frames_per_beat())
-                    self.seq_clock += PERIOD
-                elif was_playing:
-                    was_playing = False
-                    self.seq.stop()
-                if self._auditions and not self.playing:
-                    events, self._auditions = self._auditions, []
-                if events:
-                    soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
-                    for offset, lane, _vel, _locks in events:
-                        self.seq_hits[lane] = soon + offset / self.rate
-                m = self.drums.m                # this block's machine (switching one mid-block can't mix them up)
-                seq_voices, live_voices = m.render(PERIOD, events)
-                # what you hear: both, now. What's recorded (at pos, where you pressed): your hits now, and
-                # the sequencer's from read_ahead frames ago (they were made that far ahead, to sound on time)
-                voices = live_voices + self._delay_sequencer(seq_voices)
-                rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
-                x = self._drum_input(m, voices, rev_g, dly_g)
-                heard = seq_voices + live_voices
-                pans = m.pans() * DRUMS_MONITOR
-                out = self.process(x, monitor=heard @ pans,
-                                   monitor_rev=(heard * rev_g) @ pans if rev_g.any() else None,
-                                   monitor_dly=(heard * dly_g) @ pans if dly_g.any() else None)
+                    for mid in self.loaded_machines():
+                        self.drums.get(mid).set_bpm(bpm)     # tempo-synced LFOs follow the song
+                x, mon, mon_rev, mon_dly = self._instruments_block(PERIOD, was_playing)
+                was_playing = self.playing
+                out = self.process(x, monitor=mon, monitor_rev=mon_rev, monitor_dly=mon_dly)
                 if port and not port.dead:
                     port.push(out)
                 if time.monotonic() > look:
@@ -2408,7 +2498,7 @@ class Engine:
                     if not want or want["id"] != dev["id"]:
                         with self.lock:
                             self._resume_recording = self.recording
-                        log("Input: switching from the drum synth")
+                        log("Input: switching from the instruments")
                         return
         except Exception as e:
             log("Drum synth stopped: %s" % e, traceback.format_exc())
@@ -2418,42 +2508,108 @@ class Engine:
             with self.lock:
                 self.recording = False
 
-    def _drum_input(self, m, voices, rev_g, dly_g):
-        """What the drum synth puts on tape, as 10 input channels: 0-7 each drum on its own (DRUM 1-8: the
-        track then plays back that drum's reverb and delay through its own sends), and 8-9 the whole kit
+    def loaded_machines(self):
+        return [m for m in self.slots if m]
+
+    def _instruments_block(self, frames, was_playing):
+        """One block from the instruments (audio thread): (input channels, what you hear now, its reverb and
+        delay sends). Each sounding slot's sequencer plays; the shown slot also plays your hits by hand."""
+        x = np.zeros((frames, INST_CHANNELS), np.float32)
+        mon = np.zeros((frames, 2), np.float32)
+        mon_rev = mon_dly = None
+        starting = self.playing and not was_playing
+        if starting:
+            # the patterns start from step 1, wherever the tape is (the sequencer's own clock)
+            self.seq_clock = 0
+        elif was_playing and not self.playing:
+            for mid in self.loaded_machines():
+                self.seqs[mid].stop()
+        sounding = self.sounding_slots()
+        auditions = []
+        if self._auditions and not self.playing:
+            auditions, self._auditions = self._auditions, []
+        current = self.slot
+        play = list(sounding)
+        if current is not None and current not in play and (self.inst_view or auditions):
+            play.append(current)                 # your hits on the drum page, heard while you play them
+        fpb = self.frames_per_beat()
+        for i in play:
+            mid = self.slots[i]
+            m, seq = self.drums.get(mid), self.seqs.get(mid)
+            if m is None or seq is None:
+                continue
+            plays = i in sounding
+            events = []
+            if starting and plays:
+                # the first read_ahead frames go by before you hear anything: make the sequencer's hits for
+                # them now, straight into what gets recorded
+                ahead = seq.events(0, self.read_ahead, fpb)
+                self._seq_fifos[mid] = m.render(self.read_ahead, ahead, with_live=False)[0]
+            if self.playing and plays:
+                # read_ahead frames on from where the tape is being recorded
+                events = seq.events(self.seq_clock + self.read_ahead, frames, fpb)
+            if i == current:
+                events = events or auditions
+                if events:
+                    soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
+                    for offset, lane, _vel, _locks in events:
+                        self.seq_hits[lane] = soon + offset / self.rate
+            seq_voices, live_voices = m.render(frames, events, with_live=(i == current))
+            # what's recorded (at pos, where you pressed): your hits now, and the sequencer's from read_ahead
+            # frames ago (they were made that far ahead, to sound on time). What you hear: both, now
+            voices = live_voices + self._delay_sequencer(mid, seq_voices)
+            rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
+            x[:, i * SLOT_CH:(i + 1) * SLOT_CH] = self._drum_input(mid, m, voices, rev_g, dly_g)
+            heard = seq_voices + live_voices
+            pans = m.pans() * DRUMS_MONITOR
+            mon += heard @ pans
+            if rev_g.any():
+                mon_rev = (heard * rev_g) @ pans + (0 if mon_rev is None else mon_rev)
+            if dly_g.any():
+                mon_dly = (heard * dly_g) @ pans + (0 if mon_dly is None else mon_dly)
+        if self.playing:
+            self.seq_clock += frames
+        return x, mon, mon_rev, mon_dly
+
+    def _drum_input(self, mid, m, voices, rev_g, dly_g):
+        """What one instrument puts on tape, as its SLOT_CH input channels: 0-7 each drum on its own (DRUM 1-8:
+        the track then plays back that drum's reverb and delay through its own sends), 8-9 the whole kit
         panned in stereo (KIT L / KIT R) with its reverb and delay printed in, from effects of its own so
-        the tape tracks' sends don't get in."""
+        the tape tracks' sends don't get in, and 10 that kit in mono (KIT)."""
         lanes = m.multi(voices)
         p = m.pans()
         x = voices @ p
-        if effects and effects.AVAILABLE and (rev_g.any() or dly_g.any() or self._drum_fx_ringing > 0):
-            if self._drum_rev is None:
-                self._drum_rev, self._drum_dly = effects.Reverb(self.rate), effects.Delay(self.rate)
-            wet = self.run_effects((voices * rev_g) @ p, (voices * dly_g) @ p, self._drum_rev, self._drum_dly)
+        fx = self._slot_fx.setdefault(mid, [None, None, 0])
+        if effects and effects.AVAILABLE and (rev_g.any() or dly_g.any() or fx[2] > 0):
+            if fx[0] is None:
+                fx[0], fx[1] = effects.Reverb(self.rate), effects.Delay(self.rate)
+            wet = self.run_effects((voices * rev_g) @ p, (voices * dly_g) @ p, fx[0], fx[1])
             x = x + wet
             # keep running a while after the sends go to 0, so a tail isn't cut off
-            self._drum_fx_ringing = 10 * self.rate if (rev_g.any() or dly_g.any()) else self._drum_fx_ringing - len(x)
-        out = np.zeros((len(voices), DRUM_KIT + 2), np.float32)
+            fx[2] = 10 * self.rate if (rev_g.any() or dly_g.any()) else fx[2] - len(x)
+        out = np.zeros((len(voices), SLOT_CH), np.float32)
         n = min(DRUM_KIT, lanes.shape[1])
         out[:, :n] = lanes[:, :n]
-        out[:, DRUM_KIT:] = x
+        out[:, DRUM_KIT:DRUM_KIT + 2] = x
+        out[:, DRUM_KIT + 2] = x.mean(axis=1)
         return out
 
     def _heard_frame(self):
         """Where the sequencer is as you hear it (its own clock: frames since PLAY, plus read_ahead)."""
         return self.seq_clock + self.read_ahead
 
-    def _delay_sequencer(self, block):
-        """block, read_ahead frames late: the sequencer's sound lined up with where it belongs on tape."""
-        fifo, want = self._seq_fifo, self.read_ahead
-        if fifo.shape[1] != block.shape[1]:                  # the drum machine changed
+    def _delay_sequencer(self, mid, block):
+        """block, read_ahead frames late: a sequencer's sound lined up with where it belongs on tape."""
+        want = self.read_ahead
+        fifo = self._seq_fifos.get(mid)
+        if fifo is None or fifo.shape[1] != block.shape[1]:
             fifo = np.zeros((0, block.shape[1]), np.float32)
         if len(fifo) < want:
             fifo = np.concatenate([np.zeros((want - len(fifo), block.shape[1]), np.float32), fifo])
         elif len(fifo) > want:
             fifo = fifo[len(fifo) - want:]
         fifo = np.concatenate([fifo, block])
-        out, self._seq_fifo = fifo[:len(block)], fifo[len(block):]
+        out, self._seq_fifos[mid] = fifo[:len(block)], fifo[len(block):]
         return out
 
     def process(self, x, monitor=None, monitor_rev=None, monitor_dly=None):
@@ -2472,7 +2628,7 @@ class Engine:
         with self.lock:
             peaks = np.abs(x).max(axis=0) if n else np.zeros(1)
             self.in_peaks[:] = 0
-            self.in_peaks[:min(CHANNELS, len(peaks))] = peaks[:CHANNELS]
+            self.in_peaks[:min(len(self.in_peaks), len(peaks))] = peaks[:len(self.in_peaks)]
             done = 0
             while self.playing and done < n:
                 loop = self.loop_region() if self.loop_on else None
@@ -2525,7 +2681,7 @@ class Engine:
         idx = np.minimum(idx, self.frames - 1)
         overdub = self.rec_mode == "overdub"
         for t in range(TRACKS):
-            if (overdub or t not in targets) and self.audible(t):
+            if (overdub or t not in targets) and self.audible(t) and not self.inst_view:
                 sides = []
                 for c in self.chans(t):
                     sig = self.tracks[c][idx] * self.volumes[t]
@@ -2570,9 +2726,9 @@ class Engine:
                         self.dirty.add(t)
 
     def _mix(self, x):
-        """A mono track's "mix" input: every channel mixed (for the drum synth, the kit's two)."""
-        if self.drums_input and x.shape[1] > DRUM_KIT + 1:
-            return x[:, DRUM_KIT:DRUM_KIT + 2].mean(axis=1)
+        """A mono track's "mix" input: every channel mixed (for the instruments, every slot's kit)."""
+        if self.drums_input and x.shape[1] >= SLOT_CH:
+            return x[:, DRUM_KIT + 2::SLOT_CH].sum(axis=1)
         return x.mean(axis=1)
 
     def _save_for_undo(self, t, a, b):

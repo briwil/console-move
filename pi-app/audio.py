@@ -787,12 +787,13 @@ class Engine:
 
     def sounding_slots(self):
         """The slots playing now: on the instrument pages every one that isn't muted; on the tape page
-        only those an armed track records from (with the instruments as the input)."""
+        only those a track armed with SHIFT + its key records from (Brian: just selecting a track isn't
+        enough to hear its instrument)."""
         loaded = [i for i in self.loaded_slots() if i not in self.slot_mutes]
         if self.inst_view:
             return loaded
         used = set()
-        for t in self.armed_tracks():
+        for t in sorted(self.arm_extra):
             src = self.source(t)
             chans = [src] if isinstance(src, int) else list(src) if isinstance(src, tuple) else None
             if chans is None:

@@ -308,7 +308,8 @@ then record them onto the tape and cut and move them there like any recording.
 
 **What you hear.** On the INSTRUMENTS, drum and sequencer pages, PLAY plays every
 loaded slot that isn't muted, all together, and **not the tape**. On the tape page,
-PLAY plays the tape, and only the instruments an armed track records from.
+PLAY plays the tape, and only the instruments that a track armed with SHIFT + its key
+(the selected track too) records from. Selecting a track isn't enough to hear its instrument.
 
 **Recording one.** Each instrument has its own inputs, named after it: **606 DRUM 1-8**
 (each drum on its own), **606 KIT L / KIT R** (the whole kit in stereo, for a stereo

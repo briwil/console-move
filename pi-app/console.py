@@ -406,16 +406,15 @@ class Transport:
             if e and not self.recording:
                 e.arm_extra = set()               # a plain press arms just this track
         elif name == "ARM_ALL" and e:
-            every = set(range(8)) - {self.armed - 1}
+            every = set(range(8))
             e.arm_extra = set() if e.arm_extra == every else every
-            self.say("ALL TRACKS ARMED" if e.arm_extra else "ONLY TRACK %d ARMED" % self.armed, 2)
+            self.say("ALL TRACKS ARMED" if e.arm_extra else "NO TRACKS ARMED", 2)
         elif name.startswith("ARM") and name[3:].isdigit() and e:
+            # SHIFT + a track key arms it (the selected one too): an armed track's instrument is heard on
+            # the tape page, and LIFT / CUT / SPLICE take every armed track
             n = int(name[3:])
-            if n == self.armed:
-                self.say("TRACK %d IS THE SELECTED TRACK, SO IT'S ALWAYS ARMED" % n, 3)
-            else:
-                e.arm_extra ^= {n - 1}
-                self.say("TRACK %d %s" % (n, "ARMED" if (n - 1) in e.arm_extra else "DISARMED"), 2)
+            e.arm_extra ^= {n - 1}
+            self.say("TRACK %d %s" % (n, "ARMED" if (n - 1) in e.arm_extra else "DISARMED"), 2)
         elif name == "FOCUS":
             self.focus.toggle(self.armed)
         elif name == "SEQ_UNDO":
@@ -1171,8 +1170,8 @@ class Transport:
         if self.playing:
             self.say("STOP FIRST, THEN BOUNCE")
             return
-        sources = sorted(e.arm_extra)
         dest = self.armed - 1
+        sources = sorted(e.arm_extra - {dest})        # (the selected track can be armed too: it's where it goes)
         if not sources:
             self.say("ARM THE TRACKS TO BOUNCE WITH SHIFT+TRACK; THEY GO ONTO THE SELECTED TRACK", 6)
             return
@@ -1329,7 +1328,7 @@ class Transport:
         if self.focus.active:
             self.focus.info["lines"] = self.panel_lines()
         red = "#FF5A4E" if (self.recording or ready) else "#7D838C"
-        t.extra_armed = {n for n in armed if n != self.armed}
+        t.extra_armed = {n + 1 for n in e.arm_extra} if e else set()   # armed with SHIFT + key: outlined
         t.arm_colour = ui.rgb(red)
         s.set("rec_dot", c=red)
         s.set("rec_outline", c=red)

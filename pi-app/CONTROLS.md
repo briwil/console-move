@@ -108,8 +108,8 @@ stereo mix) in the Exports folder.
 | MIDI | The INSTRUMENTS page (and makes the instruments the input). There: opens the picked slot's drum page; then it goes between the drum page and its sequencer (see Instruments below) | Back: drum page or sequencer → INSTRUMENTS → the tape |
 | IMPORT | Not yet (coming in a later version) | |
 | SPLICE | Split the box under the playhead on the armed track(s). On a join between two boxes: join them | Same, on all tracks |
-| CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space, from every track you hear that has a box there. Hold to take several boxes (see below) | Undo |
-| LIFT | Copy the box under the playhead onto the clipboard, from every track you hear that has a box there (mute the others). Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
+| CUT | Take the box under the playhead off the tape onto the clipboard, leaving an empty space, from the selected track (and any others armed with SHIFT + their keys). Hold to take several boxes (see below) | Undo |
+| LIFT | Copy the box under the playhead onto the clipboard, from the selected track (and any others armed with SHIFT + their keys). Hold to copy several boxes | Start / stop selecting several boxes (no holding needed) |
 | DROP | Drop the clipboard onto the armed track at the playhead, replacing what's there. Several tracks: it asks SEPARATE or MERGED first | Insert it, pushing the rest of the track later |
 | LOOP | Loop on / off (the first time, loops 4 bars from the current bar) | Clear the in/out points |
 | EXPORT | Export stems and a stereo mix to Exports | Bounce: the armed tracks onto the selected track (press twice) |
@@ -153,11 +153,10 @@ like a region in a DAW. Empty tape has no boxes.
   new box, covering what's there. SHIFT+DROP inserts it instead, pushing the
   rest of the track later (splitting a box it lands in the middle of).
 
-**Several tracks at once (like the OP-1).** LIFT and CUT take every track you
-hear, not just the selected one: the selected track's outline sets where
-the piece starts and ends, and every other track that isn't muted (or, while
-anything is soloed, every soloed track) with a box in that stretch comes too.
-They all get the white outline. Mute the tracks you want to leave behind.
+**Several tracks at once (like the OP-1).** LIFT, CUT and SPLICE work on the
+selected track only, unless you arm more tracks with SHIFT + their keys: then
+they work on every armed track with a box there (they all get the white
+outline). Pressing a track's key on its own makes it the only armed track again.
 
 When the clipboard has more than one track, DROP asks how to put it down:
 

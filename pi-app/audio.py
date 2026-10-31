@@ -1868,21 +1868,21 @@ class Engine:
         """The channels LIFT, CUT and DROP work on: the selected track's (both sides of a stereo track)."""
         return self.chans(self.armed - 1)
 
-    def lift_tracks(self, a, b, base):
-        """The channels LIFT and CUT take for [a, b): the selected track's, and every other track's you hear
-        (not muted, soloed if anything is soloed) with a box there. A stereo track's right channel comes
-        straight after its left."""
-        ts = {c % RIGHT for c in base}
-        for t in range(TRACKS):
-            if self.audible(t) and any(r[0] < b and r[1] > a for r in self.regions[t]):
+    def lift_tracks(self, a, b, base=None):
+        """The channels LIFT and CUT take for [a, b): the selected track's, and every other armed track's
+        (SHIFT + its key) with a box there; nothing else (Brian: as on the OP-1, only the tracks you
+        picked). A stereo track's right channel comes straight after its left."""
+        ts = {self.armed - 1}
+        for t in self.armed_tracks():
+            if any(r[0] < b and r[1] > a for c in self.chans(t) for r in self.regions[c]):
                 ts.add(t)
         return [c for t in sorted(ts) for c in self.chans(t)]
 
     def selection(self):
         """(track indexes, start, end) of what LIFT and CUT would take: the box under the playhead,
-        or, while selecting, every box from where the selection started to the playhead. The selected
-        track sets the start and end; every track you hear with a box in that stretch comes too."""
-        ts = self.edit_tracks()
+        or, while selecting, every box from where the selection started to the playhead, on the armed
+        tracks (the selected one, and any others armed with SHIFT + their keys)."""
+        ts = [c for t in self.armed_tracks() for c in self.chans(t)]
         if self.sel_anchor is None:
             lo = hi = self.pos
             rs = [r for t in ts for r in self.regions[t] if r[0] <= lo < r[1]]

@@ -1416,15 +1416,19 @@ def main():
     startup("audio engine and song loaded")
     keys = queue.Queue()
     clock = None
+    note_to = [None]                                  # Transport.midi_note, once there's a transport
     try:
         import midi
         settings = engine.settings if engine else {}
         board = Board(keys)
-        _ctl, _clk, clock = midi.start(board, engine, settings.get("clock_device"), on_note=transport.midi_note)
+        # the OP-XY's notes go to the transport, made just below (until then they're dropped)
+        _ctl, _clk, clock = midi.start(board, engine, settings.get("clock_device"),
+                                       on_note=lambda note, vel: note_to[0] and note_to[0](note, vel))
     except Exception as e:
         board = None
         print("No MIDI input:", e)
     transport = Transport(screen, engine, clock)
+    note_to[0] = transport.midi_note
     if engine:
         import linksync
         transport.link = linksync.LinkSync(engine)

@@ -22,6 +22,12 @@ import ui
 
 MENU = ["CHANGE INSTRUMENT", "REMOVE"]
 SYNTHS_LATER = "SYNTHS: COMING IN A LATER VERSION"
+BUILDING = "MORE ARE BEING BUILT (THE FIRST TIME TAKES A FEW MINUTES)..."
+
+
+def building():
+    import drums
+    return bool(drums.schwung_modules and drums.schwung_modules.building)
 
 
 def machines():
@@ -243,5 +249,5 @@ class InstPage:
             surf.blit(txt, (640 - txt.get_width() // 2, ry + (row_h - 4 - txt.get_height()) // 2))
         if extra:
             ry = y + 42 + len(items) * row_h
-            txt = f(12).render(SYNTHS_LATER, True, dim)
+            txt = f(12).render(BUILDING if building() else SYNTHS_LATER, True, dim)
             surf.blit(txt, (640 - txt.get_width() // 2, ry + 8))

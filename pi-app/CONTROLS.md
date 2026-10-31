@@ -327,6 +327,14 @@ with **FILE → DRUM MACHINE** on its drum page or sequencer.
 - **TR-606** (6W6) and **TR-808** (8W8) are from Schwung on the Ableton Move.
 - **MACHINEDRUM** is the Elektron Machinedrum's TRX, EFM, P-I and GND machines, as
   OP-XY-MNMD rewrote them from scratch for the OP-XY (no ROM needed).
+- **FORGE, WEIRD DREAMS, LIBPO32, CW-78 and SIMIAN** are Schwung modules (made for the
+  Ableton Move). The first time the app starts after the update that adds them, it
+  fetches and builds them in the background (a few minutes; it needs the internet), and
+  they appear in the INSTRUMENTS list when they're ready. Each has 16 pads (CW-78: 14):
+  keys 1–8, and with SHIFT + knob 1 on the sequencer 9–16. On the drum page, knob 9 goes
+  through the pad's own SOUND pages, then the kit's pages (KIT, FX, …, as the module
+  arranges them). They give one stereo mix, so their inputs are KIT L / KIT R and KIT
+  (no DRUM 1–8), and they use their own reverb and delay rather than Console's.
 
 How they differ:
 

@@ -25,3 +25,7 @@ Thumbs.db
 sim-data/
 sim-shots/
 *.so.tmp
+
+# Schwung modules: fetched and built on the Pi by pi-app/schwung/build.py
+pi-app/schwung/src/
+pi-app/schwung/modules/

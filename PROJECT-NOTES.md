@@ -145,6 +145,26 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 - Saved as "slots", "slot", "slot_mutes"; songs without them get their drum_machine in slot 1. Kits
   and patterns stay per machine (drum_kits / drum_seqs), so a removed machine comes back as it was.
 
+### Schwung modules (Oct 2026)
+
+- `schwung/`: a generic host for Schwung's plugin API v2 (`host.c` -> `libschwunghost.so`, ctypes in
+  `modules.py`). `catalog.py` pins each module to a commit with a native gcc/g++ recipe from its own
+  build script; `build.py` fetches (git fetch by SHA) and builds into `schwung/modules/<id>/` (gitignored).
+  The app runs it niced in the background at start (`drums._prebuild` -> `modules.build_missing`), so
+  setup.sh doesn't change (changing setup.sh makes the updater ask for SSH).
+- `modules.Module` has drums.py's machine methods. Settings come from the module's runtime
+  `chain_params` (else module.json); per-pad keys are `pad3_`, `v3_`, `pv3_` or a catalog prefix
+  (CW-78's bd_, sd_...). `cv_*` (focused-voice copies), write-only actions, `ui_*`, note_map/midi are left
+  out. Values are knob positions, sent as text. Pages: the pad's own (SOUND, 8 each), then the kit's in
+  the module's ui_hierarchy order, the rest as MORE. A global int/enum change re-reads every value
+  (a kit choice changes the rest).
+- Pads are MIDI notes 36-51 (a Move drum rack). Two instances (dsp.so and a copy dsp_live.so), as the
+  other machines. render_block is always 128 frames (sh_render keeps the remainder), so hits land on
+  the next 128-frame block (<= 2.9 ms). Output is stereo only: voices columns 0/1 are L/R, pans()
+  routes them, multi() is empty, sends are 0 (they have their own FX). Libpo32 renders hits on a
+  worker thread, so it needs real time (silent if rendered faster than real time).
+- Forge, Weird Dreams, CW-78, Simian and Libpo32 are in. Synths (and the synth sequencer) next.
+
 ### MACHINEDRUM (Oct 2026)
 
 - `drums/md/`: mmockett/OP-XY-MNMD's Machinedrum voices (TRX, EFM, P-I, GND; 33 machines; MIT), vendored

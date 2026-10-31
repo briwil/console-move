@@ -19,6 +19,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import threading
 
 import numpy as np
@@ -827,7 +828,18 @@ def _prebuild():
     for mid in SPECS:
         _sw_build(mid)
     _md_build()
+    if schwung_modules:
+        schwung_modules.build_missing()      # the Schwung modules (fetched from GitHub the first time)
 
+
+# ---------------------------------------------------------------- Schwung modules (schwung/)
+
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(DIR), "schwung"))
+    import modules as schwung_modules
+except Exception as _e:                      # carry on without them
+    print("Drums: no Schwung modules: %s" % _e)
+    schwung_modules = None
 
 threading.Thread(target=_prebuild, daemon=True, name="drum builds").start()
 
@@ -849,7 +861,10 @@ class Drums:
         ms = self._machines
         if machine not in ms:
             try:
-                ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
+                if schwung_modules and machine in schwung_modules.catalog.BY_ID:
+                    ms[machine] = schwung_modules.Module(machine)     # a Schwung module (schwung/)
+                else:
+                    ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
             except Exception as e:
                 print("Drums: the %s isn't available: %s" % (machine, e))
                 return None
@@ -919,4 +934,6 @@ def available_machines():
             out.append((mid, spec["title"]))
     if os.path.exists(os.path.join(MD_DIR, "libmd.so")) or os.path.exists(os.path.join(MD_DIR, "glue_md.cpp")):
         out.append(("md", "MACHINEDRUM"))
+    if schwung_modules:                      # Schwung modules built by schwung/build.py
+        out += [(mid, schwung_modules.catalog.BY_ID[mid]["title"]) for mid in schwung_modules.built_ids()]
     return out

@@ -22,6 +22,7 @@ import os
 
 import audio
 import menu
+import notes
 import sequencer
 
 KITS = os.path.join(audio.DATA, "kits")
@@ -299,13 +300,21 @@ class KitMenu(menu.Menu):
         """The current pattern back to empty, like a new one (SHIFT+CUT on the sequencer undoes it)."""
         self.seq.snapshot()
         with self.seq.lock:
-            self.seq.patterns[self.seq.current] = sequencer.Pattern(self.seq.new_length())
+            if isinstance(self.seq, notes.NoteSequencer):
+                self.seq.patterns[self.seq.current] = notes.NotePattern(self.seq.new_length())
+            else:
+                self.seq.patterns[self.seq.current] = sequencer.Pattern(self.seq.new_length())
         self.engine.seq_changed()
         self.close()
         self.transport.say("PATTERN %d CLEARED" % (self.seq.current + 1), 3)
 
     def lock_count(self):
-        """(locks, steps with locks or changed velocity / chance / ratchets) in the current pattern."""
+        """(locks, steps with locks or changed velocity / chance / ratchets) in the current pattern (a synth's:
+        notes with locks or changed velocity / chance / ratchets)."""
+        if isinstance(self.seq, notes.NoteSequencer):
+            ns = [n for step in self.seq.pattern.notes.values() for n in step.values()
+                  if n.locks or n.vel != sequencer.DEFAULT_VELOCITY or n.chance or n.ratchet != 1]
+            return sum(len(n.locks) for n in ns), len(ns)
         steps = [s for ln in self.seq.pattern.lanes for s in ln.steps
                  if s.locks or s.vel != sequencer.DEFAULT_VELOCITY or s.chance or s.ratchet != 1]
         return sum(len(s.locks) for s in steps), len(steps)
@@ -313,7 +322,12 @@ class KitMenu(menu.Menu):
     def clear_locks(self):
         self.seq.snapshot()                           # key 8 on the sequencer undoes it
         with self.seq.lock:
-            for ln in self.seq.pattern.lanes:
+            if isinstance(self.seq, notes.NoteSequencer):
+                for step in self.seq.pattern.notes.values():
+                    for n in step.values():
+                        n.locks.clear()
+                        n.vel, n.chance, n.ratchet = sequencer.DEFAULT_VELOCITY, 0, 1
+            for ln in getattr(self.seq.pattern, "lanes", []):
                 for st in ln.steps:
                     st.locks.clear()
                     st.vel, st.chance, st.ratchet = sequencer.DEFAULT_VELOCITY, 0, 1     # step settings too

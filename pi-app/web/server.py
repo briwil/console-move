@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 import theme  # noqa: E402  (pi-app/theme.py: the screen's colours, fonts and sizes)
 FONT_DIR = os.path.join(HERE, "..", "fonts")
 DATA = os.path.realpath(os.path.expanduser(os.environ.get("CONSOLE_DATA", "~/console-data")))
-TOP_FOLDERS = ["projects", "samples", "exports"]
+TOP_FOLDERS = ["projects", "samples", "exports", "roms"]
 CHUNK = 1024 * 256
 
 

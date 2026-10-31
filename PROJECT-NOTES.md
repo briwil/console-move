@@ -163,7 +163,27 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   the next 128-frame block (<= 2.9 ms). Output is stereo only: voices columns 0/1 are L/R, pans()
   routes them, multi() is empty, sends are 0 (they have their own FX). Libpo32 renders hits on a
   worker thread, so it needs real time (silent if rendered faster than real time).
-- Forge, Weird Dreams, CW-78, Simian and Libpo32 are in. Synths (and the synth sequencer) next.
+- Forge, Weird Dreams, CW-78, Simian and Libpo32 are in.
+
+### Synths and the synth sequencer (Oct 2026)
+
+- 19 synth modules (catalog kind "synth"); `modules.SynthModule`: pages are the module's own (no per-pad
+  split), note_on / note_off / all_off; the sequencer's events carry each note's length as locks["gate"]
+  (frames) and render() keeps notes held across blocks (`_held`), lets go before playing at the same
+  frame. Live notes go to the second copy and are let go by key release (Board -> Transport.pad_release)
+  or the OP-XY's note-offs (midi.start(on_note=Transport.midi_note)).
+- `notes.py` `NoteSequencer` (Brian: Deluge-style, each row a note of the scale, chords): patterns of
+  {step: {MIDI note: Note(length, vel, chance, ratchet, locks)}}, one length / rate per pattern; root,
+  scale (13) and `low` (lowest row on screen, in scale rows) per synth. Same methods the engine and
+  pages use as the drum Sequencer. `Engine._seq_for` makes the right kind by `Engine.is_synth`.
+- `synthpage.py`: the page (console.py's `sp()` picks it or seqpage for the shown slot). Keys: press puts
+  the note on (and plays it), press on an existing note takes it off on release unless a knob turned;
+  while playing, live_place + length from how long it was held. ← / → octave, SHIFT ← / → a row.
+- The engine lets synths go (all_off) when playback stops or a slot stops sounding.
+- JE-8086: CMake build (cmake from pip --user if missing), helper `jp8000-dsp` copied beside dsp.so, one
+  copy only (catalog "one_copy"), `roms/` is a symlink to ~/console-data/roms/je8086 (the file page's
+  ROMs tab). Its own error ("No JP-8000 ROM...") shows when its slot opens (`sh_module_error`).
+- Model-72 is left out: its engine is Rust (no cargo on the Pi).
 
 ### MACHINEDRUM (Oct 2026)
 

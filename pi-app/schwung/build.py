@@ -12,6 +12,7 @@ git): dsp.so and module.json, the two files a module is.
 The app runs it in the background at start-up (at low priority) for anything missing, so a software
 update that adds a module needs nothing else; run it by hand to watch it work.
 """
+import glob
 import json
 import os
 import shutil
@@ -25,6 +26,8 @@ import catalog  # noqa: E402
 SRC = os.path.join(HERE, "src")          # the modules' code, one folder each
 OUT = os.path.join(HERE, "modules")      # the built modules
 HOST_LIB = os.path.join(HERE, "libschwunghost.so")
+DATA = os.environ.get("CONSOLE_DATA", os.path.expanduser("~/console-data"))
+LOCAL_CMAKE = os.path.expanduser("~/.local/bin/cmake")
 
 
 def log(msg):
@@ -36,6 +39,16 @@ def run(cmd, cwd, timeout=1800):
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip()[-600:] or "failed")
     return r.stdout
+
+
+def cmake():
+    """cmake: the system's, or one installed for this user with pip (no password needed)."""
+    found = shutil.which("cmake") or (LOCAL_CMAKE if os.path.exists(LOCAL_CMAKE) else None)
+    if found:
+        return found
+    log("installing cmake (for this user)...")
+    run([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages", "--quiet", "cmake"], HERE)
+    return LOCAL_CMAKE
 
 
 def build_host():
@@ -91,7 +104,16 @@ def build(m):
         tmp = os.path.join(out_dir, "dsp.so.tmp")
         log("building %s..." % m["title"])
         for step in m["build"]:
-            run([a.replace("{out}", tmp) for a in step], d)
+            args = []
+            for a in step:
+                if "*" in a:                        # a wildcard: the files it matches, in order
+                    found = sorted(glob.glob(os.path.join(d, a)))
+                    args += [os.path.relpath(f, d) for f in found] or [a]
+                elif a == "{cmake}":
+                    args.append(cmake())
+                else:
+                    args.append(a.replace("{out}", tmp))
+            run(args, d, timeout=3 * 3600)
         os.replace(tmp, os.path.join(out_dir, "dsp.so"))
         # module.json, and anything else the module reads from its folder (presets, kits...)
         shutil.copyfile(os.path.join(d, m["json"]), os.path.join(out_dir, "module.json"))
@@ -102,7 +124,18 @@ def build(m):
                 shutil.rmtree(dst, ignore_errors=True)
                 shutil.copytree(src, dst)
             elif os.path.exists(src):
-                shutil.copyfile(src, dst)
+                shutil.copy2(src, dst)              # keeps a helper program runnable
+        if m.get("roms"):
+            # the module looks for ROMs in its own roms/ folder: that's ~/console-data/roms/<name>, which
+            # the file page (http://console.local) can upload to
+            roms = os.path.join(DATA, "roms", m["roms"])
+            os.makedirs(roms, exist_ok=True)
+            link = os.path.join(out_dir, "roms")
+            if os.path.islink(link) or os.path.isfile(link):
+                os.remove(link)
+            elif os.path.isdir(link):
+                shutil.rmtree(link)
+            os.symlink(roms, link)
         with open(os.path.join(out_dir, ".console-commit"), "w") as f:
             f.write(m["commit"] + catalog.recipe_version(m))
         log("%s ready" % m["title"])

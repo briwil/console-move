@@ -154,6 +154,7 @@ class Board:
         self.heard = lambda: 0             # the sequencer's clock now (for live recording into the sequencer)
         self.banked = lambda: False        # True when the drum machine has more than 8 lanes (SHIFT: 9-16)
         self.seq_pads = None               # Transport.seq_pad: the sequencer page's key sound
+        self.pad_release = None            # Transport.pad_release: a synth's key let go on its sound page
 
     def __call__(self, kind, number, value):       # runs in the MIDI thread
         if kind == "note":
@@ -178,6 +179,8 @@ class Board:
                         self.q.put(("RELEASE", name))
                     return
                 if not value:
+                    if name.startswith("TRACK") and self.pad_release:
+                        self.pad_release(int(name[5:]))   # a synth's note stops when its key is let go
                     return
                 if name.startswith("TRACK") and self.pads and self.pads(int(name[5:]), self.shift):
                     return                                # a drum pad: played already, nothing else to do
@@ -230,6 +233,8 @@ class Transport:
         self._knob_times = {}                     # knob -> when it last clicked, to speed up fast turns
         self.seq_page = False                     # the MIDI key on the drum page: its sequencer
         self.seqp = seqpage.SeqPage(self)
+        import synthpage
+        self.synthp = synthpage.SynthPage(self)   # a synth's sequencer (the rows are notes)
         import instpage
         self.inst_page = False                    # the MIDI key from the tape: the INSTRUMENTS page
         self.instp = instpage.InstPage(self)
@@ -323,7 +328,7 @@ class Transport:
             if name[0] == "KNOB":
                 self.knob(*name[1:])
             elif name[0] == "LANE":
-                self.seqp.lane_key(*name[1:])
+                self.sp().lane_key(*name[1:])
             elif name[0] == "HOLD":
                 self.hold(name[1])
             elif name[0] == "RELEASE":
@@ -345,6 +350,10 @@ class Transport:
                 self.playing = True
         elif name == "RECORD":
             self.record_key()
+        elif name in ("LEFT", "RIGHT", "LOOP_IN", "LOOP_OUT") and self.seq_page and self.synth_shown():
+            # the synth sequencer: the rows down / up an octave (SHIFT: one row)
+            way = -1 if name in ("LEFT", "LOOP_IN") else 1
+            self.synthp.arrows(way * (self.synthp.octave() if name in ("LEFT", "RIGHT") else 1))
         elif name in ("LEFT", "RIGHT") and self.seq_page and self.engine and self.engine.drums:
             self.seqp.move_box(-1 if name == "LEFT" else 1)   # the sequencer: the picked lane's 8-step box
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
@@ -410,11 +419,11 @@ class Transport:
         elif name == "FOCUS":
             self.focus.toggle(self.armed)
         elif name == "SEQ_UNDO":
-            self.seqp.undo()
+            self.sp().undo()
         elif name.startswith("MUTE") and name[4:].isdigit() and self.full_drum_page():
             self.drum_reset(int(name[4:]))        # the drum page: push a knob, its setting goes back to default
         elif name == "MUTE1" and self.seq_page:
-            self.seqp.cycle_mode()                # push knob 1 on the sequencer: the next knob mode
+            self.sp().cycle_mode()                # push knob 1 on the sequencer: the next knob mode
         elif name in ("MUTE1", "MUTE2", "MUTE3", "SOLO1", "SOLO2", "SOLO3") and self.focus.active and e \
                 and not self.drum_page and not self.fx_page:
             # the zoomed view: push knob 1 normalizes the box (SHIFT: gain back to 0 dB); 2 and 3: no fade
@@ -452,6 +461,7 @@ class Transport:
         if self.drum_page:
             self.seq_page = not self.seq_page
             self.seqp.held = {}
+            self.synthp.held = {}
             return
         if self.inst_page:
             self.instp.push()
@@ -490,6 +500,16 @@ class Transport:
         self.drum_voice, self.drum_key, self.drum_tab = 0, 1, 0
         self.seqp.lane, self.seqp.mode, self.seqp.box = 0, 0, {}
         self.seqp.held, self.seqp.placed = {}, {}
+        self.synthp.row, self.synthp.mode, self.synthp.held, self.synthp.down = 0, 0, {}, {}
+
+    def synth_shown(self):
+        """True when the drum and sequencer pages show a synth (its rows are notes)."""
+        e = self.engine
+        return bool(e and e.slot is not None and e.slots[e.slot] and e.is_synth(e.slots[e.slot]))
+
+    def sp(self):
+        """The sequencer page for the shown instrument: the synth sequencer or the drum sequencer."""
+        return self.synthp if self.synth_shown() else self.seqp
 
     def pad(self, n, shift=False):
         """Track key n on the drum page: play the drum on lane n (with SHIFT, lane n + 8 on a machine with
@@ -498,6 +518,13 @@ class Transport:
         e = self.engine
         if not (self.drum_page and e and e.drums_input and e.drums and 1 <= n <= 8):
             return False
+        if self.synth_shown():
+            if shift:
+                return False
+            e.note_on(e.seq.shown_notes()[n - 1], 100)     # a synth: the keys play the sequencer's 8 rows
+            self.drum_key = n
+            self._drum_hits[0] = time.monotonic()
+            return True
         d = e.drums
         if shift and d.lanes <= 8:
             return False
@@ -511,12 +538,45 @@ class Transport:
         self._drum_hits[voice] = time.monotonic()
         return True
 
+    def midi_note(self, note, velocity):
+        """A note from a MIDI keyboard (the OP-XY): plays the open synth, and on its sequencer page while
+        playing, goes into the pattern where it's playing, as long as it's held. From the MIDI thread."""
+        e = self.engine
+        if not (e and self.synth_shown() and e.drums_input):
+            return
+        held = self.__dict__.setdefault("_midi_held", {})
+        if velocity:
+            e.note_on(note, velocity)
+            if self.seq_page and e.playing:
+                at = e._heard_frame()
+                held[note] = (e.seq.live_place(note, at, e.frames_per_beat()), at)
+                e.seq_changed()
+        else:
+            e.note_off(note)
+            placed = held.pop(note, None)
+            if placed and e.playing:
+                step, at = placed
+                steps = round((e._heard_frame() - at) / (e.frames_per_beat() / e.seq.pattern.steps_per_beat()))
+                if steps > 1:
+                    e.seq.change_note(step, note, "length", steps - 1)
+                    e.seq_changed()
+
+    def pad_release(self, n):
+        """Track key n let go on a synth's sound page: its note stops. From the MIDI thread."""
+        e = self.engine
+        if self.drum_page and not self.seq_page and e and self.synth_shown() and 1 <= n <= 8:
+            e.note_off(e.seq.shown_notes()[n - 1])
+
     def seq_pad(self, n, shift=False):
         """Track key n pressed on the sequencer page: the drum on lane n of the keys' bank (the 808's
         9-16 after SHIFT + knob 1), or with SHIFT the picked lane's drum. From the MIDI thread."""
         e = self.engine
         if not (self.drum_page and e and e.drums_input and e.drums and 1 <= n <= 8):
             return False
+        if self.synth_shown():
+            if not shift:
+                self.synthp.key_sound(n, True)
+            return True
         lane = self.seqp.lane if shift else n - 1 + 8 * (self.seqp.lane // 8)
         if lane >= e.drums.lanes:
             return False
@@ -581,7 +641,7 @@ class Transport:
         elif self.inst_page:
             self.instp.knob(number, delta)
         elif self.seq_page and self.engine and self.engine.drums and number <= 10 and not (number == 10 and shift):
-            self.seqp.knob(number, delta, shift)
+            self.sp().knob(number, delta, shift)
         elif self.drum_page and self.engine and self.engine.drums and number <= 9:
             self.drum_knob(number, delta, shift)
         elif self.focus.active and self.engine and number <= 3:
@@ -715,7 +775,7 @@ class Transport:
         if self.fx_page:
             self.draw_fx(surf, it)
         elif self.seq_page and self.engine and self.engine.drums:
-            self.seqp.draw(surf)
+            self.sp().draw(surf)
         elif self.full_drum_page():
             pass                                  # drawn over the whole screen at the end (draw_full_page)
         else:
@@ -1006,7 +1066,7 @@ class Transport:
                      else "JOINED BACK TOGETHER ON %s" % where if done == "removed"
                      else "NO BOX HERE TO SPLIT", 2)
         elif name == "UNDO" and self.seq_page and e and e.drums:
-            self.seqp.undo()                      # on the sequencer, SHIFT+CUT undoes the last pattern edit
+            self.sp().undo()                      # on the sequencer, SHIFT+CUT undoes the last pattern edit
         elif name == "UNDO":
             self.say("UNDONE" if e.undo() else "NOTHING TO UNDO", 2)
 
@@ -1360,7 +1420,7 @@ def main():
         import midi
         settings = engine.settings if engine else {}
         board = Board(keys)
-        _ctl, _clk, clock = midi.start(board, engine, settings.get("clock_device"))
+        _ctl, _clk, clock = midi.start(board, engine, settings.get("clock_device"), on_note=transport.midi_note)
     except Exception as e:
         board = None
         print("No MIDI input:", e)
@@ -1373,6 +1433,7 @@ def main():
         board.seq_page = lambda: transport.seq_page
         board.banked = lambda: bool(engine and engine.drums and engine.drums.lanes > 8)
         board.seq_pads = transport.seq_pad
+        board.pad_release = transport.pad_release
         transport.shift_held = lambda: board.shift       # the sequencer's box lights up while SHIFT is held
         if engine:
             board.heard = lambda: engine.seq_clock        # where the sequencer is (for live steps)

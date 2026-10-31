@@ -1,5 +1,4 @@
-"""The INSTRUMENTS page (the MIDI key from the tape page): 8 slots, each empty or one of the drum machines
-(synths come later). It's where you choose what's loaded; the patterns are made on the drum and sequencer
+"""The INSTRUMENTS page (the MIDI key from the tape page): 8 slots, each empty, a drum machine or a synth. It's where you choose what's loaded; the patterns are made on the drum and sequencer
 pages, and recorded onto the tape like anything else.
 
 - Knob 1 (or the big knob) picks a slot.
@@ -21,13 +20,18 @@ import audio
 import ui
 
 MENU = ["CHANGE INSTRUMENT", "REMOVE"]
-SYNTHS_LATER = "SYNTHS: COMING IN A LATER VERSION"
 BUILDING = "MORE ARE BEING BUILT (THE FIRST TIME TAKES A FEW MINUTES)..."
 
 
 def building():
     import drums
     return bool(drums.schwung_modules and drums.schwung_modules.building)
+
+
+def is_synth(mid):
+    import drums
+    sm = drums.schwung_modules
+    return bool(sm and mid in sm.catalog.BY_ID and sm.catalog.BY_ID[mid]["kind"] == "synth")
 
 
 def machines():
@@ -133,6 +137,9 @@ class InstPage:
             t.reset_drum_view()
         t.inst_page = False
         t.drum_page, t.seq_page = True, False
+        problem = getattr(e.drums.m, "problem", lambda: "")()
+        if problem:
+            t.say(problem.upper()[:110], 6)        # e.g. JE-8086 without its ROM
 
     def mute(self, n):
         """Track key n: mute or unmute slot n."""
@@ -214,14 +221,16 @@ class InstPage:
             self.draw_list(surf, f, white, grey, dim, green)
 
     def draw_pattern(self, surf, seq, rect, colour):
-        """The current pattern at a glance: a tick for each step that has a hit on any lane."""
+        """The current pattern at a glance: a tick for each step that has a hit on any lane (a synth: a
+        note starting there)."""
         x, y, w, h = rect
         pat = seq.pattern
-        length = max([ln.length for ln in pat.lanes] + [1])
+        synth = hasattr(pat, "notes")
+        length = pat.length if synth else max([ln.length for ln in pat.lanes] + [1])
         length = min(length, 64)
         cell = w / length
         for k in range(length):
-            on = any(k < ln.length and ln.steps[k].on for ln in pat.lanes)
+            on = bool(pat.at(k)) if synth else any(k < ln.length and ln.steps[k].on for ln in pat.lanes)
             cx = round(x + k * cell)
             cw = max(2, round(cell) - 2)
             if on:
@@ -230,24 +239,43 @@ class InstPage:
                 pygame.draw.rect(surf, (40, 43, 50), (cx, y + h // 2 - 1, cw, 2))
 
     def draw_list(self, surf, f, white, grey, dim, green):
-        items = [title for _, title in self.choices] if self.mode == "pick" else list(self.choices)
-        w, row_h = 520, 38
-        extra = 1 if self.mode == "pick" else 0
-        h = 56 + row_h * (len(items) + extra)
+        """The pick list (or the CHANGE / REMOVE menu): 6 rows at a time, scrolling with the pick."""
+        if self.mode == "pick":
+            items = [(title, "SYNTH" if is_synth(mid) else "DRUMS") for mid, title in self.choices]
+        else:
+            items = [(label, "") for label in self.choices]
+        rows = 6
+        w, row_h = 560, 38
+        shown = min(rows, len(items))
+        extra = 1 if (self.mode == "pick" and building()) else 0
+        h = 56 + row_h * (shown + extra)
         x, y = 640 - w // 2, max(40, 200 - h // 2)
         pygame.draw.rect(surf, (20, 22, 26), (x, y, w, h), border_radius=10)
         pygame.draw.rect(surf, (70, 75, 84), (x, y, w, h), 2, border_radius=10)
         head = "INSTRUMENT FOR SLOT %d" % (self.row + 1) if self.mode == "pick" else "SLOT %d" % (self.row + 1)
+        if len(items) > rows:
+            head += "   (%d OF %d)" % (self.pick + 1, len(items))
         hd = f(13).render(head, True, grey)
         surf.blit(hd, (640 - hd.get_width() // 2, y + 14))
-        for k, label in enumerate(items):
-            ry = y + 42 + k * row_h
+        top = max(0, min(self.pick - rows // 2, len(items) - rows))
+        for r in range(shown):
+            k = top + r
+            label, kind = items[k]
+            ry = y + 42 + r * row_h
             on = k == self.pick
             if on:
                 pygame.draw.rect(surf, (35, 38, 45), (x + 12, ry, w - 24, row_h - 4), border_radius=6)
             txt = f(22 if on else 20, 600, "sans").render(label, True, green if on else white)
             surf.blit(txt, (640 - txt.get_width() // 2, ry + (row_h - 4 - txt.get_height()) // 2))
+            if kind:
+                tg = f(11).render(kind, True, dim if not on else grey)
+                surf.blit(tg, (x + w - 24 - tg.get_width(), ry + (row_h - 4 - tg.get_height()) // 2))
+        if top > 0:
+            pygame.draw.polygon(surf, grey, [(640 - 8, y + 38), (640 + 8, y + 38), (640, y + 31)])
+        if top + rows < len(items):
+            by = y + 42 + shown * row_h - 2
+            pygame.draw.polygon(surf, grey, [(640 - 8, by), (640 + 8, by), (640, by + 7)])
         if extra:
-            ry = y + 42 + len(items) * row_h
-            txt = f(12).render(BUILDING if building() else SYNTHS_LATER, True, dim)
+            ry = y + 42 + shown * row_h
+            txt = f(12).render(BUILDING, True, dim)
             surf.blit(txt, (640 - txt.get_width() // 2, ry + 8))

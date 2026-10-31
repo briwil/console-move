@@ -321,6 +321,38 @@ goes onto the track.
 A new song starts with the drum machine you used last in slot 1. A song from before
 the INSTRUMENTS page opens with its drum machine, kit and patterns in slot 1.
 
+## Synths
+
+The INSTRUMENTS list also has 19 synths, all Schwung modules: OB-XD, DEXED, BRAIDS, HUSH ONE,
+RAFFOSYNTH, HERA, PLAITS, ESSAIM, DENIS, WURL, APHEX, FIZZIK, MAZE VOICE, QUILT, CHONK, TINYK, TINYPRO5,
+AMINO and JE-8086. Like the Schwung drum machines, they're fetched and built in the background the first
+time (JE-8086 takes longest: it's an emulator of the JP-8000).
+
+- **Sound page** (push knob 1 on its slot): the synth's own pages (MAIN, then OSC, FILTER, … as the
+  synth arranges them; knob 9 turns them). Track keys 1–8 play the 8 notes the synth sequencer shows,
+  for as long as you hold them.
+- **Playing it from the OP-XY:** notes from the OP-XY's keys play the open synth. On its sequencer
+  while it's playing, they go into the pattern too (held notes come in as long notes).
+- **Synth sequencer** (MIDI on the sound page). Each row is a note of the scale, lowest at the bottom
+  (8 at a time); a step can have any number of notes (a chord):
+  - **Knob 1:** the step cursor (1–64).
+  - **Track key n:** picks the nth row and puts its note on the cursor's step (and plays it). Press it
+    on a note that's there to take it off. While playing, a key puts the note where it's playing, as
+    long as you hold it.
+  - **Knobs 2–9:** the picked note's LENGTH (in steps), VELOCITY, CHANCE and RATCHETS, then the pattern's
+    LENGTH and RATE, then this synth's KEY and SCALE (13 scales, CHROMATIC for every note). Knob 10:
+    the pattern. Holding a key while turning a knob changes that note without taking it off.
+  - **← / →:** the rows down / up an octave. **SHIFT + ← / →:** one row.
+  - **Push knob 1:** the knobs go to the synth's sound pages. Hold a note's key and turn to lock that
+    setting to the note; with no key held they change the synth's sound (heard as you turn, when
+    stopped, as on the drum sequencer).
+  - SHIFT+CUT undoes. FILE: COPY / PASTE / CLEAR Pattern and CLEAR Locks work here too.
+- Like the Schwung drum machines, a synth's inputs are KIT L / KIT R and KIT (its stereo out).
+- **JE-8086 needs the JP-8000's ROM:** on the file page (http://console.local) open **ROMs**, then the
+  **je8086** folder, and upload all 8 firmware .mid files there. Then restart Console (or take JE-8086
+  out of its slot and put it back). Until then it's silent, and opening it says the ROM is missing.
+- Not in yet: **Model-72** (its engine is written in Rust, which the Pi doesn't have).
+
 **Four drum machines.** Pick them on the INSTRUMENTS page, or change the open slot's
 with **FILE → DRUM MACHINE** on its drum page or sequencer.
 - **LXR-02** is the one described below.

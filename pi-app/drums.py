@@ -862,7 +862,7 @@ class Drums:
         if machine not in ms:
             try:
                 if schwung_modules and machine in schwung_modules.catalog.BY_ID:
-                    ms[machine] = schwung_modules.Module(machine)     # a Schwung module (schwung/)
+                    ms[machine] = schwung_modules.make(machine)       # a Schwung module (schwung/)
                 else:
                     ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
             except Exception as e:

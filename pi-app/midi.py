@@ -237,10 +237,12 @@ class ClockOut(threading.Thread):
             time.sleep(max(0.0, min(0.002, next_tick - time.perf_counter())))
 
 
-def start(on_control, engine, clock_name=None):
+def start(on_control, engine, clock_name=None, on_note=None):
     """Start reading the control board and a clock source.
 
     on_control(kind, number, value) gets ("note", note, 1 or 0) and ("cc", number, value).
+    on_note(note, velocity) gets the notes played on the clock source (the OP-XY's keys), velocity 0 for
+    a note let go: they play the synth that's open.
     Returns (controller source, clock source, Clock).
     """
     def control_message(status, d1, d2):
@@ -270,8 +272,15 @@ def start(on_control, engine, clock_name=None):
         return None
 
     clock = Clock(engine)
+
+    def clock_message(status, d1, d2):
+        kind = status & 0xF0
+        if on_note and kind in (0x80, 0x90):
+            on_note(d1, d2 if kind == 0x90 else 0)
+        clock.message(status, d1, d2)
+
     ctl = Source(pick_controller, control_message, label="Controls")
-    clk = Source(pick_clock, clock.message, clock.realtime, label="Clock")
+    clk = Source(pick_clock, clock_message, clock.realtime, label="Clock")
     ctl.start()
     clk.start()
     if engine:

@@ -10,6 +10,7 @@
  *   sh_set(h, key, value)                        a setting, as text (the API's way)
  *   sh_get(h, key, buf, len)                     a setting's value as text; < 0 if it has none
  *   sh_render(h, out, frames)                    out: frames x 2 floats (left, right)
+ *   sh_module_error(h, buf, len)                 what's wrong, if the module says (a missing ROM...)
  *   sh_close(h)
  *   sh_bpm(bpm)                                  the song's tempo, for modules that follow it
  *
@@ -95,6 +96,14 @@ void *sh_open(const char *dsp_path, const char *module_dir, const char *defaults
     h->api = api;
     h->inst = inst;
     return h;
+}
+
+int sh_module_error(handle_t *h, char *buf, int len)
+{
+    if (!h || !h->api->get_error || len <= 0)
+        return 0;
+    buf[0] = 0;
+    return h->api->get_error(h->inst, buf, len);
 }
 
 void sh_close(handle_t *h)

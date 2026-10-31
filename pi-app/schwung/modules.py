@@ -50,7 +50,8 @@ def host():
             for name, args, res in [("sh_open", [cp, cp, cp], vp), ("sh_error", [], cp), ("sh_close", [vp], None),
                                     ("sh_midi", [vp, i, i, i], None), ("sh_set", [vp, cp, cp], None),
                                     ("sh_get", [vp, cp, cp, i], i), ("sh_bpm", [ctypes.c_float], None),
-                                    ("sh_render", [vp, ctypes.POINTER(ctypes.c_float), i], None)]:
+                                    ("sh_render", [vp, ctypes.POINTER(ctypes.c_float), i], None),
+                                    ("sh_module_error", [vp, cp, i], i)]:
                 fn = getattr(h, name)
                 fn.argtypes, fn.restype = args, res
             _host = h
@@ -102,6 +103,12 @@ class Instance:
         r = self.h.sh_get(self.ptr, key.encode(), buf, len(buf))
         return buf.value.decode(errors="replace") if r >= 0 else None
 
+    def error(self):
+        """What the module says is wrong (no ROM...), or ""."""
+        buf = ctypes.create_string_buffer(512)
+        self.h.sh_module_error(self.ptr, buf, len(buf))
+        return buf.value.decode(errors="replace").strip()
+
     def set(self, key, value):
         self.h.sh_set(self.ptr, key.encode(), str(value).encode())
 
@@ -136,6 +143,8 @@ class Module:
         self._seq = Instance(dsp, folder, defaults)
         live = os.path.join(folder, "dsp_live.so")
         try:
+            if spec.get("one_copy"):
+                raise RuntimeError("one copy")
             if not os.path.exists(live) or os.path.getmtime(live) < os.path.getmtime(dsp):
                 shutil.copyfile(dsp, live + ".tmp")
                 os.replace(live + ".tmp", live)
@@ -160,6 +169,20 @@ class Module:
             ui = json.loads(s.get("ui_hierarchy", big=True) or "null") or caps.get("ui_hierarchy") or {}
         except ValueError:
             ui = caps.get("ui_hierarchy") or {}
+        if not chain:
+            # some modules only describe their settings in their pages (Hush One)
+            levels = list((ui.get("levels") or {}).values()) + \
+                list(((caps.get("ui_hierarchy") or {}).get("levels") or {}).values())
+            for lvl in levels:
+                for p in lvl.get("params") or []:
+                    if isinstance(p, dict) and p.get("key") and p.get("type"):
+                        q = dict(p)
+                        q["name"] = p.get("label") or p.get("name") or p["key"]
+                        if "max_param" in p and "max" not in p:
+                            n = _number(s.get(p["max_param"]))
+                            q["max"] = max(0, (n or 1) - 1)
+                        if p["key"] not in {c.get("key") for c in chain}:
+                            chain.append(q)
         prefixes = self.spec.get("voice_prefixes")
         self.params = []                              # {key, label, kind, options, lo, hi, steps, voice}
         voices = set()
@@ -239,14 +262,18 @@ class Module:
         kit = [i for i, p in enumerate(self.params) if p["voice"] is None]
         self._kit_pages, used = [], set()
         for name, lvl in (ui.get("levels") or {}).items():
-            if lvl.get("child_count") or not lvl.get("knobs"):
+            knobs = lvl.get("knobs") or [p["key"] for p in lvl.get("params") or []
+                                         if isinstance(p, dict) and p.get("key")]
+            if lvl.get("child_count") or not knobs:
                 continue
-            idx = [self.index[k] for k in lvl["knobs"] if k in self.index and self.index[k] in kit
+            idx = [self.index[k] for k in knobs if k in self.index and self.index[k] in kit
                    and self.index[k] not in used]
             if idx:
                 used |= set(idx)
-                label = (lvl.get("name") or lvl.get("label") or name).upper()
-                self._kit_pages.append(("KIT" if name == "root" else label[:10], idx[:8]))
+                label = (lvl.get("name") or lvl.get("label") or name).upper().replace("_", " ")
+                for k in range(0, len(idx), 8):
+                    page = ("KIT" if name == "root" else label[:10]) if k == 0 else "%s %d" % (label[:8], k // 8 + 1)
+                    self._kit_pages.append((page, idx[k:k + 8]))
         rest = [i for i in kit if i not in used]
         for k in range(0, len(rest), 8):
             self._kit_pages.append(("MORE" if self._kit_pages or k else "KIT", rest[k:k + 8]))
@@ -276,6 +303,10 @@ class Module:
             return p["raw"][max(0, min(p["steps"], pos))]
         v = p["lo"] + (p["hi"] - p["lo"]) * pos / p["steps"]
         return str(int(round(v))) if p["int"] else "%.4f" % v
+
+    def problem(self):
+        """The module's own complaint, for the screen (e.g. JE-8086 without its ROM), or ""."""
+        return self._seq.error()
 
     # ------------------------------------------------------------ what the screens ask
     def pages(self, voice):
@@ -446,3 +477,137 @@ class Module:
     def multi(self, voices):
         """No drum on its own: these modules give one stereo mix (the KIT inputs)."""
         return np.zeros((len(voices), self.channels), np.float32)
+
+
+class SynthModule(Module):
+    """A Schwung synth: played with notes. Its pages are the module's own; the drum page shows them, and
+    track keys 1-8 play the notes the synth sequencer shows (note_on / note_off, from console.py). The
+    synth sequencer's events carry each note's length in their locks as "gate" (frames)."""
+
+    def __init__(self, mid):
+        super().__init__(mid)
+        self.lanes = 8                       # the keys on the sound page: 8 notes of the scale
+        self.voices = 1
+        self.lane_voice = [0] * self.lanes
+        self.names = [self.title]
+        self.short = [self.title[:4]]
+        self.lane_names = [self.title] * self.lanes
+        self.lane_short = [str(i + 1) for i in range(self.lanes)]
+        self._param_voice = lambda lane: 0
+        self._held = []                      # [frames left, note]: the sequencer's notes still sounding
+        self._live_on = set()                # notes held by hand
+        for p in self.params:
+            p["voice"] = None
+        self._voice_pages = {}
+        self._locked = [set()]
+
+    def pages(self, voice=0):
+        pages = self._kit_pages or [("SOUND", [])]
+        return [("MAIN" if n == "KIT" else n, idx) for n, idx in pages]
+
+    def note_on(self, note, velocity=100):
+        with self._lock:
+            self._pending.append(("on", int(note), int(velocity)))
+
+    def note_off(self, note):
+        with self._lock:
+            self._pending.append(("off", int(note)))
+
+    def all_off(self):
+        """Every note let go (the sequencer stopped, or this synth stopped sounding)."""
+        with self._lock:
+            self._pending.append(("all_off",))
+
+    def hit(self, lane, velocity=100):
+        pass                                 # synths are played with note_on / note_off
+
+    def render(self, frames, events=(), with_live=True):
+        with self._lock:
+            todo = [t for t in self._pending if with_live or t[0] not in ("on", "off")]
+            self._pending = [] if with_live else [t for t in self._pending if t[0] in ("on", "off")]
+        seq = np.zeros((frames, self.voices), np.float32)
+        live = np.zeros((frames, self.voices), np.float32)
+        engines = (self._seq, self._live) if self.two_engines else (self._seq,)
+        refresh = False
+        for t in todo:
+            if t[0] == "on":
+                if t[1] in self._live_on:
+                    self._live.midi(0x80, t[1], 0)
+                self._live.midi(0x90, max(0, min(127, t[1])), max(1, min(127, t[2])))
+                self._live_on.add(t[1])
+            elif t[0] == "off":
+                if t[1] in self._live_on:
+                    self._live.midi(0x80, t[1], 0)
+                    self._live_on.discard(t[1])
+            elif t[0] == "param":
+                for inst in engines:
+                    self._apply(inst, t[1], t[2])
+            elif t[0] == "refresh":
+                refresh = True
+            elif t[0] == "all_off":
+                for _, note in self._held:
+                    self._seq.midi(0x80, note, 0)
+                self._held = []
+                for note in list(self._live_on):
+                    self._live.midi(0x80, note, 0)
+                self._live_on.clear()
+        if refresh:
+            self._refresh()
+        # what happens in this block, in order: notes let go (0) before notes played (1) at the same time
+        acts, keep = [], []
+        for left, note in self._held:
+            if left < frames:
+                acts.append((max(0, int(left)), 0, note, 0, None))
+            else:
+                keep.append([left - frames, note])
+        self._held = keep
+        for offset, note, vel, locks in events:
+            if not 0 <= note <= 127:
+                continue
+            locks = dict(locks)
+            gate = max(1, int(locks.pop("gate", 4410)))
+            acts.append((offset, 1, note, vel, locks))
+            if offset + gate < frames:
+                acts.append((offset + gate, 0, note, 0, None))
+            else:
+                self._held.append([offset + gate - frames, note])
+        acts.sort(key=lambda a: (a[0], a[1]))
+        buf = np.zeros((frames, 2), np.float32)
+        pos = 0
+        for offset, kind, note, vel, locks in acts:
+            offset = max(pos, min(frames, offset))
+            if offset > pos:
+                self._seq.render(buf[pos:offset])
+                pos = offset
+            if kind == 0:
+                self._seq.midi(0x80, note, 0)
+                continue
+            for p in self._locked[0] - set(locks):
+                self._apply(self._seq, p, self.values[p])
+            for p, v in locks.items():
+                if isinstance(p, int) and 0 <= p < self.param_count:
+                    self._apply(self._seq, p, v)
+            self._locked[0] = set(p for p in locks if isinstance(p, int) and 0 <= p < self.param_count)
+            self._seq.midi(0x90, note, max(1, min(127, vel)))
+        if pos < frames:
+            self._seq.render(buf[pos:])
+        seq = np.zeros((frames, 2), np.float32)
+        seq[:] = buf
+        if self.two_engines and with_live:
+            live = np.zeros((frames, 2), np.float32)
+            self._live.render(live)
+        else:
+            live = np.zeros((frames, 2), np.float32)
+        return seq, live
+
+    def pans(self):
+        return np.eye(2, dtype=np.float32)
+
+    def sends(self):
+        z = np.zeros(2, np.float32)
+        return z, z
+
+
+def make(mid):
+    """The instrument for a module id: a drum machine or a synth."""
+    return SynthModule(mid) if catalog.BY_ID[mid]["kind"] == "synth" else Module(mid)

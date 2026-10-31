@@ -118,11 +118,12 @@
 <script>
 (function () {
   "use strict";
-  var TABS = { projects: ["Projects", "#4F8CFF"], samples: ["Samples", "#3CCB7F"], exports: ["Exports", "#F2C230"] };
+  var TABS = { projects: ["Projects", "#4F8CFF"], samples: ["Samples", "#3CCB7F"], exports: ["Exports", "#F2C230"], roms: ["ROMs", "#B278FF"] };
   var EMPTY = {
     projects: ["No projects yet", "Songs you record on the console will show up here."],
     samples: ["No samples yet", "Upload WAV files here to use them on the console."],
-    exports: ["No exports yet", "Stems and mixdowns you export from the console will show up here."]
+    exports: ["No exports yet", "Stems and mixdowns you export from the console will show up here."],
+    roms: ["No ROMs yet", "Instruments that need a ROM have a folder here (je8086: the JP-8000's 8 firmware .mid files). Upload them into it."]
   };
   var cur = "projects", entries = [], playing = null;
   function $(id) { return document.getElementById(id); }

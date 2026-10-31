@@ -50,6 +50,7 @@ except Exception as _e:                     # carry on without the drum synth
     drums = None
 
 import drumparams
+import notes
 import sequencer
 
 TRACKS = 8
@@ -698,15 +699,37 @@ class Engine:
     def loaded_slots(self):
         return [i for i, m in enumerate(self.slots) if m]
 
+    @staticmethod
+    def is_synth(machine):
+        """True for a synth (played with notes; the synth sequencer), False for a drum machine."""
+        sm = drums.schwung_modules if drums else None
+        return bool(sm and machine in sm.catalog.BY_ID and sm.catalog.BY_ID[machine]["kind"] == "synth")
+
+    def _new_seq(self, machine, data=None):
+        s = notes.NoteSequencer() if self.is_synth(machine) else sequencer.Sequencer()
+        s.bar_beats = self.bar_beats()
+        s.from_json(data)
+        return s
+
     def _seq_for(self, machine):
-        """A machine's sequencer (its patterns), made empty if it has none yet. Call with the lock held."""
+        """A machine's sequencer (its patterns), made empty if it has none yet (a synth's is the synth
+        sequencer). Call with the lock held."""
         s = self.seqs.get(machine)
-        if s is None:
-            s = sequencer.Sequencer()
-            s.bar_beats = self.bar_beats()
-            s.from_json(None)
+        if s is None or isinstance(s, notes.NoteSequencer) != self.is_synth(machine):
+            s = self._new_seq(machine)
             self.seqs[machine] = s
         return s
+
+    def note_on(self, note, velocity=100):
+        """Play a note on the shown synth (track keys on its sound page, or a MIDI keyboard)."""
+        m = self.drums.m if self.drums and self.slot is not None else None
+        if m is not None and hasattr(m, "note_on"):
+            m.note_on(note, velocity)
+
+    def note_off(self, note):
+        m = self.drums.m if self.drums and self.slot is not None else None
+        if m is not None and hasattr(m, "note_off"):
+            m.note_off(note)
 
     def set_slot(self, i, machine):
         """The INSTRUMENTS page: put a machine in slot i (None empties it). Each machine has its own kit and
@@ -989,8 +1012,9 @@ class Engine:
                 # a new song starts with the machine used last, and every machine's Init Kit
                 self.drums.restore(getattr(self, "settings", {}).get("drum_machine", "lxr"), {})
                 self._drum_machine_changed()
-            self.seq.from_json(None)                    # ... and empty patterns
-            self.seqs = {self.drums.machine if self.drums else "lxr": self.seq}
+            first = self.drums.machine if self.drums else "lxr"
+            self.seq = self._new_seq(first)             # ... and empty patterns
+            self.seqs = {first: self.seq}
             # its instruments: that machine in slot 1
             self.slots = [self.drums.machine if self.drums else None] + [None] * (SLOTS - 1)
             self.slot = 0 if self.drums else None
@@ -1187,10 +1211,7 @@ class Engine:
         if meta.get("drum_seq") is not None:
             saved[meta.get("drum_machine", "lxr")] = meta["drum_seq"]
         for mid, data in saved.items():
-            s = sequencer.Sequencer()
-            s.bar_beats = self.bar_beats()                 # missing patterns start at a bar of the song's time
-            s.from_json(data)
-            self.seqs[mid] = s
+            self.seqs[mid] = self._new_seq(mid, data)      # missing patterns start at a bar of the song's time
         self.seq.bar_beats = self.bar_beats()
         self.seq.from_json(None)
         if self.drums:
@@ -1199,6 +1220,8 @@ class Engine:
         machine = self.drums.machine if self.drums else meta.get("drum_machine", "lxr")
         if machine in self.seqs:
             self.seq = self.seqs[machine]
+        elif isinstance(self.seq, notes.NoteSequencer) != self.is_synth(machine):
+            self.seq = self._new_seq(machine)
         self.seqs[machine] = self.seq
         # the instrument slots (older songs: their drum machine in slot 1)
         saved_slots = meta.get("slots")
@@ -1217,7 +1240,7 @@ class Engine:
             want = loaded[0] if loaded else None
         if self.drums and want is not None:
             self.drums.use(self.slots[want])
-            self.seq = self.seqs[self.slots[want]]
+            self.seq = self._seq_for(self.slots[want])
             self.slot = want
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
@@ -2524,7 +2547,15 @@ class Engine:
         elif was_playing and not self.playing:
             for mid in self.loaded_machines():
                 self.seqs[mid].stop()
+                m = self.drums.get(mid)
+                if hasattr(m, "all_off"):
+                    m.all_off()                  # a synth lets go of the sequencer's notes
         sounding = self.sounding_slots()
+        for i in set(getattr(self, "_sounding", ())) - set(sounding):
+            m = self.drums.get(self.slots[i]) if self.slots[i] else None
+            if hasattr(m, "all_off"):
+                m.all_off()                      # stopped sounding: nothing left hanging when it comes back
+        self._sounding = list(sounding)
         auditions = []
         if self._auditions and not self.playing:
             auditions, self._auditions = self._auditions, []
@@ -2553,7 +2584,8 @@ class Engine:
                 if events:
                     soon = time.monotonic() + self.read_ahead / self.rate     # when you'll hear them
                     for offset, lane, _vel, _locks in events:
-                        self.seq_hits[lane] = soon + offset / self.rate
+                        if lane < len(self.seq_hits):
+                            self.seq_hits[lane] = soon + offset / self.rate
             seq_voices, live_voices = m.render(frames, events, with_live=(i == current))
             # what's recorded (at pos, where you pressed): your hits now, and the sequencer's from read_ahead
             # frames ago (they were made that far ahead, to sound on time). What you hear: both, now

@@ -153,7 +153,7 @@ MODULES = [
                ["git", "-C", "libs/gearmulator/source/cpu/dsp56300", "submodule", "update", "--init", "--depth",
                 "1", "source/asmjit"],
                ["{cmake}", "-B", "build", "-DCMAKE_BUILD_TYPE=Release"],
-               ["{cmake}", "--build", "build", "--target", "jp8000-move-plugin", "jp8000-dsp", "-j3"],
+               ["{cmake}", "--build", "build", "--target", "jp8000-move-plugin", "jp8000-dsp", "-j2"],
                ["cp", "build/dsp.so", "{out}"]]},
     {"id": "amino", "title": "AMINO", "kind": "synth", "license": "MIT",
      "repo": "klaine/amino", "commit": "5c8ce7c9725b5d02471c98d78be182e223428a0d",

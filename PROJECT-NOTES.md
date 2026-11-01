@@ -131,7 +131,7 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
 ### INSTRUMENTS page (Oct 2026)
 
 - Brian's design: the MIDI key from the tape opens `instpage.py`, 8 slots (`Engine.slots`, machine ids
-  or None; `slot` = the one the drum and sequencer pages show; `slot_mutes`). Push knob 1 opens or
+  or None; `slot` = the one the drum and sequencer pages show; `slot_mutes`). Push knob 11 opens or
   picks, SHIFT+push changes / removes, track keys mute, SHIFT+MIDI (`DRUMS_BACK`) goes back a page.
   MIDI on the drum page toggles drum page / sequencer. Each machine in one slot only (each library is
   one engine). Arranging is done on the tape (record each pattern, then edit), not on this page.

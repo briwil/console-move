@@ -1,10 +1,10 @@
 """The INSTRUMENTS page (the MIDI key from the tape page): 8 slots, each empty, a drum machine or a synth. It's where you choose what's loaded; the patterns are made on the drum and sequencer
 pages, and recorded onto the tape like anything else.
 
-- Knob 1 (or the big knob) picks a slot.
-- Push knob 1: on an empty slot, pick an instrument for it; on a loaded one, open it (its drum page; the
+- Knob 11 (the big knob) picks a slot.
+- Push knob 11: on an empty slot, pick an instrument for it; on a loaded one, open it (its drum page; the
   MIDI key then goes between the drum page and its sequencer, SHIFT+MIDI comes back here).
-- SHIFT + push knob 1 on a loaded slot: CHANGE INSTRUMENT or REMOVE. A removed machine's kit and patterns
+- SHIFT + push knob 11 on a loaded slot: CHANGE INSTRUMENT or REMOVE. A removed machine's kit and patterns
   stay in the song, so putting it back finds them.
 - Track keys 1-8 mute and unmute slots 1-8.
 - SHIFT+MIDI: back to the tape page.
@@ -57,7 +57,7 @@ class InstPage:
     # ------------------------------------------------------------ controls
 
     def knob(self, number, delta):
-        if number not in (1, 11):
+        if number != 11:
             return
         step = 1 if delta > 0 else -1
         if self.mode:
@@ -66,7 +66,7 @@ class InstPage:
             self.row = max(0, min(audio.SLOTS - 1, self.row + step))
 
     def push(self):
-        """Push knob 1 (or the MIDI key): choose in the list, open a loaded slot, or pick for an empty one."""
+        """Push knob 11 (or the MIDI key): choose in the list, open a loaded slot, or pick for an empty one."""
         e = self.e
         if not e or not e.drums:
             return
@@ -83,7 +83,7 @@ class InstPage:
             self.start_pick()
 
     def shift_push(self):
-        """SHIFT + push knob 1 on a loaded slot: change or remove it."""
+        """SHIFT + push knob 11 on a loaded slot: change or remove it."""
         e = self.e
         if self.mode or not e or not e.slots[self.row]:
             return
@@ -155,12 +155,12 @@ class InstPage:
     def hint(self):
         e = self.e
         if self.mode == "pick":
-            return "INSTRUMENT FOR SLOT %d  ·  KNOB 1: PICK  ·  PUSH KNOB 1: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
+            return "INSTRUMENT FOR SLOT %d  ·  KNOB 11: PICK  ·  PUSH KNOB 11: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
         if self.mode == "menu":
-            return "SLOT %d  ·  KNOB 1: PICK  ·  PUSH KNOB 1: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
+            return "SLOT %d  ·  KNOB 11: PICK  ·  PUSH KNOB 11: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
         if e and e.slots[self.row]:
-            return "PUSH KNOB 1: OPEN  ·  SHIFT+PUSH: CHANGE OR REMOVE  ·  TRACK KEYS: MUTE  ·  SHIFT+MIDI: TAPE"
-        return "KNOB 1: PICK A SLOT  ·  PUSH KNOB 1: ADD AN INSTRUMENT  ·  TRACK KEYS: MUTE  ·  SHIFT+MIDI: TAPE"
+            return "PUSH KNOB 11: OPEN  ·  SHIFT+PUSH: CHANGE OR REMOVE  ·  TRACK KEYS: MUTE  ·  SHIFT+MIDI: TAPE"
+        return "KNOB 11: PICK A SLOT  ·  PUSH KNOB 11: ADD AN INSTRUMENT  ·  TRACK KEYS: MUTE  ·  SHIFT+MIDI: TAPE"
 
     # ------------------------------------------------------------ drawing
 

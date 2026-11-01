@@ -298,10 +298,10 @@ one of the drum machines below (synths come in a later version). It's where you
 choose what's loaded; you make each one's patterns on its drum and sequencer pages,
 then record them onto the tape and cut and move them there like any recording.
 
-- **Knob 1** (or the big knob) picks a slot.
-- **Push knob 1** on an empty slot: pick an instrument for it. On a loaded slot: open
+- **Knob 11** (the big knob) picks a slot.
+- **Push knob 11** on an empty slot: pick an instrument for it. On a loaded slot: open
   it, on its drum page. Then **MIDI** goes between the drum page and its sequencer.
-- **SHIFT + push knob 1** on a loaded slot: CHANGE INSTRUMENT or REMOVE. A removed
+- **SHIFT + push knob 11** on a loaded slot: CHANGE INSTRUMENT or REMOVE. A removed
   machine's kit and patterns stay in the song, so putting it back finds them.
 - **Track keys 1–8** mute and unmute slots 1–8.
 - **SHIFT+MIDI** goes back: from the drum page or sequencer to INSTRUMENTS, and from
@@ -406,7 +406,7 @@ LXR-02, running on the Pi from its open-source firmware. It's an input, like
 the OP-XY: you hear it along with the tape, and RECORD puts it on tape.
 
 1. Press the **MIDI** key (`D` on a keyboard) for the INSTRUMENTS page, then push
-   knob 1 on the slot to open its drum page. The first time, this also sets
+   knob 11 on the slot to open its drum page. The first time, this also sets
    SETTINGS > INPUT to INSTRUMENTS; set it back there to record from the OP-XY again.
 2. Track keys **1–7** play the drums (no velocity yet, every hit is the same):
 

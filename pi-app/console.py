@@ -194,6 +194,8 @@ class Board:
                 name = PUSHES[number - 32]
                 if self.shift and name.startswith("MUTE"):
                     name = "SOLO" + name[4:]          # SHIFT + push a track knob: solo
+                elif self.shift and name == "HOME":
+                    name = "HOME_PUSH_SHIFT"          # SHIFT + push knob 11 (HOME otherwise)
                 elif self.shift and name == "ZOOM_RESET":
                     name = "SWEEP_UNDO"               # SHIFT + push knob 9: undo the in/out sweep
                 self.q.put(name)
@@ -358,7 +360,10 @@ class Transport:
             self.seqp.move_box(-1 if name == "LEFT" else 1)   # the sequencer: the picked lane's 8-step box
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
             self.move(-1 if name.endswith("LEFT") else 1, tape.BEATS_PER_BAR if name.startswith("BAR") else t.step)
-        elif name == "HOME":
+        elif self.inst_page and not self.fx_page and name in ("HOME", "HOME_PUSH_SHIFT"):
+            # the INSTRUMENTS page: knob 11 turns through the list, push it to choose (SHIFT: change / remove)
+            self.instp.push() if name == "HOME" else self.instp.shift_push()
+        elif name in ("HOME", "HOME_PUSH_SHIFT"):
             start = e.loop_a / e.frames_per_beat() if (e and e.loop_on and e.loop_region()) else 0.0
             self.set_pos(start if t.pos > start + 1e-6 else 0.0)
         elif name == "GRID":
@@ -392,10 +397,6 @@ class Transport:
             # the INSTRUMENTS page: track keys mute slots, push knob 1 opens / picks (SHIFT: change, remove)
             if name.startswith("TRACK"):
                 self.instp.mute(int(name[5:]))
-            elif name == "MUTE1":
-                self.instp.push()
-            elif name == "SOLO1":
-                self.instp.shift_push()
         elif name.startswith("TRACK") and self.pad(int(name[5:])):
             pass                                  # a keyboard number key on the drum page: played
         elif name.startswith("TRACK"):

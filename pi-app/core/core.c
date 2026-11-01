@@ -76,6 +76,7 @@ typedef struct {
     int64_t awake;                            /* frames left before it sleeps: renders only while > 0 */
     int held;                                 /* notes held down (a module stays awake while any are) */
     int silent;                               /* its buffer is all zeros (asleep) */
+    int slot;                                 /* the instrument slot it belongs to, or -1 (mixed on its own) */
     float buf[MAX_BLOCK * MAX_VOICES];        /* this cycle's sound, interleaved */
 } Source;
 
@@ -83,7 +84,8 @@ static Source sources[MAX_SOURCES];
 
 /* ------------------------------------------------------------------ queues */
 
-enum { EV_TRIGGER = 1, EV_MIDI = 2, EV_CALL = 3 };
+enum { EV_TRIGGER = 1, EV_MIDI = 2, EV_CALL = 3, EV_TRANSPORT = 4 };
+enum { T_PLAY = 1, T_STOP = 2, T_LOCATE = 3, T_RECORD = 4, T_RECORD_OFF = 5 };
 
 typedef struct {
     uint64_t frame;                           /* when (core frames); 0 = as soon as possible */
@@ -126,6 +128,7 @@ static void *reverb, *delay;
 static float rev_level = 0.0f, dly_level = 0.0f;
 static float master = 1.0f, mix_gain = 0.6f;
 static float send_l[2][MAX_BLOCK], fx_out[4][MAX_BLOCK], mix[2][MAX_BLOCK];
+static float send_d[2][MAX_BLOCK];
 
 static void flush_denormals(void) {
 #if defined(__aarch64__)
@@ -136,6 +139,234 @@ static void flush_denormals(void) {
 #elif defined(__SSE__)
     _mm_setcsr(_mm_getcsr() | 0x8040);
 #endif
+}
+
+/* ------------------------------------------------------------------ instrument slots: their recording inputs
+
+   Each slot (the INSTRUMENTS page) groups its machine's two sources (sequencer and hands) and makes what the
+   tape can record from it, as the Python engine did: SLOT_CH channels each cycle,
+     0-7  each drum on its own (DRUM 1-8)
+     8-9  the kit in stereo, with the slot's own reverb and delay printed in (KIT L / KIT R)
+     10   the kit in mono (KIT)
+   and, if it's being heard, adds it to the mix (with its sends to the main effects). After the slots come the
+   Move's own audio inputs (two channels). */
+
+#define SLOTS 8
+#define SLOT_CH 11
+#define DRUM_KIT 8
+#define EXT_IN (SLOTS * SLOT_CH)              /* the Move's audio input: channels EXT_IN, EXT_IN + 1 */
+#define IN_CHANNELS (EXT_IN + 2)
+
+typedef struct {
+    int used, src[2], voices;
+    int lane[MAX_VOICES];                     /* voice -> DRUM n channel (0-7), or -1 */
+    float pan[MAX_VOICES][2], rev[MAX_VOICES], dly[MAX_VOICES];
+    float monitor;                            /* how loud it's heard (0: not heard) */
+    void *frev, *fdly;                        /* its own effects, for the KIT inputs (NULL: none) */
+    int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
+} Slot;
+static Slot slots[SLOTS];
+static float inputs[IN_CHANNELS][MAX_BLOCK];
+static float in_peak[IN_CHANNELS];            /* loudest sample since Python last asked */
+static float slot_send[4][MAX_BLOCK], slot_fx[4][MAX_BLOCK];
+
+/* ------------------------------------------------------------------ the tape
+
+   Python owns the tape's memory (numpy arrays: track t, and t + 8 for the right side of a stereo track) and
+   all the bookkeeping (boxes, undo, the drawn levels). The core plays and records it, sample by sample, and
+   says which stretch of which channel it recorded. */
+
+#define TRACKS 8
+#define CHANNELS 16
+typedef struct { int64_t a, b, fi, fo; float g, unused; } Box;     /* frames; gain; fades in frames */
+static struct { const Box *b; int n; } boxes[CHANNELS][2];
+static atomic_int box_cur[CHANNELS];
+static float *track[CHANNELS];
+static int64_t tape_frames;
+static float t_vol[TRACKS], t_pan[TRACKS], t_rev[TRACKS], t_dly[TRACKS];
+static int t_audible[TRACKS], t_stereo[TRACKS], t_armed[TRACKS], t_src[TRACKS][2];
+static int tape_heard = 1, playing, recording, overdub, loop_on;
+static int64_t tpos, loop_a, loop_b, punch_a, punch_b;
+static int64_t rec_lo[CHANNELS], rec_hi[CHANNELS];     /* what was recorded since Python last asked */
+static atomic_flag rec_lock = ATOMIC_FLAG_INIT;
+
+static inline float fade_curve(float u) {
+    if (u <= 0.0f) return 0.0f;
+    if (u >= 1.0f) return 1.0f;
+    return 0.5f - 0.5f * cosf(3.14159265f * u);
+}
+
+static inline float saturate(float x) {        /* gentle tape-style limit above 0.8, as the Python engine */
+    float y = fabsf(x);
+    if (y <= 0.8f) return x;
+    float z = 0.8f + 0.2f * tanhf((y - 0.8f) / 0.2f);
+    return x < 0 ? -z : z;
+}
+
+/* the boxes' gain and fades for channel c at frames idx .. idx + m - 1, into env (1 where no box changes it) */
+static void envelope(int c, int64_t idx, int m, float *env) {
+    for (int i = 0; i < m; i++) env[i] = 1.0f;
+    int cur = atomic_load(&box_cur[c]);
+    const Box *bx = boxes[c][cur].b;
+    int nb = boxes[c][cur].n;
+    if (!bx) return;
+    int64_t lo = idx, hi = idx + m;
+    for (int k = 0; k < nb; k++) {
+        const Box *r = &bx[k];
+        if (r->a >= hi) break;
+        if (r->b <= lo) continue;
+        if (r->g == 1.0f && !r->fi && !r->fo) continue;
+        int64_t f0 = r->a > lo ? r->a : lo, f1 = r->b < hi ? r->b : hi;
+        for (int64_t f = f0; f < f1; f++) {
+            float e = r->g;
+            if (r->fi && f < r->a + r->fi) e *= fade_curve((float)(f - r->a) / (float)r->fi);
+            if (r->fo && f >= r->b - r->fo) e *= fade_curve((float)(r->b - f) / (float)r->fo);
+            env[f - lo] = e;
+        }
+    }
+}
+
+static void note_recorded(int c, int64_t a, int64_t b) {
+    while (atomic_flag_test_and_set(&rec_lock)) ;
+    if (rec_lo[c] < 0 || a < rec_lo[c]) rec_lo[c] = a;
+    if (b > rec_hi[c]) rec_hi[c] = b;
+    atomic_flag_clear(&rec_lock);
+}
+
+/* play and record frames [i0, i0 + m) of this cycle, which are tape frames p .. p + m - 1 (no loop end in between) */
+static void tape_stretch(int i0, int m, int64_t p) {
+    static float env0[MAX_BLOCK], env1[MAX_BLOCK];
+    if (tape_heard) {
+        for (int t = 0; t < TRACKS; t++) {
+            if (!t_audible[t] || !track[t]) continue;
+            if (recording && t_armed[t] && !overdub) continue;          /* replacing it: you hear the new */
+            int st = t_stereo[t] && track[t + TRACKS];
+            float vol = t_vol[t], pan = t_pan[t];
+            float gl = (1.0f - pan) < 1.0f ? 1.0f - pan : 1.0f, gr = (1.0f + pan) < 1.0f ? 1.0f + pan : 1.0f;
+            float rs = t_rev[t], ds = t_dly[t];
+            envelope(t, p, m, env0);
+            if (st) envelope(t + TRACKS, p, m, env1);
+            const float *x0 = track[t] + p, *x1 = st ? track[t + TRACKS] + p : x0;
+            for (int i = 0; i < m; i++) {
+                float a = x0[i] * vol * env0[i];
+                float b = st ? x1[i] * vol * env1[i] : a;
+                float l = a * gl, r = b * gr;
+                mix[0][i0 + i] += l; mix[1][i0 + i] += r;
+                if (rs > 0.0f) { send_l[0][i0 + i] += l * rs; send_l[1][i0 + i] += r * rs; }
+                if (ds > 0.0f) { send_d[0][i0 + i] += l * ds; send_d[1][i0 + i] += r * ds; }
+            }
+        }
+    }
+    if (!recording) return;
+    int64_t a = p, b = p + m;
+    if (punch_b > punch_a) { if (a < punch_a) a = punch_a; if (b > punch_b) b = punch_b; }   /* punch in / out */
+    if (b <= a) return;
+    for (int t = 0; t < TRACKS; t++) {
+        if (!t_armed[t]) continue;
+        int sides = (t_stereo[t] && track[t + TRACKS]) ? 2 : 1;
+        for (int k = 0; k < sides; k++) {
+            int c = k ? t + TRACKS : t;
+            if (!track[c]) continue;
+            int ch = t_src[t][k];
+            float *dst = track[c];
+            for (int64_t f = a; f < b; f++) {
+                int i = i0 + (int)(f - p);
+                float v;
+                if (ch >= 0 && ch < IN_CHANNELS) v = inputs[ch][i];
+                else {                                                    /* the mix: every slot's kit, mono */
+                    v = 0.0f;
+                    for (int s = 0; s < SLOTS; s++) if (slots[s].used) v += inputs[s * SLOT_CH + DRUM_KIT + 2][i];
+                }
+                dst[f] = overdub ? saturate(dst[f] + v) : v;
+            }
+            note_recorded(c, a, b);
+        }
+    }
+}
+
+static void tape_cycle(int n) {
+    if (!playing || tape_frames <= 0) return;
+    int done = 0;
+    while (playing && done < n) {
+        int64_t limit = (loop_on && loop_b > loop_a && tpos < loop_b) ? loop_b : tape_frames;
+        int64_t m = n - done;
+        if (m > limit - tpos) m = limit - tpos;
+        if (m <= 0) {
+            if (loop_on && loop_b > loop_a && tpos >= loop_b && limit == loop_b) { tpos = loop_a; continue; }
+            playing = recording = 0;                                      /* the end of the tape */
+            break;
+        }
+        tape_stretch(done, (int)m, tpos);
+        tpos += m;
+        done += (int)m;
+        if (loop_on && loop_b > loop_a && tpos >= loop_b && limit == loop_b) tpos = loop_a;
+    }
+}
+
+static void slots_cycle(int n) {
+    for (int s = 0; s < SLOTS; s++) {
+        Slot *sl = &slots[s];
+        float *in = inputs[s * SLOT_CH];
+        for (int c = 0; c < SLOT_CH; c++) memset(inputs[s * SLOT_CH + c], 0, sizeof(float) * n);
+        if (!sl->used) continue;
+        (void)in;
+        Source *a = sl->src[0] >= 0 ? &sources[sl->src[0]] : NULL;
+        Source *b = (sl->src[1] >= 0 && sl->src[1] != sl->src[0]) ? &sources[sl->src[1]] : NULL;
+        int aon = a && a->kind && a->on && !a->silent, bon = b && b->kind && b->on && !b->silent;
+        int fx = sl->frev && sl->fdly && rev_process && dly_process;
+        int sending = 0;
+        for (int v = 0; v < sl->voices; v++) if (sl->rev[v] > 0.0f || sl->dly[v] > 0.0f) sending = 1;
+        int run_fx = fx && (sending || sl->fx_tail > 0);
+        if (run_fx) for (int k = 0; k < 4; k++) memset(slot_send[k], 0, sizeof(float) * n);
+        float *kl = inputs[s * SLOT_CH + DRUM_KIT], *kr = inputs[s * SLOT_CH + DRUM_KIT + 1];
+        if (aon || bon) {
+            int V = sl->voices;
+            for (int v = 0; v < V; v++) {
+                float pl = sl->pan[v][0], pr = sl->pan[v][1], rs = sl->rev[v], ds = sl->dly[v], g = sl->monitor;
+                int ln = sl->lane[v];
+                float *lane = (ln >= 0 && ln < DRUM_KIT) ? inputs[s * SLOT_CH + ln] : NULL;
+                const float *xa = aon ? a->buf + v : NULL, *xb = bon ? b->buf + v : NULL;
+                int Va = aon ? a->voices : 0, Vb = bon ? b->voices : 0;
+                if ((xa && v >= Va) || (xb && v >= Vb)) continue;
+                for (int i = 0; i < n; i++) {
+                    float x = (xa ? xa[i * Va] : 0.0f) + (xb ? xb[i * Vb] : 0.0f);
+                    float l = x * pl, r = x * pr;
+                    if (lane) lane[i] += x;
+                    kl[i] += l; kr[i] += r;
+                    if (run_fx) {
+                        slot_send[0][i] += l * rs; slot_send[1][i] += r * rs;
+                        slot_send[2][i] += l * ds; slot_send[3][i] += r * ds;
+                    }
+                    if (g > 0.0f) {                          /* heard: into the mix, sends to the main effects */
+                        float hl = l * g, hr = r * g;
+                        mix[0][i] += hl; mix[1][i] += hr;
+                        if (rs > 0.0f) { send_l[0][i] += hl * rs; send_l[1][i] += hr * rs; }
+                        if (ds > 0.0f) { send_d[0][i] += hl * ds; send_d[1][i] += hr * ds; }
+                    }
+                }
+            }
+        }
+        if (run_fx) {
+            /* the slot's own effects, printed into its KIT inputs (so a track's sends don't get in) */
+            rev_process(sl->frev, slot_send[0], slot_send[1], slot_fx[0], slot_fx[1], n);
+            dly_process(sl->fdly, slot_send[2], slot_send[3], slot_fx[2], slot_fx[3], n);
+            for (int i = 0; i < n; i++) {
+                kl[i] += slot_fx[0][i] * rev_level + slot_fx[2][i] * dly_level;
+                kr[i] += slot_fx[1][i] * rev_level + slot_fx[3][i] * dly_level;
+            }
+            sl->fx_tail = sending ? 10LL * (int64_t)rate : sl->fx_tail - n;
+        }
+        float *mono = inputs[s * SLOT_CH + DRUM_KIT + 2];
+        for (int i = 0; i < n; i++) mono[i] = 0.5f * (kl[i] + kr[i]);
+    }
+}
+
+static void input_peaks(int n) {
+    for (int c = 0; c < IN_CHANNELS; c++) {
+        float pk = in_peak[c];
+        for (int i = 0; i < n; i++) { float v = fabsf(inputs[c][i]); if (v > pk) pk = v; }
+        in_peak[c] = pk;
+    }
 }
 
 /* ------------------------------------------------------------------ the callback */
@@ -164,6 +395,15 @@ static void apply(const Event *e) {
         }
         break;
     case EV_CALL: if (e->fn) ((void (*)(intptr_t, intptr_t, intptr_t))e->fn)(e->a, e->b, e->c); break;
+    case EV_TRANSPORT:
+        switch (e->a) {
+        case T_PLAY: tpos = (int64_t)e->b; playing = 1; break;
+        case T_STOP: playing = recording = 0; break;
+        case T_LOCATE: tpos = (int64_t)e->b; break;
+        case T_RECORD: recording = 1; playing = 1; break;
+        case T_RECORD_OFF: recording = 0; break;
+        }
+        break;
     }
 }
 
@@ -239,14 +479,20 @@ static int process(jack_nframes_t n, void *arg) {
         if (src->awake > 0) src->awake -= n;
     }
 
-    /* mix: each voice panned, its sends to the effects */
-    memset(mix, 0, sizeof(float) * 2 * MAX_BLOCK);
+    /* mix: the slots (making their recording inputs too), sources on their own, the tape */
+    memset(mix, 0, sizeof(float) * 2 * n);
     memset(send_l, 0, sizeof(float) * 2 * MAX_BLOCK);
-    static float send_d[2][MAX_BLOCK];
     memset(send_d, 0, sizeof(float) * 2 * MAX_BLOCK);
+    slots_cycle((int)n);
+    {
+        const float *il = J.port_get_buffer(in_l, n), *ir = J.port_get_buffer(in_r, n);
+        memcpy(inputs[EXT_IN], il, sizeof(float) * n);
+        memcpy(inputs[EXT_IN + 1], ir, sizeof(float) * n);
+    }
+    input_peaks((int)n);
     for (int s = 0; s < MAX_SOURCES; s++) {
         Source *src = &sources[s];
-        if (!src->kind || !src->on || src->gain <= 0.0f || src->silent) continue;
+        if (!src->kind || !src->on || src->gain <= 0.0f || src->silent || src->slot >= 0) continue;
         int V = src->voices;
         for (int v = 0; v < V; v++) {
             float gl = src->pan[v][0] * src->gain, gr = src->pan[v][1] * src->gain;
@@ -261,6 +507,7 @@ static int process(jack_nframes_t n, void *arg) {
             }
         }
     }
+    tape_cycle((int)n);
     if (reverb && rev_process) {
         rev_process(reverb, send_l[0], send_l[1], fx_out[0], fx_out[1], (int)n);
         for (jack_nframes_t i = 0; i < n; i++) { mix[0][i] += fx_out[0][i] * rev_level; mix[1][i] += fx_out[1][i] * rev_level; }
@@ -323,6 +570,8 @@ int core_open(const char *libjack, const char *name) {
     disp_out = J.port_register(client, "display_out", MIDI, IS_OUTPUT, 0);
     if (!out_l || !out_r || !in_l || !in_r || !ctl_in || !ctl_out || !disp_out) return -4;
     for (int s = 0; s < MAX_SOURCES; s++) sources[s].kind = 0;
+    for (int c = 0; c < CHANNELS; c++) { rec_lo[c] = rec_hi[c] = -1; }
+    for (int t = 0; t < TRACKS; t++) { t_vol[t] = 0.8f; t_audible[t] = 1; t_src[t][0] = t_src[t][1] = -1; }
     J.set_process_callback(client, process, NULL);
     if (J.activate(client)) return -5;
     char me[300];
@@ -359,7 +608,7 @@ static int new_source(int kind, int voices) {
         memset(src->rev, 0, sizeof src->rev);
         memset(src->dly, 0, sizeof src->dly);
         src->voices = voices; src->gain = 1.0f; src->on = 0;
-        src->awake = 0; src->held = 0; src->silent = 1;
+        src->awake = 0; src->held = 0; src->silent = 1; src->slot = -1;
         memset(src->buf, 0, sizeof src->buf);
         src->kind = kind;
         return s;
@@ -439,4 +688,76 @@ void core_set_display(const uint8_t *frame) {
     memcpy(display[display_next], frame, DISPLAY_BYTES);
     atomic_store(&display_ready, display_next);
     display_next ^= 1;
+}
+
+/* ------------------------------------------------------------------ Python's side: slots */
+
+/* a slot: its two sources (seq, live: the same number twice if there's only one copy) */
+int core_slot(int k, int seq, int live, int voices) {
+    if (k < 0 || k >= SLOTS || voices < 1 || voices > MAX_VOICES) return -1;
+    Slot *sl = &slots[k];
+    sl->used = 0;
+    for (int s = 0; s < MAX_SOURCES; s++) if (sources[s].slot == k) sources[s].slot = -1;
+    memset(sl->pan, 0, sizeof sl->pan); memset(sl->rev, 0, sizeof sl->rev); memset(sl->dly, 0, sizeof sl->dly);
+    for (int v = 0; v < MAX_VOICES; v++) sl->lane[v] = -1;
+    sl->voices = voices; sl->src[0] = seq; sl->src[1] = live; sl->monitor = 0.0f; sl->fx_tail = 0;
+    if (seq >= 0 && seq < MAX_SOURCES) sources[seq].slot = k;
+    if (live >= 0 && live < MAX_SOURCES) sources[live].slot = k;
+    sl->used = 1;
+    return 0;
+}
+void core_slot_clear(int k) {
+    if (k < 0 || k >= SLOTS) return;
+    slots[k].used = 0;
+    for (int s = 0; s < MAX_SOURCES; s++) if (sources[s].slot == k) sources[s].slot = -1;
+}
+void core_slot_lane(int k, int v, int lane) { if (k >= 0 && k < SLOTS && v >= 0 && v < MAX_VOICES) slots[k].lane[v] = lane; }
+void core_slot_mix(int k, int v, float l, float r, float rev, float dly) {
+    if (k < 0 || k >= SLOTS || v < 0 || v >= MAX_VOICES) return;
+    slots[k].pan[v][0] = l; slots[k].pan[v][1] = r; slots[k].rev[v] = rev; slots[k].dly[v] = dly;
+}
+void core_slot_monitor(int k, float g) { if (k >= 0 && k < SLOTS) slots[k].monitor = g; }
+void core_slot_effects(int k, void *rev, void *dly) { if (k >= 0 && k < SLOTS) { slots[k].frev = rev; slots[k].fdly = dly; } }
+
+/* the loudest sample on each input channel since the last call (IN_CHANNELS of them), then starts again */
+int core_input_peaks(float *out) {
+    for (int c = 0; c < IN_CHANNELS; c++) { out[c] = in_peak[c]; in_peak[c] = 0.0f; }
+    return IN_CHANNELS;
+}
+int core_in_channels(void) { return IN_CHANNELS; }
+
+/* ------------------------------------------------------------------ Python's side: the tape */
+
+void core_tape_frames(int64_t frames) { tape_frames = frames; }
+void core_tape_channel(int c, float *data) { if (c >= 0 && c < CHANNELS) track[c] = data; }
+void core_tape_track(int t, float vol, float pan, float rev, float dly, int audible, int stereo) {
+    if (t < 0 || t >= TRACKS) return;
+    t_vol[t] = vol; t_pan[t] = pan; t_rev[t] = rev; t_dly[t] = dly; t_audible[t] = audible; t_stereo[t] = stereo;
+}
+/* armed: records from input channel src0 (and src1 for its right side); -1 = the mix */
+void core_tape_arm(int t, int armed, int src0, int src1) {
+    if (t < 0 || t >= TRACKS) return;
+    t_src[t][0] = src0; t_src[t][1] = src1; t_armed[t] = armed;
+}
+/* a channel's boxes: n of them, sorted (Python keeps the array alive until it replaces it twice more) */
+void core_tape_boxes(int c, const Box *b, int n) {
+    if (c < 0 || c >= CHANNELS) return;
+    int next = atomic_load(&box_cur[c]) ^ 1;
+    boxes[c][next].b = b; boxes[c][next].n = n;
+    atomic_store(&box_cur[c], next);
+}
+void core_tape_heard(int on) { tape_heard = on; }
+void core_tape_loop(int on, int64_t a, int64_t b) { loop_a = a; loop_b = b; loop_on = on; }
+void core_tape_punch(int64_t a, int64_t b) { punch_a = a; punch_b = b; }
+void core_tape_overdub(int on) { overdub = on; }
+int64_t core_tape_pos(void) { return tpos; }
+int core_tape_state(void) { return (playing ? 1 : 0) | (recording ? 2 : 0); }
+/* what channel c recorded since the last call: 1 and [*a, *b), or 0 */
+int core_tape_recorded(int c, int64_t *a, int64_t *b) {
+    if (c < 0 || c >= CHANNELS) return 0;
+    while (atomic_flag_test_and_set(&rec_lock)) ;
+    int got = rec_lo[c] >= 0;
+    if (got) { *a = rec_lo[c]; *b = rec_hi[c]; rec_lo[c] = -1; rec_hi[c] = -1; }
+    atomic_flag_clear(&rec_lock);
+    return got;
 }

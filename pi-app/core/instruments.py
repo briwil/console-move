@@ -54,8 +54,10 @@ def kind(m):
 class Slot:
     """One machine in the core: its two sources, and how its steps and settings turn into events."""
 
-    def __init__(self, core, machine):
-        self.core, self.m, self.kind = core, machine, kind(machine)
+    def __init__(self, core, machine, k=None):
+        """k: the instrument slot (0-7) it's in: the core then makes its recording inputs and mixes it as a
+        slot. None: mixed on its own (tests)."""
+        self.core, self.m, self.kind, self.k = core, machine, kind(machine), k
         m = machine
         if self.kind == "lxr":
             self.seq_lib, self.live_lib = drums._lib, drums._live
@@ -72,6 +74,19 @@ class Slot:
             self.seq = core.add_module(h.sh_render, h.sh_midi, m._seq.ptr)
             self.live = core.add_module(h.sh_render, h.sh_midi, m._live.ptr) if m._live is not m._seq else self.seq
         self._refresh_after = None          # (core frame) a module re-reads its settings once the core has them
+        self.fx = None
+        if k is not None:
+            voices = drums.VOICES if self.kind == "lxr" else (m.voices if self.kind == "engine" else 2)
+            core.slot(k, self.seq, self.live, voices)
+            for v, lane in self.lanes(voices).items():
+                core.slot_lane(k, v, lane)
+            try:
+                import effects
+                if effects.AVAILABLE:
+                    self.fx = (effects.Reverb(core.rate), effects.Delay(core.rate))
+                    core.slot_effects(k, self.fx[0].h, self.fx[1].h)
+            except Exception as e:                              # noqa: BLE001
+                print("Slot effects:", e)
         self.sync_mix()
         core.on(self.seq)
         core.on(self.live)
@@ -79,14 +94,41 @@ class Slot:
     def sources(self):
         return {self.seq, self.live}
 
+    def lanes(self, voices):
+        """{voice: DRUM n channel (0-7)}: how the machine's drums land on their own recording inputs."""
+        m = self.m
+        if self.kind == "lxr":
+            return {v: v for v in range(min(voices, 8))}
+        if self.kind == "engine":
+            if isinstance(m, drums.Machinedrum):
+                return {v: v % m.channels for v in range(voices)}
+            out = {}
+            for lane, v in enumerate(m.lane_voice):
+                out.setdefault(v, lane % m.channels)
+            return out
+        return {}                                   # modules and synths: only the kit (stereo) inputs
+
     def remove(self):
+        if self.k is not None:
+            self.core.slot_clear(self.k)
         for s in self.sources():
             self.core.remove(s)
+
+    def effect_settings(self, rev_size, rev_tone, dly_samples, dly_feedback):
+        """The slot's own effects (printed into its KIT inputs) follow the main ones' settings."""
+        if self.fx:
+            self.fx[0].set(rev_size, rev_tone)
+            self.fx[1].set(dly_samples, dly_feedback)
 
     def sync_mix(self, gain=0.8):
         """Pans and effect sends, from the machine (call when they may have changed)."""
         pans = self.m.pans()
         rev, dly = self.m.sends()
+        if self.k is not None:
+            for v in range(len(pans)):
+                self.core.slot_mix(self.k, v, float(pans[v][0]), float(pans[v][1]),
+                                   float(rev[v]) if v < len(rev) else 0.0, float(dly[v]) if v < len(dly) else 0.0)
+            return
         for s in self.sources():
             for v in range(len(pans)):
                 self.core.pan(s, v, float(pans[v][0]), float(pans[v][1]))

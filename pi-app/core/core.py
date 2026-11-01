@@ -14,7 +14,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LIB = os.path.join(HERE, "libconsolecore.so")
 LIBJACK = os.environ.get("CONSOLE_LIBJACK", "/data/UserData/rnbo/lib/libjack.so.0")
 
-EV_TRIGGER, EV_MIDI, EV_CALL = 1, 2, 3
+EV_TRIGGER, EV_MIDI, EV_CALL, EV_TRANSPORT = 1, 2, 3, 4
+T_PLAY, T_STOP, T_LOCATE, T_RECORD, T_RECORD_OFF = 1, 2, 3, 4, 5
+SLOT_CH, DRUM_KIT = 11, 8      # as core.c and audio.py: each slot's recording inputs
+BOX = None                     # numpy dtype of a box, made on first use (numpy only loaded if needed)
 u64, vp, i32, f32, ip = C.c_uint64, C.c_void_p, C.c_int, C.c_float, C.c_ssize_t
 
 
@@ -36,7 +39,20 @@ class Core:
                 ("core_set_effects", [vp, vp, vp, vp], None), ("core_set_effect_levels", [f32, f32], None),
                 ("core_push", [u64, i32, i32, ip, ip, ip, vp], i32), ("core_events_done", [], u64),
                 ("core_read_midi", [C.c_char_p, i32], i32), ("core_send_midi", [C.c_char_p, i32], i32),
-                ("core_set_display", [C.c_char_p], None)]:
+                ("core_set_display", [C.c_char_p], None),
+                # slots
+                ("core_slot", [i32, i32, i32, i32], i32), ("core_slot_clear", [i32], None),
+                ("core_slot_lane", [i32, i32, i32], None), ("core_slot_mix", [i32, i32, f32, f32, f32, f32], None),
+                ("core_slot_monitor", [i32, f32], None), ("core_slot_effects", [i32, vp, vp], None),
+                ("core_input_peaks", [C.POINTER(f32)], i32), ("core_in_channels", [], i32),
+                # the tape
+                ("core_tape_frames", [C.c_int64], None), ("core_tape_channel", [i32, vp], None),
+                ("core_tape_track", [i32, f32, f32, f32, f32, i32, i32], None),
+                ("core_tape_arm", [i32, i32, i32, i32], None), ("core_tape_boxes", [i32, vp, i32], None),
+                ("core_tape_heard", [i32], None), ("core_tape_loop", [i32, C.c_int64, C.c_int64], None),
+                ("core_tape_punch", [C.c_int64, C.c_int64], None), ("core_tape_overdub", [i32], None),
+                ("core_tape_pos", [], C.c_int64), ("core_tape_state", [], i32),
+                ("core_tape_recorded", [i32, C.POINTER(C.c_int64), C.POINTER(C.c_int64)], i32)]:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
         r = lib.core_open(LIBJACK.encode(), name)
@@ -156,3 +172,91 @@ class Core:
     def display(self, frame):
         """frame: b"MOVEDISP" + 1024 bytes."""
         self.lib.core_set_display(bytes(frame))
+
+    # ---- instrument slots (see core.c): their recording inputs and how they're heard
+    def slot(self, k, seq, live, voices):
+        if self.lib.core_slot(k, seq, live, voices) != 0:
+            raise RuntimeError("bad slot")
+
+    def slot_clear(self, k):
+        self.lib.core_slot_clear(k)
+
+    def slot_lane(self, k, voice, lane):
+        self.lib.core_slot_lane(k, voice, lane)
+
+    def slot_mix(self, k, voice, left, right, rev, dly):
+        self.lib.core_slot_mix(k, voice, left, right, rev, dly)
+
+    def slot_monitor(self, k, gain):
+        """How loud slot k is heard (0: not heard; it still makes its recording inputs)."""
+        self.lib.core_slot_monitor(k, gain)
+
+    def slot_effects(self, k, reverb, delay):
+        self.lib.core_slot_effects(k, reverb, delay)
+
+    def input_peaks(self):
+        """The loudest sample on each input channel since the last call."""
+        n = self.lib.core_in_channels()
+        buf = (f32 * n)()
+        self.lib.core_input_peaks(buf)
+        return list(buf)
+
+    # ---- the tape (Python owns its memory: numpy float32 arrays, kept alive while the core has them)
+    def tape(self, channels, frames):
+        """channels: 16 arrays (or None), track t and its right side t + 8."""
+        self._tape_refs = list(channels)
+        self.lib.core_tape_frames(0)
+        for c, a in enumerate(channels):
+            self.lib.core_tape_channel(c, a.ctypes.data if a is not None else None)
+        self.lib.core_tape_frames(int(frames))
+
+    def tape_track(self, t, vol, pan, rev, dly, audible, stereo):
+        self.lib.core_tape_track(t, vol, pan, rev, dly, 1 if audible else 0, 1 if stereo else 0)
+
+    def tape_arm(self, t, armed, src=(-1, -1)):
+        """src: the input channel(s) it records (-1: the mix of every slot's kit)."""
+        self.lib.core_tape_arm(t, 1 if armed else 0, int(src[0]), int(src[1]))
+
+    def tape_boxes(self, c, shaped):
+        """shaped: [(start, end, gain, fade in, fade out)] in frames, sorted."""
+        global BOX
+        import numpy as np
+        if BOX is None:
+            BOX = np.dtype([("a", "<i8"), ("b", "<i8"), ("fi", "<i8"), ("fo", "<i8"), ("g", "<f4"), ("u", "<f4")])
+        arr = np.zeros(len(shaped), BOX)
+        for i, (a, b, g, fi, fo) in enumerate(shaped):
+            arr[i] = (a, b, fi, fo, g, 0.0)
+        keep = self.__dict__.setdefault("_box_refs", {}).setdefault(c, [])
+        keep.append(arr)
+        del keep[:-3]                        # the core may still be reading the one before
+        self.lib.core_tape_boxes(c, arr.ctypes.data if len(arr) else None, len(arr))
+
+    def tape_heard(self, on):
+        self.lib.core_tape_heard(1 if on else 0)
+
+    def tape_loop(self, on, a, b):
+        self.lib.core_tape_loop(1 if on else 0, int(a), int(b))
+
+    def tape_punch(self, a, b):
+        self.lib.core_tape_punch(int(a), int(b))
+
+    def tape_overdub(self, on):
+        self.lib.core_tape_overdub(1 if on else 0)
+
+    def transport(self, what, pos=0, at=0):
+        """what: T_PLAY (from pos), T_STOP, T_LOCATE (to pos), T_RECORD, T_RECORD_OFF; at: the frame (it
+        happens at the start of the cycle that frame is in)."""
+        return self._push(at, EV_TRANSPORT, -1, what, int(pos), 0)
+
+    def tape_pos(self):
+        return self.lib.core_tape_pos()
+
+    def tape_state(self):
+        """(playing, recording)."""
+        s = self.lib.core_tape_state()
+        return bool(s & 1), bool(s & 2)
+
+    def recorded(self, c):
+        """(start, end) recorded on channel c since the last call, or None."""
+        a, b = C.c_int64(), C.c_int64()
+        return (a.value, b.value) if self.lib.core_tape_recorded(c, C.byref(a), C.byref(b)) else None

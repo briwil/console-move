@@ -61,6 +61,8 @@ class Core:
                                 -3: "JACK isn't running (is console mode on?)", -4: "couldn't make JACK ports",
                                 -5: "couldn't start the JACK client"}.get(r, "error %d" % r))
         self.rate, self.block = lib.core_rate(), lib.core_block()
+        self.vol = 0.4
+        self.volume(self.vol)               # start quiet: the Move's speaker is loud and nothing else turns it down
         self._keep = []                     # (frame, object): kept alive until the core is past that frame
         self._pushed = 0
         self._lock = threading.Lock()       # pushes come from more than one Python thread
@@ -112,6 +114,17 @@ class Core:
 
     def master(self, g):
         self.lib.core_set_master(g)
+
+    def volume(self, v):
+        """The volume knob's position 0..1 (squared, as the Pi's headphone level, so it feels even)."""
+        self.vol = max(0.0, min(1.0, v))
+        self.lib.core_set_master(self.vol * self.vol)
+        return self.vol
+
+    def volume_knob(self, value):
+        """A turn of the Move's volume knob (CC 79's value): one click = 2%."""
+        step = value - 128 if value > 63 else value
+        return self.volume(self.vol + step * 0.02)
 
     def effects(self, rev_process, reverb, dly_process, delay):
         self.lib.core_set_effects(addr(rev_process), reverb, addr(dly_process), delay)

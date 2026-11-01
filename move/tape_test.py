@@ -44,7 +44,6 @@ rv.set(0.5, 0.5)
 dl.set(0.75 * FPB, 0.4)
 c.effects(effects._lib.rev_process, rv.h, effects._lib.dly_process, dl.h)
 c.effect_levels(0.8 * effects.REVERB_MAKEUP, 0.7)
-c.master(0.8)
 
 lxr = d.get("lxr")
 lxr.set_bpm(BPM)
@@ -86,6 +85,8 @@ def loop():
                 lxr.hit(note - 68, vel)
             if kind in (0x80, 0x90) and 68 <= note < 100:
                 c.send_midi(bytes((0x9F, note, 127 if (kind == 0x90 and vel) else 0)))
+            elif kind == 0xB0 and note == 79:                  # the volume knob
+                c.volume_knob(vel)
         slot.flush()
         if phase[0] == "record":
             sched.tick([(slot, seq)], FPB)

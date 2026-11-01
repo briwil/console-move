@@ -102,14 +102,10 @@ def pads():
                     lines[3] = "PAD %d  VEL %d" % (pad + 1, vel)
                     c.display(render_screen(lines))
             elif kind == 0xB0 and note == 79:                  # the volume knob
-                step = vel - 128 if vel > 63 else vel
-                pads.volume = max(0.0, min(1.0, pads.volume + step * 0.02))
-                c.master(pads.volume)
+                c.volume_knob(vel)
         time.sleep(0.001)
 
 
-pads.volume = 0.8
-c.master(pads.volume)
 threading.Thread(target=pads, daemon=True).start()
 
 # ---------------------------------------------------------------- jam: patterns, scheduled ahead

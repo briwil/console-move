@@ -80,8 +80,6 @@ c.display(render_screen(lines))
 sched = Scheduler(c)
 sched.start()
 stop = False
-volume = [0.8]
-c.master(volume[0])
 
 
 def loop():
@@ -105,9 +103,7 @@ def loop():
                     lines[3] = "PAD %d: %s" % (pad + 1, "DRUM" if pad < 8 else "SYNTH")
                     c.display(render_screen(lines))
             elif kind == 0xB0 and note == 79:
-                step = vel - 128 if vel > 63 else vel
-                volume[0] = max(0.0, min(1.0, volume[0] + step * 0.02))
-                c.master(volume[0])
+                c.volume_knob(vel)
         for s in slots:
             s.flush()
             s.tick()

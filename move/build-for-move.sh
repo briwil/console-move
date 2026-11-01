@@ -3,8 +3,8 @@
 # Run on the Raspberry Pi 5 (same kind of processor as the Move):
 #
 #     bash ~/console-move/move/build-for-move.sh          (everything: the first time, 15-30 minutes)
-#     bash ~/console-move/move/build-for-move.sh update   (after a git pull: just the effects library and the
-#                                                          app's Python files, a minute: ~/move-update.tgz)
+#     bash ~/console-move/move/build-for-move.sh update   (after a git pull: the effects and the sound core, and
+#                                                          the app's Python files, a minute: ~/move-update.tgz)
 #
 # The Move's system libraries are older (glibc 2.35) than the Pi's, so a library built normally on the Pi
 # won't load there. This builds inside an Ubuntu 22.04 container instead, which has exactly glibc 2.35,
@@ -15,18 +15,21 @@ OUT="$HOME/move-libs.tgz"
 
 if [ "$1" = "update" ]; then
   command -v docker >/dev/null || { echo "Run it without 'update' first."; exit 1; }
-  echo "Building the effects for the Move..."
+  echo "Building the effects and the sound core for the Move..."
   sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
     set -e
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq && apt-get install -y -qq gcc libc6-dev >/dev/null
     gcc -O2 -mtune=cortex-a72 -shared -fPIC -o /out/libconsolefx.so /src/pi-app/fx/fx.c -lm
-    chown '"$(id -u):$(id -g)"' /out/libconsolefx.so'
+    gcc -O2 -mtune=cortex-a72 -shared -fPIC -o /out/libconsolecore.so /src/pi-app/core/core.c -ldl -lm
+    chown '"$(id -u):$(id -g)"' /out/libconsolefx.so /out/libconsolecore.so'
   rm -rf "$HOME/move-update" && mkdir -p "$HOME/move-update/console-move"
   (cd "$REPO" && tar cf - --exclude='pi-app/splash' --exclude='pi-app/fonts' --exclude='*.so' --exclude='__pycache__' \
       --exclude='pi-app/drums/lxr' --exclude='pi-app/schwung/src' --exclude='pi-app/schwung/modules' pi-app move) \
       | tar xf - -C "$HOME/move-update/console-move"
-  mkdir -p "$HOME/move-update/console-move/pi-app/fx" && mv "$HOME/libconsolefx.so" "$HOME/move-update/console-move/pi-app/fx/"
+  mkdir -p "$HOME/move-update/console-move/pi-app/fx" "$HOME/move-update/console-move/pi-app/core"
+  mv "$HOME/libconsolefx.so" "$HOME/move-update/console-move/pi-app/fx/"
+  mv "$HOME/libconsolecore.so" "$HOME/move-update/console-move/pi-app/core/"
   tar czf "$HOME/move-update.tgz" -C "$HOME/move-update" console-move
   echo "Done: $HOME/move-update.tgz"
   exit 0
@@ -50,6 +53,7 @@ sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
   find . -name "*.so" -delete
   rm -rf schwung/modules schwung/src
   echo "- effects";        gcc -O2 -shared -fPIC -o fx/libconsolefx.so fx/fx.c -lm
+  echo "- sound core";     gcc -O2 -shared -fPIC -o core/libconsolecore.so core/core.c -ldl -lm
   echo "- LXR drum synth"; bash drums/build.sh
   cp drums/libdrums.so drums/libdrums_live.so 2>/dev/null || true
   echo "- 606 / 808";      for m in 606 808; do g++ -O2 -shared -fPIC -w -o drums/schwung/lib$m.so drums/schwung/glue$m.cpp; done

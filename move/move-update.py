@@ -73,7 +73,7 @@ def download():
 
 
 def unpack(data):
-    """Puts pi-app/ and move/ from the archive into /data/UserData/console, over what's there (files that
+    """Puts pi-app/, move/ and the simulator's stand-ins (tools/sim/stubs/, the Move app uses them) from the archive into /data/UserData/console, over what's there (files that
     aren't in the archive, like the built libraries, stay)."""
     n = 0
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as t:
@@ -82,7 +82,7 @@ def unpack(data):
             if len(parts) < 2:
                 continue
             rel = parts[1]
-            if not (rel.startswith("pi-app/") or rel.startswith("move/")) or (rel + "/").startswith(SKIP):
+            if not (rel.startswith(("pi-app/", "move/", "tools/sim/stubs/"))) or (rel + "/").startswith(SKIP):
                 continue
             if ".." in rel.split("/") or os.path.isabs(rel):
                 continue                                 # never write outside the console folder

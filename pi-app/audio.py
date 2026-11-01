@@ -2623,22 +2623,18 @@ class Engine:
                         if lane < len(self.seq_hits):
                             self.seq_hits[lane] = soon + offset / self.rate
             jobs.append((i, mid, m, events, i == current))
-        # each instrument's sound is C code that lets go of Python while it works, so with more than one they
-        # run side by side on the processor's cores
-        pool = self._render_pool() if len(jobs) > 1 else None
-        if pool:
-            futures = [pool.submit(m.render, frames, events, with_live=live) for _i, _mid, m, events, live in jobs]
-            results = [f.result() for f in futures]
-        else:
-            results = [m.render(frames, events, with_live=live) for _i, _mid, m, events, live in jobs]
-        for (i, mid, m, events, _live), (seq_voices, live_voices) in zip(jobs, results):
+        for i, mid, m, events, live in jobs:
+            if not events and getattr(m, "asleep", lambda: False)() and self._slot_fx.get(mid, (0, 0, 0))[2] <= 0:
+                continue                                 # nothing to play and nothing ringing: costs nothing
+            seq_voices, live_voices = m.render(frames, events, with_live=live)
             # what's recorded (at pos, where you pressed): your hits now, and the sequencer's from read_ahead
             # frames ago (they were made that far ahead, to sound on time). What you hear: both, now
             voices = live_voices + self._delay_sequencer(mid, seq_voices)
             rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
-            x[:, i * SLOT_CH:(i + 1) * SLOT_CH] = self._drum_input(mid, m, voices, rev_g, dly_g)
+            p = m.pans()
+            x[:, i * SLOT_CH:(i + 1) * SLOT_CH] = self._drum_input(mid, m, voices, rev_g, dly_g, p)
             heard = seq_voices + live_voices
-            pans = m.pans() * DRUMS_MONITOR
+            pans = p * DRUMS_MONITOR
             mon += heard @ pans
             if rev_g.any():
                 mon_rev = (heard * rev_g) @ pans + (0 if mon_rev is None else mon_rev)
@@ -2648,23 +2644,14 @@ class Engine:
             self.seq_clock += frames
         return x, mon, mon_rev, mon_dly
 
-    def _render_pool(self):
-        """Worker threads for the instruments (one per core, less the one this thread runs on)."""
-        pool = getattr(self, "_pool", None)
-        if pool is None:
-            from concurrent.futures import ThreadPoolExecutor
-            workers = max(1, min(SLOTS, (os.cpu_count() or 2) - 1))
-            pool = self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="instrument",
-                                                   initializer=flush_denormals)
-        return pool
-
-    def _drum_input(self, mid, m, voices, rev_g, dly_g):
+    def _drum_input(self, mid, m, voices, rev_g, dly_g, p=None):
         """What one instrument puts on tape, as its SLOT_CH input channels: 0-7 each drum on its own (DRUM 1-8:
         the track then plays back that drum's reverb and delay through its own sends), 8-9 the whole kit
         panned in stereo (KIT L / KIT R) with its reverb and delay printed in, from effects of its own so
         the tape tracks' sends don't get in, and 10 that kit in mono (KIT)."""
         lanes = m.multi(voices)
-        p = m.pans()
+        if p is None:
+            p = m.pans()
         x = voices @ p
         fx = self._slot_fx.setdefault(mid, [None, None, 0])
         if effects and effects.AVAILABLE and (rev_g.any() or dly_g.any() or fx[2] > 0):
@@ -2689,6 +2676,12 @@ class Engine:
         """block, read_ahead frames late: a sequencer's sound lined up with where it belongs on tape."""
         want = self.read_ahead
         fifo = self._seq_fifos.get(mid)
+        if fifo is not None and fifo.shape[1] == block.shape[1] and len(fifo) == want:
+            n = len(block)                               # the usual case: one join
+            if n <= want:
+                out = fifo[:n]
+                self._seq_fifos[mid] = np.concatenate([fifo[n:], block])
+                return out
         if fifo is None or fifo.shape[1] != block.shape[1]:
             fifo = np.zeros((0, block.shape[1]), np.float32)
         if len(fifo) < want:

@@ -39,6 +39,11 @@ PROBLEM = ""              # why the drum synth is off, if it is
 LIVE_TAIL = 8 * 44100     # the hand-played copy of an instrument sleeps this long after your last hit (frames)
 
 
+def asleep(machine):
+    """True if neither copy of the instrument has anything to sound and nothing is waiting to be done."""
+    return machine._seq_left <= 0 and machine._live_left <= 0 and not machine._pending
+
+
 def seq_awake(machine, frames, busy):
     """The sequencer's copy of an instrument sleeps too, LIVE_TAIL frames after its last note, so an
     instrument with nothing to play costs nothing. busy: it has something to play in this block."""
@@ -105,6 +110,7 @@ _live = (_load(LIVE_LIB) if AVAILABLE else None) or _lib
 
 
 class LXR:
+    asleep = asleep
     _seq_left = 0           # the same for the sequencer's engine
     _live_left = 0          # frames the hand-played engine still has to sound (see LIVE_TAIL)
     """The LXR-02's drum synth (the library holds a single engine, so make one of these)."""
@@ -313,6 +319,7 @@ class LXR:
             elif t[0] == "param":
                 for lib in engines:
                     lib.drums_set_param(t[1], t[2])
+                self._pans = None
             elif t[0] == "bpm":
                 for lib in engines:
                     lib.drums_set_bpm(t[1])
@@ -340,15 +347,24 @@ class LXR:
             _lib.drums_set_param(p, self.values[p])
         for p, v in locks.items():
             _lib.drums_set_param(p, v)
+        if locks or self._locked[voice]:
+            self._pans = None                # a locked pan changes them
         self._locked[voice] = set(locks)
 
+    _pans = None
+
     def pans(self):
-        """Each voice's left and right gain from the kit's pan settings: (6, 2)."""
+        """Each voice's left and right gain from the kit's pan settings: (6, 2). Kept until a setting changes."""
+        if self._pans is not None:
+            return self._pans
         g = np.zeros((VOICES, 2), np.float32)
         for v in range(VOICES):
             p = (_lib.drums_pan(v) if AVAILABLE else 64) / 127.0
             g[v] = math.cos(p * math.pi / 2), math.sin(p * math.pi / 2)
-        return g * math.sqrt(2)      # centre = 1.0 in each side
+        g *= math.sqrt(2)            # centre = 1.0 in each side
+        if AVAILABLE:
+            self._pans = g
+        return g
 
     def stereo(self, voices):
         """(frames, 6) voices -> (frames, 2), panned the way the kit says."""
@@ -433,6 +449,7 @@ def _sw_load(path):
 
 
 class Schwung:
+    asleep = asleep
     _live_left = 0
     _seq_left = 0
     """The TR-606 (6W6) or TR-808 (8W8), each voice coming out on its own (see drums/schwung/glue*.cpp)."""

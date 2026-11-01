@@ -130,6 +130,11 @@ def _number(text):
 LIVE_TAIL = 8 * 44100      # the hand-played copy sleeps this long (frames) after your last hit or key
 
 
+def asleep(machine):
+    """True if neither copy of the instrument has anything to sound and nothing is waiting to be done."""
+    return machine._seq_left <= 0 and machine._live_left <= 0 and not machine._pending
+
+
 def seq_awake(machine, frames, busy):
     """The sequencer's copy of an instrument sleeps too, LIVE_TAIL frames after its last note, so an
     instrument with nothing to play costs nothing. busy: it has something to play in this block."""
@@ -141,6 +146,7 @@ def seq_awake(machine, frames, busy):
 
 
 class Module:
+    asleep = asleep
     _live_left = 0
     _seq_left = 0
     """A Schwung drum machine, with the methods drums.py's machines have."""

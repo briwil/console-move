@@ -1,0 +1,28 @@
+#!/bin/bash
+
+export HOME=/data/UserData/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/data/UserData/rnbo/lib/
+export SQLITE_TMPDIR=/data/UserData/Scratch/
+export TMPDIR=/data/UserData/Scratch/
+export ROCKET_CONFIG=/data/UserData/rnbo/share/rnbo-runner-panel/Rocket.toml
+
+# --- console: if /data/UserData/console/ENABLED exists, start only JACK (no RNBO)
+# and wait until /data/UserData/console/STOP appears (or JACK dies). Then exit,
+# which should hand the Move back. Delete ENABLED to get RNBO back as normal.
+C=/data/UserData/console
+if [ -f "$C/ENABLED" ]; then
+  rm -f "$C/STOP"
+  /data/UserData/rnbo/bin/jackd -d move > "$C/jackd.log" 2>&1 &
+  JACKPID=$!
+  echo "jackd started, pid $JACKPID" >> "$C/launcher.log"
+  while [ ! -f "$C/STOP" ] && kill -0 "$JACKPID" 2>/dev/null; do
+    sleep 1
+  done
+  echo "stopping" >> "$C/launcher.log"
+  kill "$JACKPID" 2>/dev/null
+  wait "$JACKPID"
+  rm -f "$C/STOP"
+  exit 0
+fi
+
+/data/UserData/rnbo/bin/rnbomovecontrol -s /data/UserData/rnbo/config/control-startup.json -c /data/UserData/.config/rnbo/rnbomovecontrol.json

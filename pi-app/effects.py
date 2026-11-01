@@ -51,9 +51,9 @@ def _load():
     f, p, i = ctypes.c_float, ctypes.c_void_p, ctypes.c_int
     fp = ctypes.POINTER(ctypes.c_float)
     for name, args, res in [("rev_new", [f], p), ("rev_free", [p], None), ("rev_clear", [p], None),
-                            ("rev_params", [p, f, f, f, f], None), ("rev_room", [p, f], None), ("rev_process", [p, fp, fp, fp, fp, i], None),
+                            ("rev_params", [p, f, f, f, f], None), ("rev_room", [p, f], None), ("rev_process", [p, p, p, p, p, i], None),
                             ("dly_new", [f, f], p), ("dly_free", [p], None), ("dly_clear", [p], None),
-                            ("dly_params", [p, f, f, f], None), ("dly_process", [p, fp, fp, fp, fp, i], None)]:
+                            ("dly_params", [p, f, f, f], None), ("dly_process", [p, p, p, p, p, i], None)]:
         fn = getattr(lib, name)
         fn.argtypes, fn.restype = args, res
     return lib
@@ -63,10 +63,6 @@ _lib = _load()
 AVAILABLE = _lib is not None
 
 
-def _ptr(a):
-    return a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-
-
 class _Effect:
     def __init__(self, handle, process, free):
         self.h, self._process, self._free = handle, process, free
@@ -74,13 +70,14 @@ class _Effect:
     def process(self, x):
         """x: (frames, 2) float32 send signal -> (frames, 2) wet signal."""
         n = len(x)
-        l = np.ascontiguousarray(x[:, 0], np.float32)
-        r = np.ascontiguousarray(x[:, 1], np.float32)
-        ol = np.empty(n, np.float32)
-        orr = np.empty(n, np.float32)
+        buf = np.empty((4, n), np.float32)            # rows: in left, in right, out left, out right
+        buf[0] = x[:, 0]
+        buf[1] = x[:, 1]
         if n:
-            self._process(self.h, _ptr(l), _ptr(r), _ptr(ol), _ptr(orr), n)
-        return np.stack([ol, orr], axis=1)
+            base = buf.ctypes.data                    # plain addresses (void*): cheaper than ctypes pointers
+            step = buf.strides[0]
+            self._process(self.h, base, base + step, base + 2 * step, base + 3 * step, n)
+        return buf[2:].T                              # (frames, 2) view: no copy
 
     def __del__(self):
         try:
@@ -96,6 +93,9 @@ class Reverb(_Effect):
         super().__init__(_lib.rev_new(rate), _lib.rev_process, _lib.rev_free)
 
     def set(self, size, tone):
+        if (size, tone) == getattr(self, "_set", None):
+            return
+        self._set = (size, tone)
         """size and tone 0..1. SIZE sets the room (its lines shrink to an eighth at 0) and the tail
         together: fully down is a small, short room, fully up the Elements hall. Tone as on Elements."""
         _lib.rev_room(self.h, 0.125 + 0.875 * size ** 1.5)
@@ -110,6 +110,9 @@ class Delay(_Effect):
         super().__init__(_lib.dly_new(rate, max_seconds), _lib.dly_process, _lib.dly_free)
 
     def set(self, samples, feedback, tone=0.55):
+        if (samples, feedback, tone) == getattr(self, "_set", None):
+            return
+        self._set = (samples, feedback, tone)
         _lib.dly_params(self.h, samples, feedback, tone)
 
     def clear(self):

@@ -2,7 +2,9 @@
 # Build Console's sound engines (drum synth, effects, drum machines, Schwung synths) for the Ableton Move.
 # Run on the Raspberry Pi 5 (same kind of processor as the Move):
 #
-#     bash ~/console-move/move/build-for-move.sh
+#     bash ~/console-move/move/build-for-move.sh          (everything: the first time, 15-30 minutes)
+#     bash ~/console-move/move/build-for-move.sh update   (after a git pull: just the effects library and the
+#                                                          app's Python files, a minute: ~/move-update.tgz)
 #
 # The Move's system libraries are older (glibc 2.35) than the Pi's, so a library built normally on the Pi
 # won't load there. This builds inside an Ubuntu 22.04 container instead, which has exactly glibc 2.35,
@@ -10,6 +12,25 @@
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$HOME/move-libs.tgz"
+
+if [ "$1" = "update" ]; then
+  command -v docker >/dev/null || { echo "Run it without 'update' first."; exit 1; }
+  echo "Building the effects for the Move..."
+  sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y -qq gcc libc6-dev >/dev/null
+    gcc -O2 -shared -fPIC -o /out/libconsolefx.so /src/pi-app/fx/fx.c -lm
+    chown '"$(id -u):$(id -g)"' /out/libconsolefx.so'
+  rm -rf "$HOME/move-update" && mkdir -p "$HOME/move-update/console-move"
+  (cd "$REPO" && tar cf - --exclude='pi-app/splash' --exclude='pi-app/fonts' --exclude='*.so' --exclude='__pycache__' \
+      --exclude='pi-app/drums/lxr' --exclude='pi-app/schwung/src' --exclude='pi-app/schwung/modules' pi-app move) \
+      | tar xf - -C "$HOME/move-update/console-move"
+  mkdir -p "$HOME/move-update/console-move/pi-app/fx" && mv "$HOME/libconsolefx.so" "$HOME/move-update/console-move/pi-app/fx/"
+  tar czf "$HOME/move-update.tgz" -C "$HOME/move-update" console-move
+  echo "Done: $HOME/move-update.tgz"
+  exit 0
+fi
 
 if ! command -v docker >/dev/null; then
   echo "Installing Docker (one time)..."

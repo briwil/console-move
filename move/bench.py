@@ -23,6 +23,7 @@ import audio         # noqa: E402
 SECONDS = 15
 machines = sys.argv[1:] or ["lxr", "obxd", "dexed", "plaits", "braids"]
 
+audio.flush_denormals()
 e = audio.Engine(song=None, bpm=120.0)
 if not e.drums:
     sys.exit("The instruments didn't load (no drum synth libraries found). Copy the .so files over first.")

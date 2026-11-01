@@ -21,6 +21,25 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__aarch64__)
+#include <stdint.h>
+#elif defined(__SSE__)
+#include <xmmintrin.h>
+#endif
+
+/* Round tiny numbers to zero on the calling thread. As a reverb tail fades the numbers go "denormal" and the
+   processor handles them many times slower (the effects run on silence all the time). Call once from the
+   audio thread; it then covers every C library that thread calls. */
+void console_flush_denormals(void) {
+#if defined(__aarch64__)
+    uint64_t fpcr;
+    __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
+    fpcr |= (1ull << 24);                       /* FZ */
+    __asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
+#elif defined(__SSE__)
+    _mm_setcsr(_mm_getcsr() | 0x8040);          /* FTZ and DAZ */
+#endif
+}
 
 /* ------------------------------------------------------------------ reverb */
 

@@ -36,6 +36,7 @@ SHORT = ["DR1", "DR2", "DR3", "SN", "CY", "HH"]
 OPEN_HAT = 6
 VEL_TO_VOLUME = range(137, 143)     # each voice's VEL>VOL setting
 PROBLEM = ""              # why the drum synth is off, if it is
+LIVE_TAIL = 8 * 44100     # the hand-played copy of an instrument sleeps this long after your last hit (frames)
 
 
 def _newest_source():
@@ -94,6 +95,7 @@ _live = (_load(LIVE_LIB) if AVAILABLE else None) or _lib
 
 
 class LXR:
+    _live_left = 0          # frames the hand-played engine still has to sound (see LIVE_TAIL)
     """The LXR-02's drum synth (the library holds a single engine, so make one of these)."""
 
     id, title = "lxr", "LXR-02"
@@ -296,6 +298,7 @@ class LXR:
         for t in todo:
             if t[0] == "hit":
                 _live.drums_trigger(t[1], t[2])
+                self._live_left = LIVE_TAIL
             elif t[0] == "param":
                 for lib in engines:
                     lib.drums_set_param(t[1], t[2])
@@ -315,8 +318,9 @@ class LXR:
             _lib.drums_trigger(lane, vel)
         if pos < frames:
             _lib.drums_render(ptr(seq[pos:]), frames - pos)
-        if self.two_engines and with_live:
+        if self.two_engines and with_live and self._live_left > 0:    # asleep until your next hit
             _live.drums_render(ptr(live), frames)
+            self._live_left -= frames
         return seq, live
 
     def _apply_locks(self, voice, locks):
@@ -418,6 +422,7 @@ def _sw_load(path):
 
 
 class Schwung:
+    _live_left = 0
     """The TR-606 (6W6) or TR-808 (8W8), each voice coming out on its own (see drums/schwung/glue*.cpp)."""
 
     channels = 8                     # DRUM 1-8 inputs: lanes 1-8; with 16, lanes 9-16 share them
@@ -593,6 +598,7 @@ class Schwung:
             if t[0] == "hit":
                 if 0 <= t[1] < self.lanes:
                     self._live.sw_trigger(self.lane_voice[t[1]], t[2])
+                    self._live_left = LIVE_TAIL
             elif t[0] == "param":
                 for lib in engines:
                     self._set(lib, t[1], t[2])
@@ -615,8 +621,9 @@ class Schwung:
             self._lib.sw_trigger(voice, vel)
         if pos < frames:
             self._lib.sw_render(ptr(seq[pos:]), frames - pos)
-        if self.two_engines and with_live:
+        if self.two_engines and with_live and self._live_left > 0:
             self._live.sw_render(ptr(live), frames)
+            self._live_left -= frames
         return seq, live
 
     def pans(self):

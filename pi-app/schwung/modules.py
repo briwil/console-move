@@ -127,7 +127,11 @@ def _number(text):
         return None
 
 
+LIVE_TAIL = 8 * 44100      # the hand-played copy sleeps this long (frames) after your last hit or key
+
+
 class Module:
+    _live_left = 0
     """A Schwung drum machine, with the methods drums.py's machines have."""
 
     channels = 8                     # DRUM 1-8 inputs (these modules only give stereo: they stay empty)
@@ -427,6 +431,7 @@ class Module:
                 if 0 <= t[1] < self.lanes:
                     self._live.midi(0x90, FIRST_PAD + t[1], max(1, min(127, t[2])))
                     self._offs.append((self._live, FIRST_PAD + t[1]))
+                    self._live_left = LIVE_TAIL
             elif t[0] == "param":
                 for inst in engines:
                     self._apply(inst, t[1], t[2])
@@ -460,10 +465,11 @@ class Module:
         if pos < frames:
             self._seq.render(buf[pos:])
         seq[:, :2] = buf
-        if self.two_engines and with_live:
+        if self.two_engines and with_live and self._live_left > 0:     # asleep until your next hit
             lbuf = np.zeros((frames, 2), np.float32)
             self._live.render(lbuf)
             live[:, :2] = lbuf
+            self._live_left -= frames
         return seq, live
 
     def pans(self):
@@ -535,6 +541,7 @@ class SynthModule(Module):
                     self._live.midi(0x80, t[1], 0)
                 self._live.midi(0x90, max(0, min(127, t[1])), max(1, min(127, t[2])))
                 self._live_on.add(t[1])
+                self._live_left = LIVE_TAIL
             elif t[0] == "off":
                 if t[1] in self._live_on:
                     self._live.midi(0x80, t[1], 0)
@@ -593,9 +600,12 @@ class SynthModule(Module):
             self._seq.render(buf[pos:])
         seq = np.zeros((frames, 2), np.float32)
         seq[:] = buf
-        if self.two_engines and with_live:
+        if self._live_on:
+            self._live_left = LIVE_TAIL                  # a key is down: stay awake until it's let go, plus the tail
+        if self.two_engines and with_live and self._live_left > 0:
             live = np.zeros((frames, 2), np.float32)
             self._live.render(live)
+            self._live_left -= frames
         else:
             live = np.zeros((frames, 2), np.float32)
         return seq, live

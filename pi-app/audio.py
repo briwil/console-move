@@ -409,6 +409,15 @@ def read_wav(path, mono=True):
 
 # ---------------------------------------------------------------- a second output
 
+def flush_denormals():
+    """Round tiny numbers to zero on this thread (see fx.c): fading tails on silence run many times slower
+    without it, which the Move's processor really feels. Call from the thread that makes the sound."""
+    try:
+        effects._lib.console_flush_denormals()
+    except Exception:
+        pass                                    # an older effects library, or none: just slower
+
+
 class OutPort(threading.Thread):
     """Plays the tape on a device other than the one recording: the screen's headphone jack, or another
     USB device. That device runs on its own clock, which never quite matches, so the engine pushes blocks
@@ -2350,6 +2359,7 @@ class Engine:
         self._close_port()
 
     def _run(self):
+        flush_denormals()
         while not self._stop:
             dev = self.find_input()
             if dev and dev.get("virtual"):
@@ -2737,17 +2747,22 @@ class Engine:
                 idx[over] = loop[0] + (idx[over] - loop[1]) % length
         idx = np.minimum(idx, self.frames - 1)
         overdub = self.rec_mode == "overdub"
+        a0 = int(idx[0])
+        flat = m > 0 and int(idx[-1]) - a0 == m - 1          # a straight stretch (no loop wrap): slice, don't gather
         for t in range(TRACKS):
             if (overdub or t not in targets) and self.audible(t) and not self.inst_view:
                 sides = []
                 for c in self.chans(t):
-                    sig = self.tracks[c][idx] * self.volumes[t]
+                    src = self.tracks[c]
+                    sig = (src[a0:a0 + m] if flat else src[idx]) * self.volumes[t]
                     env = envelope(self.regions[c], idx)
                     if env is not None:
                         sig *= env                           # each box's gain and fades
                     sides.append(sig)
                 gl, gr = pan_gains(self.pans[t])             # on a stereo track, the balance
-                stereo = np.stack([sides[0] * gl, sides[-1] * gr], axis=1)
+                stereo = np.empty((m, 2), np.float32)
+                np.multiply(sides[0], gl, out=stereo[:, 0])
+                np.multiply(sides[-1], gr, out=stereo[:, 1])
                 mix += stereo
                 if self.rev_sends[t]:
                     rev_in += stereo * self.rev_sends[t]     # sends are after the volume and pan

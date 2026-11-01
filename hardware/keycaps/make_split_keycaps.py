@@ -1,3 +1,4 @@
+# NOTE: the cross-stem (Cherry-style) design in this file is NOT used. make_choc_keycaps.py is the real one for the Choc V1 switches and only borrows the helpers here (font, icons, mesher, 3MF writer).
 #!/usr/bin/env python3
 """Two-piece keycaps (24 of them): the round top is its own piece, the rest of the cap prints flat on the bed.
 Built from basic-keycap-1u.stl (cut from your basickeycap.stl), with Lato numbers.

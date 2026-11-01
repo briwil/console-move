@@ -95,6 +95,10 @@ typedef struct {
 #define EVENTS 4096                           /* power of two */
 static Event events[EVENTS];
 static atomic_uint_fast64_t ev_head, ev_tail;  /* Python writes at head, the core reads at tail */
+/* the core's own list of events not due yet, and this cycle's due ones (only the audio thread uses these) */
+static Event waiting[EVENTS], due[EVENTS];
+static uint64_t waiting_order[EVENTS], due_order[EVENTS], next_order;
+static int waiting_n;
 
 #define MIDI_IN 1024
 static struct { uint64_t frame; uint8_t b[4]; } midi_in[MIDI_IN];
@@ -184,13 +188,36 @@ static int process(jack_nframes_t n, void *arg) {
         atomic_store(&mi_head, h + 1);
     }
 
-    /* events due in this cycle, in order, each at its exact frame: every source renders up to it first */
-    int pos = 0;
+    /* take everything Python has queued into the waiting list (events can arrive in any order: steps sent
+       ahead, then a pad hit for right now) */
     for (;;) {
         uint64_t tail = atomic_load(&ev_tail);
-        if (tail == atomic_load(&ev_head)) break;
-        Event *e = &events[tail % EVENTS];
-        if (e->frame >= t1) break;                                  /* a later cycle's */
+        if (tail == atomic_load(&ev_head) || waiting_n >= EVENTS) break;
+        waiting[waiting_n] = events[tail % EVENTS];
+        waiting_order[waiting_n] = next_order++;
+        waiting_n++;
+        atomic_store(&ev_tail, tail + 1);
+    }
+    /* this cycle's events, earliest first (same frame: the order they were sent), out of the waiting list */
+    int due_n = 0;
+    for (int i = 0; i < waiting_n; ) {
+        if (waiting[i].frame < t1) {
+            Event e = waiting[i];
+            uint64_t o = waiting_order[i];
+            int j = due_n++;
+            while (j > 0 && (due[j - 1].frame > e.frame || (due[j - 1].frame == e.frame && due_order[j - 1] > o))) {
+                due[j] = due[j - 1]; due_order[j] = due_order[j - 1]; j--;
+            }
+            due[j] = e; due_order[j] = o;
+            waiting_n--;
+            waiting[i] = waiting[waiting_n];
+            waiting_order[i] = waiting_order[waiting_n];
+        } else i++;
+    }
+    /* play them, each at its exact frame: every source renders up to it first */
+    int pos = 0;
+    for (int i = 0; i < due_n; i++) {
+        Event *e = &due[i];
         int at = e->frame <= t0 ? 0 : (int)(e->frame - t0);
         if (at > pos) {
             for (int s = 0; s < MAX_SOURCES; s++)
@@ -198,7 +225,6 @@ static int process(jack_nframes_t n, void *arg) {
             pos = at;
         }
         apply(e);
-        atomic_store(&ev_tail, tail + 1);
     }
     for (int s = 0; s < MAX_SOURCES; s++)
         if (sources[s].kind && sources[s].on) render_source(&sources[s], pos, n);

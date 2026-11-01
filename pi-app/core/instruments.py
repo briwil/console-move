@@ -71,7 +71,7 @@ class Slot:
             h = sw_modules.host()
             self.seq = core.add_module(h.sh_render, h.sh_midi, m._seq.ptr)
             self.live = core.add_module(h.sh_render, h.sh_midi, m._live.ptr) if m._live is not m._seq else self.seq
-        self._refresh_after = None          # (event count) a module re-reads its settings once the core has them
+        self._refresh_after = None          # (core frame) a module re-reads its settings once the core has them
         self.sync_mix()
         core.on(self.seq)
         core.on(self.live)
@@ -141,12 +141,12 @@ class Slot:
                     for inst in insts:
                         m._apply(_InstCalls(c, inst), t[1], t[2])
                 elif what == "refresh":
-                    self._refresh_after = c._pushed
+                    self._refresh_after = c.now() + 2 * c.block
         self.sync_mix()
 
     def tick(self):
         """Call now and then: finishes jobs that wait for the core (a module re-reading its settings)."""
-        if self._refresh_after is not None and self.core.lib.core_events_done() >= self._refresh_after:
+        if self._refresh_after is not None and self.core.now() >= self._refresh_after:
             self._refresh_after = None
             self.m._refresh()
 

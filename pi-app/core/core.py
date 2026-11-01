@@ -45,7 +45,7 @@ class Core:
                                 -3: "JACK isn't running (is console mode on?)", -4: "couldn't make JACK ports",
                                 -5: "couldn't start the JACK client"}.get(r, "error %d" % r))
         self.rate, self.block = lib.core_rate(), lib.core_block()
-        self._keep = []                     # (event number, object): kept alive until the core has used it
+        self._keep = []                     # (frame, object): kept alive until the core is past that frame
         self._pushed = 0
         self._lock = threading.Lock()       # pushes come from more than one Python thread
         self._midibuf = C.create_string_buffer(12 * 256)
@@ -109,11 +109,12 @@ class Core:
             if self.lib.core_push(at or 0, kind, src, a, b, c, fn) != 0:
                 return False
             self._pushed += 1
+            now = self.lib.core_now()
             if keep is not None:
-                self._keep.append((self._pushed, keep))
-            if self._keep:
-                done = self.lib.core_events_done()
-                self._keep = [k for k in self._keep if k[0] > done]
+                # strings an event points at: kept until a while after its frame has gone by
+                self._keep.append((max(at or 0, now) + self.rate // 5, keep))
+            if self._keep and self._pushed % 64 == 0:
+                self._keep = [k for k in self._keep if k[0] >= now]
             return True
 
     def trigger(self, s, voice, velocity, at=0):

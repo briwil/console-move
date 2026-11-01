@@ -4,8 +4,9 @@ instruments through the core, with your pads playing on top.
     python3 /data/UserData/console/move/seq_test.py                   (lxr + dexed, plaits, braids)
     python3 /data/UserData/console/move/seq_test.py lxr 808 obxd      (your choice)
 
-The drum machine plays a beat, each synth a chord on every beat and a 16th-note line. Bottom row of pads: hits
-on the first drum machine; the other pads: notes on the first synth. Ctrl+C quits.
+The drum machine plays a beat, each synth a chord on every beat and a 16th-note line. Pads 1-8 (one row: the
+screen shows which pad you pressed): hits on the first drum machine; pads 9-32: notes on the first synth.
+Ctrl+C quits.
 """
 import os
 import sys
@@ -97,6 +98,9 @@ def loop():
                     else:
                         synth.m.note_off(36 + pad)
                 c.send_midi(bytes((0x9F, note, 127 if vel else 0)))
+                if vel:
+                    lines[3] = "PAD %d: %s" % (pad + 1, "DRUM" if pad < 8 else "SYNTH")
+                    c.display(render_screen(lines))
             elif kind == 0xB0 and note == 79:
                 step = vel - 128 if vel > 63 else vel
                 volume[0] = max(0.0, min(1.0, volume[0] + step * 0.02))

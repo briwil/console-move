@@ -28,13 +28,13 @@ Control map (all channel 16):
 | Knobs 1-8 turn | CC 71-78; 1 = one click right, 127 = one click left |
 | Knob touch | notes 0-9, 127 touched / 0 released |
 | Step buttons | notes 16-31 |
-| Left-side buttons | CC 40-43, 127 / 0 |
+| Left-side buttons | CC 43 (top), 42, 41, 40 (bottom); 127 / 0 |
 | Volume knob | CC 79 (touch: note 8) |
 | Jog wheel | turn CC 14 (1 = right, 127 = left), press CC 3, touch note 9 |
 | Buttons (CC, 127 down / 0 up) | Play 85, Record 86, Sample 118, Loop 58, Shift 49, Menu 50, Back 51, Capture 52, Undo 56, Copy 60, Delete 119, Mute 88, + 55, - 54, left 62, right 63 |
 | Jacks (plug detect) | CC 114: mic 0 / line in 127; CC 115: speaker 0 / line out 127 |
 Pad lights: note on, channel 16, note = pad, velocity = colour (127 worked); 0 = off.
-(Button numbers confirmed by pressing each; names from the move-anything project's control list.)
+(Button numbers and names confirmed on the Move with move/buttons_test.py.)
 
 ## Console mode (no RNBO)
 RNBO's manager (`rnbomovecontrol`) unplugs anyone else from the screen and pads, so we replace it.

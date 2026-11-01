@@ -16,8 +16,8 @@ render_screen = ns["render"]
 
 BUTTONS = {85: "PLAY", 86: "RECORD", 118: "SAMPLE", 58: "LOOP", 49: "SHIFT", 50: "MENU", 51: "BACK",
            52: "CAPTURE", 56: "UNDO", 60: "COPY", 119: "DELETE", 88: "MUTE", 55: "PLUS", 54: "MINUS",
-           62: "LEFT", 63: "RIGHT", 3: "WHEEL PRESS", 40: "LEFT BUTTON 1", 41: "LEFT BUTTON 2",
-           42: "LEFT BUTTON 3", 43: "LEFT BUTTON 4"}
+           62: "LEFT", 63: "RIGHT", 3: "WHEEL PRESS", 43: "LEFT BUTTON 1", 42: "LEFT BUTTON 2",
+           41: "LEFT BUTTON 3", 40: "LEFT BUTTON 4"}
 
 c = Core()
 c.display(render_screen(["BUTTON CHECK", "PRESS ANY BUTTON", "", ""]))

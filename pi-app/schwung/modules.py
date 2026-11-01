@@ -130,8 +130,19 @@ def _number(text):
 LIVE_TAIL = 8 * 44100      # the hand-played copy sleeps this long (frames) after your last hit or key
 
 
+def seq_awake(machine, frames, busy):
+    """The sequencer's copy of an instrument sleeps too, LIVE_TAIL frames after its last note, so an
+    instrument with nothing to play costs nothing. busy: it has something to play in this block."""
+    if busy:
+        machine._seq_left = LIVE_TAIL
+    awake = machine._seq_left > 0
+    machine._seq_left -= frames
+    return awake
+
+
 class Module:
     _live_left = 0
+    _seq_left = 0
     """A Schwung drum machine, with the methods drums.py's machines have."""
 
     channels = 8                     # DRUM 1-8 inputs (these modules only give stereo: they stay empty)
@@ -462,7 +473,7 @@ class Module:
             self._offs.append((self._seq, FIRST_PAD + lane))
         for inst, note in offs:
             inst.midi(0x80, note, 0)
-        if pos < frames:
+        if pos < frames and seq_awake(self, frames, bool(events)):
             self._seq.render(buf[pos:])
         seq[:, :2] = buf
         if self.two_engines and with_live and self._live_left > 0:     # asleep until your next hit
@@ -596,7 +607,7 @@ class SynthModule(Module):
                     self._apply(self._seq, p, v)
             self._locked[0] = set(p for p in locks if isinstance(p, int) and 0 <= p < self.param_count)
             self._seq.midi(0x90, note, max(1, min(127, vel)))
-        if pos < frames:
+        if pos < frames and seq_awake(self, frames, bool(acts or self._held)):     # notes still held: awake
             self._seq.render(buf[pos:])
         seq = np.zeros((frames, 2), np.float32)
         seq[:] = buf

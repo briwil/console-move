@@ -39,6 +39,16 @@ PROBLEM = ""              # why the drum synth is off, if it is
 LIVE_TAIL = 8 * 44100     # the hand-played copy of an instrument sleeps this long after your last hit (frames)
 
 
+def seq_awake(machine, frames, busy):
+    """The sequencer's copy of an instrument sleeps too, LIVE_TAIL frames after its last note, so an
+    instrument with nothing to play costs nothing. busy: it has something to play in this block."""
+    if busy:
+        machine._seq_left = LIVE_TAIL
+    awake = machine._seq_left > 0
+    machine._seq_left -= frames
+    return awake
+
+
 def _newest_source():
     files = [f for f in glob.glob(os.path.join(DIR, "**", "*.[ch]"), recursive=True)
              if os.sep + "schwung" + os.sep not in f] + [os.path.join(DIR, "build.sh")]
@@ -95,6 +105,7 @@ _live = (_load(LIVE_LIB) if AVAILABLE else None) or _lib
 
 
 class LXR:
+    _seq_left = 0           # the same for the sequencer's engine
     _live_left = 0          # frames the hand-played engine still has to sound (see LIVE_TAIL)
     """The LXR-02's drum synth (the library holds a single engine, so make one of these)."""
 
@@ -316,7 +327,7 @@ class LXR:
                 pos = offset
             self._apply_locks(min(lane, VOICES - 1), locks)
             _lib.drums_trigger(lane, vel)
-        if pos < frames:
+        if pos < frames and seq_awake(self, frames, bool(events)):
             _lib.drums_render(ptr(seq[pos:]), frames - pos)
         if self.two_engines and with_live and self._live_left > 0:    # asleep until your next hit
             _live.drums_render(ptr(live), frames)
@@ -423,6 +434,7 @@ def _sw_load(path):
 
 class Schwung:
     _live_left = 0
+    _seq_left = 0
     """The TR-606 (6W6) or TR-808 (8W8), each voice coming out on its own (see drums/schwung/glue*.cpp)."""
 
     channels = 8                     # DRUM 1-8 inputs: lanes 1-8; with 16, lanes 9-16 share them
@@ -619,7 +631,7 @@ class Schwung:
                     self._set(self._lib, p, v)
             self._locked[voice] = set(p for p in locks if 0 <= p < self.param_count)
             self._lib.sw_trigger(voice, vel)
-        if pos < frames:
+        if pos < frames and seq_awake(self, frames, bool(events)):
             self._lib.sw_render(ptr(seq[pos:]), frames - pos)
         if self.two_engines and with_live and self._live_left > 0:
             self._live.sw_render(ptr(live), frames)

@@ -62,32 +62,56 @@ e.device = audio.drum_device(audio.INST_CHANNELS)
 
 
 def run(seconds, label):
+    """Make `seconds` of sound as fast as possible. LOAD: the share of real time it took. LATE: blocks (after
+    the first second) that took longer than the sound they make; each could be a click if the output
+    buffer didn't cover it. WORST: the slowest of those blocks, as a share of its time."""
     blocks = int(seconds * e.rate / audio.PERIOD)
+    warm = int(e.rate / audio.PERIOD)
     with e.lock:
         e.playing = False
     e._instruments_block(audio.PERIOD, False)
     with e.lock:
         e.playing = True
     was = False
+    block_s = audio.PERIOD / e.rate
     t0 = time.perf_counter()
-    worst = 0.0
-    for _ in range(blocks):
+    worst, late = 0.0, 0
+    for k in range(blocks):
         b0 = time.perf_counter()
         x, mon, mr, md = e._instruments_block(audio.PERIOD, was)
         was = True
         e.process(x, monitor=mon, monitor_rev=mr, monitor_dly=md)
-        worst = max(worst, time.perf_counter() - b0)
+        took = time.perf_counter() - b0
+        if k >= warm:
+            worst = max(worst, took)
+            late += took > block_s
     took = time.perf_counter() - t0
-    audio_s = blocks * audio.PERIOD / e.rate
-    block_s = audio.PERIOD / e.rate
-    print("%-34s LOAD %5.1f%%   slowest block %5.1f%% of its time" % (label, 100 * took / audio_s,
-                                                                   100 * worst / block_s))
+    audio_s = blocks * block_s
+    print("%-40s LOAD %5.1f%%   LATE %3d of %d   WORST %5.1f%%" % (label, 100 * took / audio_s, late,
+                                                                   blocks - warm, 100 * worst / block_s))
+
+
+def tape_page(slot=None):
+    """The tape page: the 8 tracks play; `slot`'s instrument records onto track 1 (None: nothing armed)."""
+    e.inst_view = False
+    e.slot_mutes = set()
+    if slot is None:
+        e.arm_extra = set()
+    else:
+        e.inputs[0] = slot * audio.SLOT_CH + audio.DRUM_KIT + 2      # its kit, mono
+        e.arm_extra = {0}
 
 
 print("Loaded:", ", ".join(loaded), "| tape: 8 tracks + reverb + delay\n")
-run(SECONDS, "everything together")
+print("Instrument pages (the tape doesn't play there):")
+e.inst_view = True
+run(SECONDS, "  all of them playing at once")
 for i, m in enumerate(loaded):
     e.slot_mutes = set(range(len(loaded))) - {i}
-    run(5, "%s alone (with the tape)" % m)
-e.slot_mutes = set(range(len(loaded)))
-run(5, "the tape alone")
+    run(5, "  %s alone" % m)
+print("Tape page (8 tracks playing):")
+tape_page(None)
+run(5, "  nothing armed")
+for i, m in enumerate(loaded):
+    tape_page(i)
+    run(5, "  recording %s" % m)

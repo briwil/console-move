@@ -5,7 +5,8 @@
 1. The LXR plays a beat for 2 bars (120 BPM) and the core records it onto track 1, looping.
 2. Then the drum machine stops and you hear track 1 play back from the tape, looping: the same beat, now
    coming off tape. Play pads 1-8 (bottom row) on top: they're heard but not recorded.
-The screen says which part it's in. Ctrl+C quits.
+The screen says which part it's in. After about 10 seconds it prints what each part of the sound (the
+instruments, the tape, the reverb, the delay) was doing, to find where any odd sound comes from. Ctrl+C quits.
 """
 import os
 import sys
@@ -66,6 +67,9 @@ for lane in range(6):
 lines = ["TAPE TEST", "RECORDING TRACK 1", "2 BARS...", ""]
 c.display(render_screen(lines))
 
+c.capture(True)                                     # listen in, to say afterwards what made which sound
+cap_start = c.now()
+switch = [None]
 c.tape_arm(0, True, (K.DRUM_KIT + 2, -1))          # slot 1's kit, mono
 at = (c.now() // c.block + 40) * c.block            # the start of a cycle, a moment from now
 c.transport(K.T_PLAY, 0, at=at)
@@ -98,16 +102,34 @@ def loop():
                 c.tape_arm(0, False)
                 sched.stop()
                 phase[0] = "play"
+                switch[0] = c.now()
                 lines[1:4] = ["PLAYING TRACK 1", "FROM THE TAPE", "PADS 1-8: DRUMS"]
                 c.display(render_screen(lines))
         time.sleep(0.003)
 
 
 threading.Thread(target=loop, daemon=True).start()
+
+def report():
+    """What each part of the sound was doing while recording and while playing back."""
+    total = int(c.now() - cap_start)
+    split = int(switch[0] - cap_start) if switch[0] else total
+    print("\nWhat was heard (steady near 1 = a drone, near 0 = drums):")
+    for p, name in enumerate(c.PARTS):
+        x = c.captured(p, total)
+        print("  %-12s while recording: %s" % (name, c.describe(x[:split])))
+        print("  %-12s playing back:    %s" % ("", c.describe(x[split:])))
+    print()
+
+
+reported = False
 try:
     last = c.cycles()
     while True:
         time.sleep(2)
+        if not reported and switch[0] and c.now() - switch[0] > 6 * c.rate:
+            report()
+            reported = True
         cyc = c.cycles()
         print("%-6s  tape bar %4.2f   JACK load %5.1f%%   cycles a second %5.1f" %
               (phase[0], c.tape_pos() / BAR + 1, c.load(), (cyc - last) / 2))

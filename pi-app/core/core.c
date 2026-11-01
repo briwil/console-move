@@ -130,6 +130,14 @@ static float master = 1.0f, mix_gain = 0.6f;
 static float send_l[2][MAX_BLOCK], fx_out[4][MAX_BLOCK], mix[2][MAX_BLOCK];
 static float send_d[2][MAX_BLOCK];
 
+/* a recording of what's heard, in four parts, for finding out what makes a sound (0: the instruments, dry;
+   1: the tape; 2: the reverb's return; 3: the delay's return), mono, the last CAP_FRAMES frames */
+#define CAP_FRAMES (30 * 44100)
+#define CAP_PARTS 4
+static float cap[CAP_PARTS][CAP_FRAMES], cap_now[CAP_PARTS][MAX_BLOCK];
+static int64_t cap_pos;
+static int capture_on;
+
 static void flush_denormals(void) {
 #if defined(__aarch64__)
     uint64_t fpcr;
@@ -252,6 +260,7 @@ static void tape_stretch(int i0, int m, int64_t p) {
                 float b = st ? x1[i] * vol * env1[i] : a;
                 float l = a * gl, r = b * gr;
                 mix[0][i0 + i] += l; mix[1][i0 + i] += r;
+                cap_now[1][i0 + i] += 0.5f * (l + r);
                 if (rs > 0.0f) { send_l[0][i0 + i] += l * rs; send_l[1][i0 + i] += r * rs; }
                 if (ds > 0.0f) { send_d[0][i0 + i] += l * ds; send_d[1][i0 + i] += r * ds; }
             }
@@ -340,6 +349,7 @@ static void slots_cycle(int n) {
                     if (g > 0.0f) {                          /* heard: into the mix, sends to the main effects */
                         float hl = l * g, hr = r * g;
                         mix[0][i] += hl; mix[1][i] += hr;
+                        cap_now[0][i] += 0.5f * (hl + hr);
                         if (rs > 0.0f) { send_l[0][i] += hl * rs; send_l[1][i] += hr * rs; }
                         if (ds > 0.0f) { send_d[0][i] += hl * ds; send_d[1][i] += hr * ds; }
                     }
@@ -481,6 +491,7 @@ static int process(jack_nframes_t n, void *arg) {
 
     /* mix: the slots (making their recording inputs too), sources on their own, the tape */
     memset(mix, 0, sizeof(float) * 2 * n);
+    if (capture_on) for (int p = 0; p < CAP_PARTS; p++) memset(cap_now[p], 0, sizeof(float) * n);
     memset(send_l, 0, sizeof(float) * 2 * MAX_BLOCK);
     memset(send_d, 0, sizeof(float) * 2 * MAX_BLOCK);
     slots_cycle((int)n);
@@ -511,12 +522,21 @@ static int process(jack_nframes_t n, void *arg) {
     if (reverb && rev_process) {
         rev_process(reverb, send_l[0], send_l[1], fx_out[0], fx_out[1], (int)n);
         for (jack_nframes_t i = 0; i < n; i++) { mix[0][i] += fx_out[0][i] * rev_level; mix[1][i] += fx_out[1][i] * rev_level; }
+        if (capture_on) for (jack_nframes_t i = 0; i < n; i++) cap_now[2][i] = 0.5f * (fx_out[0][i] + fx_out[1][i]) * rev_level;
     }
     if (delay && dly_process) {
         dly_process(delay, send_d[0], send_d[1], fx_out[2], fx_out[3], (int)n);
         for (jack_nframes_t i = 0; i < n; i++) { mix[0][i] += fx_out[2][i] * dly_level; mix[1][i] += fx_out[3][i] * dly_level; }
+        if (capture_on) for (jack_nframes_t i = 0; i < n; i++) cap_now[3][i] = 0.5f * (fx_out[2][i] + fx_out[3][i]) * dly_level;
     }
 
+    if (capture_on) {
+        for (jack_nframes_t i = 0; i < n; i++) {
+            int64_t at = (cap_pos + i) % CAP_FRAMES;
+            for (int p = 0; p < CAP_PARTS; p++) cap[p][at] = cap_now[p][i];
+        }
+        cap_pos += n;
+    }
     float *ol = J.port_get_buffer(out_l, n), *orr = J.port_get_buffer(out_r, n);
     for (jack_nframes_t i = 0; i < n; i++) {
         ol[i] = tanhf(mix[0][i] * mix_gain) * master;              /* tanh: gentle limiting, as the Pi does */
@@ -760,4 +780,15 @@ int core_tape_recorded(int c, int64_t *a, int64_t *b) {
     if (got) { *a = rec_lo[c]; *b = rec_hi[c]; rec_lo[c] = -1; rec_hi[c] = -1; }
     atomic_flag_clear(&rec_lock);
     return got;
+}
+
+/* ------------------------------------------------------------------ Python's side: listening in */
+void core_capture(int on) { if (on) { cap_pos = 0; memset(cap, 0, sizeof cap); } capture_on = on; }
+/* the last n frames of part p (oldest first) into out; returns how many there were */
+int core_capture_get(int p, float *out, int n) {
+    if (p < 0 || p >= CAP_PARTS) return 0;
+    int64_t have = cap_pos < CAP_FRAMES ? cap_pos : CAP_FRAMES;
+    if (n > have) n = (int)have;
+    for (int i = 0; i < n; i++) out[i] = cap[p][(cap_pos - n + i) % CAP_FRAMES];
+    return n;
 }

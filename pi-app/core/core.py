@@ -52,7 +52,8 @@ class Core:
                 ("core_tape_heard", [i32], None), ("core_tape_loop", [i32, C.c_int64, C.c_int64], None),
                 ("core_tape_punch", [C.c_int64, C.c_int64], None), ("core_tape_overdub", [i32], None),
                 ("core_tape_pos", [], C.c_int64), ("core_tape_state", [], i32),
-                ("core_tape_recorded", [i32, C.POINTER(C.c_int64), C.POINTER(C.c_int64)], i32)]:
+                ("core_tape_recorded", [i32, C.POINTER(C.c_int64), C.POINTER(C.c_int64)], i32),
+                ("core_capture", [i32], None), ("core_capture_get", [i32, C.POINTER(f32), i32], i32)]:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
         r = lib.core_open(LIBJACK.encode(), name)
@@ -273,3 +274,33 @@ class Core:
         """(start, end) recorded on channel c since the last call, or None."""
         a, b = C.c_int64(), C.c_int64()
         return (a.value, b.value) if self.lib.core_tape_recorded(c, C.byref(a), C.byref(b)) else None
+
+    # ---- listening in: what's heard, in four parts (instruments, tape, reverb, delay)
+    PARTS = ("instruments", "tape", "reverb", "delay")
+
+    def capture(self, on=True):
+        self.lib.core_capture(1 if on else 0)
+
+    def captured(self, part, frames):
+        """The last `frames` frames of a part, as a numpy array."""
+        import numpy as np
+        buf = np.zeros(frames, np.float32)
+        n = self.lib.core_capture_get(part, buf.ctypes.data_as(C.POINTER(f32)), frames)
+        return buf[:n]
+
+    def describe(self, x):
+        """A few numbers about a stretch of sound: loudness, how steady it is (a drone is near 1, drums near 0)
+        and its strongest pitch."""
+        import numpy as np
+        if len(x) < 4096:
+            return "too short"
+        rms = float(np.sqrt((x ** 2).mean()))
+        if rms < 1e-5:
+            return "silent"
+        env = np.array([np.sqrt((x[i:i + 1024] ** 2).mean()) for i in range(0, len(x) - 1024, 1024)])
+        steady = float(np.percentile(env, 20) / max(1e-9, np.percentile(env, 90)))
+        seg = x[:min(len(x), 1 << 17)]
+        spec = np.abs(np.fft.rfft(seg * np.hanning(len(seg))))
+        freqs = np.fft.rfftfreq(len(seg), 1 / self.rate)
+        k = int(np.argmax(spec[10:])) + 10
+        return "level %6.4f   steady %.2f   strongest pitch %5.0f Hz" % (rms, steady, freqs[k])

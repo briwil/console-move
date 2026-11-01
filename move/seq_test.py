@@ -3,6 +3,7 @@ instruments through the core, with your pads playing on top.
 
     python3 /data/UserData/console/move/seq_test.py                   (lxr + dexed, plaits, braids)
     python3 /data/UserData/console/move/seq_test.py lxr 808 obxd      (your choice)
+    python3 /data/UserData/console/move/seq_test.py quiet             (no patterns: just the pads)
 
 The drum machine plays a beat, each synth a chord on every beat and a 16th-note line. Pads 1-8 (one row: the
 screen shows which pad you pressed): hits on the first drum machine; pads 9-32: notes on the first synth.
@@ -27,7 +28,8 @@ import sequencer   # noqa: E402
 from core import Core                     # noqa: E402
 from instruments import Slot, Scheduler   # noqa: E402
 
-names = sys.argv[1:] or ["lxr", "dexed", "plaits", "braids"]
+QUIET = "quiet" in sys.argv                 # no patterns: just the pads
+names = [a for a in sys.argv[1:] if a != "quiet"] or ["lxr", "dexed", "plaits", "braids"]
 BPM = 120.0
 FPB = 44100 * 60 / BPM                    # frames per beat
 
@@ -66,7 +68,8 @@ for name in names:
             for step in range(lane % 2, 16, 2 if lane < 3 else 3):
                 seq.toggle(lane, step)
     slots.append(slot)
-    plays.append((slot, seq))
+    if not QUIET:
+        plays.append((slot, seq))
 print("Playing:", ", ".join(s.m.__class__.__name__ + " " + n for s, n in zip(slots, names)))
 
 drum = next((s for s in slots if s.kind != "synth"), None)

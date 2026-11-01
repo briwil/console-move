@@ -49,7 +49,7 @@ class Core:
                 ("core_tape_frames", [C.c_int64], None), ("core_tape_channel", [i32, vp], None),
                 ("core_tape_track", [i32, f32, f32, f32, f32, i32, i32], None),
                 ("core_tape_arm", [i32, i32, i32, i32], None), ("core_tape_boxes", [i32, vp, i32], None),
-                ("core_tape_heard", [i32], None), ("core_tape_loop", [i32, C.c_int64, C.c_int64], None),
+                ("core_tape_heard", [i32], None), ("core_tape_undo", [i32, vp], None), ("core_tape_loop", [i32, C.c_int64, C.c_int64], None),
                 ("core_tape_punch", [C.c_int64, C.c_int64], None), ("core_tape_overdub", [i32], None),
                 ("core_tape_pos", [], C.c_int64), ("core_tape_state", [], i32),
                 ("core_tape_recorded", [i32, C.POINTER(C.c_int64), C.POINTER(C.c_int64)], i32),
@@ -244,6 +244,10 @@ class Core:
         keep.append(arr)
         del keep[:-3]                        # the core may still be reading the one before
         self.lib.core_tape_boxes(c, arr.ctypes.data if len(arr) else None, len(arr))
+
+    def tape_undo(self, c, buf):
+        """buf: a float32 array as long as the tape (kept alive by the caller), or None."""
+        self.lib.core_tape_undo(c, buf.ctypes.data if buf is not None else None)
 
     def tape_heard(self, on):
         self.lib.core_tape_heard(1 if on else 0)

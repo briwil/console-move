@@ -196,6 +196,8 @@ static int t_audible[TRACKS], t_stereo[TRACKS], t_armed[TRACKS], t_src[TRACKS][2
 static int tape_heard = 1, playing, recording, overdub, loop_on;
 static int64_t tpos, loop_a, loop_b, punch_a, punch_b;
 static int64_t rec_lo[CHANNELS], rec_hi[CHANNELS];     /* what was recorded since Python last asked */
+static float *undo[CHANNELS];                 /* where to keep what recording writes over (Python's memory) */
+static int64_t saved_lo[CHANNELS], saved_hi[CHANNELS];  /* what's been kept so far this pass */
 static atomic_flag rec_lock = ATOMIC_FLAG_INIT;
 
 static inline float fade_curve(float u) {
@@ -278,6 +280,12 @@ static void tape_stretch(int i0, int m, int64_t p) {
             if (!track[c]) continue;
             int ch = t_src[t][k];
             float *dst = track[c];
+            float *keep = undo[c];
+            if (keep) {                       /* the first time this pass writes a frame: keep what was there */
+                for (int64_t f = a; f < b; f++) if (f < saved_lo[c] || f >= saved_hi[c]) keep[f] = dst[f];
+                if (saved_hi[c] <= saved_lo[c]) { saved_lo[c] = a; saved_hi[c] = b; }
+                else { if (a < saved_lo[c]) saved_lo[c] = a; if (b > saved_hi[c]) saved_hi[c] = b; }
+            }
             for (int64_t f = a; f < b; f++) {
                 int i = i0 + (int)(f - p);
                 float v;
@@ -410,7 +418,10 @@ static void apply(const Event *e) {
         case T_PLAY: tpos = (int64_t)e->b; playing = 1; break;
         case T_STOP: playing = recording = 0; break;
         case T_LOCATE: tpos = (int64_t)e->b; break;
-        case T_RECORD: recording = 1; playing = 1; break;
+        case T_RECORD:
+            for (int c = 0; c < CHANNELS; c++) saved_lo[c] = saved_hi[c] = 0;
+            recording = 1; playing = 1;
+            break;
         case T_RECORD_OFF: recording = 0; break;
         }
         break;
@@ -768,6 +779,8 @@ void core_tape_boxes(int c, const Box *b, int n) {
     atomic_store(&box_cur[c], next);
 }
 void core_tape_heard(int on) { tape_heard = on; }
+/* where channel c keeps what recording writes over (as long as the tape; NULL: don't keep it) */
+void core_tape_undo(int c, float *buf) { if (c >= 0 && c < CHANNELS) undo[c] = buf; }
 void core_tape_loop(int on, int64_t a, int64_t b) { loop_a = a; loop_b = b; loop_on = on; }
 void core_tape_punch(int64_t a, int64_t b) { punch_a = a; punch_b = b; }
 void core_tape_overdub(int on) { overdub = on; }

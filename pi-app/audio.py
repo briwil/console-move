@@ -28,6 +28,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -2351,10 +2352,19 @@ class Engine:
     # ------------------------------------------------------------ the audio thread
 
     def start(self):
+        if MOVE:
+            # the Move: the C sound core makes the sound; the bridge keeps it in step with this engine
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "core"))
+            from bridge import CoreBridge
+            self.bridge = CoreBridge(self)
+            self.bridge.start()
+            return
         threading.Thread(target=self._run, daemon=True, name="audio").start()
 
     def stop(self):
         self._stop = True
+        if getattr(self, "bridge", None):
+            self.bridge.stop()
         self.save_phones_volume()
         self._close_port()
 
@@ -2817,25 +2827,29 @@ class Engine:
         return x.mean(axis=1)
 
     def _save_for_undo(self, t, a, b):
-        """Keep what a recording pass overwrites, the first time it overwrites it."""
+        """Keep what a recording pass overwrites, the first time it overwrites it. (On the Move the sound
+        core has already recorded over it: the bridge keeps a copy from before, in _undo_src.)"""
         if self._rec_undo is None:
             return
+        src = getattr(self, "_undo_src", {}).get(t)
+        if src is None:
+            src = self.tracks[t]
         s = self._rec_saved.get(t)
         if s and s[0] <= a and b <= s[1]:
             return                                   # already saved (a loop coming round again)
         if s and a == s[1]:
-            self._rec_undo.append((t, a, self.tracks[t][a:b].copy()))
+            self._rec_undo.append((t, a, src[a:b].copy()))
             s[1] = b
         elif not s:
             self._rec_undo.append(("regions", t, [list(r) for r in self.regions[t]]))
-            self._rec_undo.append((t, a, self.tracks[t][a:b].copy()))
+            self._rec_undo.append((t, a, src[a:b].copy()))
             self._rec_saved[t] = [a, b]
         else:
             lo, hi = min(a, s[0]), max(b, s[1])
             if a < s[0]:
-                self._rec_undo.append((t, a, self.tracks[t][a:s[0]].copy()))
+                self._rec_undo.append((t, a, src[a:s[0]].copy()))
             if b > s[1]:
-                self._rec_undo.append((t, s[1], self.tracks[t][s[1]:b].copy()))
+                self._rec_undo.append((t, s[1], src[s[1]:b].copy()))
             self._rec_saved[t] = [lo, hi]
 
     def _update_levels(self, t, a, b, reset=False):

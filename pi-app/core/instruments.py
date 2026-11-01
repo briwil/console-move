@@ -279,8 +279,9 @@ class Scheduler:
         """Where the sequencer is now, in its own frames."""
         return max(0, self.core.now() - self.start_frame)
 
-    def tick(self, plays, frames_per_beat):
-        """plays: [(Slot, sequencer)]. Sends what falls before now + LOOKAHEAD."""
+    def tick(self, plays, frames_per_beat, on_events=None):
+        """plays: [(Slot, sequencer)]. Sends what falls before now + LOOKAHEAD. on_events(slot, events, base):
+        told about each batch (the screen flashes the hits)."""
         if not self.playing:
             return
         want = self.core.now() + self.LOOKAHEAD - self.start_frame
@@ -291,6 +292,8 @@ class Scheduler:
             ev = seq.events(self.sent, n, frames_per_beat)
             if ev:
                 slot.play(ev, self.start_frame + self.sent)
+                if on_events:
+                    on_events(slot, ev, self.start_frame + self.sent)
         self.sent += n
 
 

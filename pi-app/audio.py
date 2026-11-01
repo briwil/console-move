@@ -2599,6 +2599,7 @@ class Engine:
         if current is not None and current not in play and (self.inst_view or auditions):
             play.append(current)                 # your hits on the drum page, heard while you play them
         fpb = self.frames_per_beat()
+        jobs = []                                        # (slot, machine id, machine, events, with_live)
         for i in play:
             mid = self.slots[i]
             m, seq = self.drums.get(mid), self.seqs.get(mid)
@@ -2621,7 +2622,16 @@ class Engine:
                     for offset, lane, _vel, _locks in events:
                         if lane < len(self.seq_hits):
                             self.seq_hits[lane] = soon + offset / self.rate
-            seq_voices, live_voices = m.render(frames, events, with_live=(i == current))
+            jobs.append((i, mid, m, events, i == current))
+        # each instrument's sound is C code that lets go of Python while it works, so with more than one they
+        # run side by side on the processor's cores
+        pool = self._render_pool() if len(jobs) > 1 else None
+        if pool:
+            futures = [pool.submit(m.render, frames, events, with_live=live) for _i, _mid, m, events, live in jobs]
+            results = [f.result() for f in futures]
+        else:
+            results = [m.render(frames, events, with_live=live) for _i, _mid, m, events, live in jobs]
+        for (i, mid, m, events, _live), (seq_voices, live_voices) in zip(jobs, results):
             # what's recorded (at pos, where you pressed): your hits now, and the sequencer's from read_ahead
             # frames ago (they were made that far ahead, to sound on time). What you hear: both, now
             voices = live_voices + self._delay_sequencer(mid, seq_voices)
@@ -2637,6 +2647,16 @@ class Engine:
         if self.playing:
             self.seq_clock += frames
         return x, mon, mon_rev, mon_dly
+
+    def _render_pool(self):
+        """Worker threads for the instruments (one per core, less the one this thread runs on)."""
+        pool = getattr(self, "_pool", None)
+        if pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            workers = max(1, min(SLOTS, (os.cpu_count() or 2) - 1))
+            pool = self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="instrument",
+                                                   initializer=flush_denormals)
+        return pool
 
     def _drum_input(self, mid, m, voices, rev_g, dly_g):
         """What one instrument puts on tape, as its SLOT_CH input channels: 0-7 each drum on its own (DRUM 1-8:

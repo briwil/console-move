@@ -177,7 +177,9 @@ Data lives in `~/console-data/` on the Pi: `projects/<song>/` (`track1.wav`…`t
   scale (13) and `low` (lowest row on screen, in scale rows) per synth. Same methods the engine and
   pages use as the drum Sequencer. `Engine._seq_for` makes the right kind by `Engine.is_synth`.
 - `synthpage.py`: the page (console.py's `sp()` picks it or seqpage for the shown slot). Keys: press puts
-  the note on (and plays it), press on an existing note takes it off on release unless a knob turned;
+  the note on (and plays it), press on an existing note takes it off on release unless a knob turned
+  (stopped, a press on a different row only picks it first, like the drums); SHIFT + knob 6 = the picked
+  row's own length (`NotePattern.lane_len`, MIDI note -> steps; `_events` loops each such row itself);
   while playing, live_place + length from how long it was held. ← / → octave, SHIFT ← / → a row.
 - The engine lets synths go (all_off) when playback stops or a slot stops sounding.
 - JE-8086: CMake build (cmake from pip --user if missing), helper `jp8000-dsp` copied beside dsp.so, one

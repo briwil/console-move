@@ -341,10 +341,14 @@ time (JE-8086 takes longest: it's an emulator of the JP-8000).
   (8 at a time); a step can have any number of notes (a chord):
   - **Knob 1:** the step cursor (1–64).
   - **Track key n:** picks the nth row and puts its note on the cursor's step (and plays it). Press it
-    on a note that's there to take it off. While playing, a key puts the note where it's playing, as
+    on a note that's there to take it off; if you were on another row, the first press only picks the
+    row (as on the drums), and the second takes the note off. While playing, a key puts the note where it's playing, as
     long as you hold it.
   - **Knobs 2–9:** the picked note's LENGTH (in steps), VELOCITY, CHANCE and RATCHETS, then the pattern's
-    LENGTH and RATE, then this synth's KEY and SCALE (13 scales, CHROMATIC for every note). Knob 10:
+    LENGTH and RATE, then this synth's KEY and SCALE (13 scales, CHROMATIC for every note).
+    **SHIFT + knob 6** (the pattern's LENGTH) sets the picked *row's* own length instead, so each row
+    can loop on its own cycle (a mark shows where a short row ends; back at the pattern's length it
+    follows the pattern again). Knob 10:
     the pattern. Holding a key while turning a knob changes that note without taking it off.
   - **← / →:** the rows down / up an octave. **SHIFT + ← / →:** one row.
   - **Push knob 1:** the knobs go to the synth's sound pages. Hold a note's key and turn to lock that

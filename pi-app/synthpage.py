@@ -9,6 +9,10 @@ each row is a note of the scale (8 on screen, lowest at the bottom) and a step c
   CHANCE, RATCHETS; then the pattern's LENGTH and RATE, and the song's KEY and SCALE for this synth.
 - Push knob 1 for the next mode: the synth's sound pages. There, hold a note's key and turn to lock the
   setting to that note (a parameter lock); with no key held, the knobs change the synth's own sound.
+- SHIFT + knob 6 (PATTERN LEN): the picked row's own length, so each row can loop on its own cycle (back at
+  the pattern's length it follows the pattern again). Rows past their length are greyed out.
+- Stopped, pressing a different row's key only picks that row (the note goes on as before); pressing it again
+  takes a note off, like the drums.
 - ← / →: the rows down / up an octave (SHIFT + ← / →: one row). Knob 10 picks the pattern.
 """
 import time
@@ -36,6 +40,7 @@ class SynthPage:
         self.mode = 0                # 0: NOTE; 1...: the synth's sound pages
         self.held = {}               # row -> True once a knob turned while its key was held
         self.down = {}               # row -> (note, step it went on, when) for keys held while playing
+        self.switching = {}          # row -> True when its key's press only picked the row (nothing is removed)
         self._gesture = None
         self._cursor_until = 0.0
         self._hear = None
@@ -103,6 +108,7 @@ class SynthPage:
         row = n - 1
         pitch = self.seq.shown_notes()[row]
         if down:
+            self.switching[row] = row != self.row and not e.playing    # stopped: a different row's key picks it first
             self.row = row
             self.held[row] = False
             if e.playing:
@@ -115,6 +121,11 @@ class SynthPage:
                 self.t.say("%s  STEP %d" % (notes.note_name(pitch), i + 1), 1)
                 return
             if self.seq.covering(self.cursor, pitch) is None:
+                length = self.seq.pattern.lane_length(pitch)
+                if self.cursor >= length:
+                    self.t.say("STEP %d IS PAST THE END OF %s (%d STEPS)" % (self.cursor + 1, notes.note_name(pitch),
+                                                                           length), 3)
+                    return
                 self._edit(("toggle", time.monotonic()))
                 self.seq.toggle(self.cursor, pitch)
                 self.held[row] = True                  # put on now: letting go doesn't take it off
@@ -129,9 +140,14 @@ class SynthPage:
                 self.seq.change_note(i, pitch, "length", steps - 1)
                 e.seq_changed()
         turned = self.held.pop(row, None)
+        switching = self.switching.pop(row, False)
         if turned is None or turned:
             return
         start = self.seq.covering(self.cursor, pitch)
+        if start is not None and switching:
+            # like the drums: the first press only picks the row; press it again to take the note off
+            self.t.say("%s  (PRESS AGAIN TO TAKE THE NOTE OFF)" % notes.note_name(pitch), 2)
+            return
         if start is not None:
             self._edit(("toggle", time.monotonic()))
             self.seq.toggle(start, pitch)
@@ -184,6 +200,14 @@ class SynthPage:
             self.held[row] = True
         step, pitch = self.picked()
         if self.mode == 0:
+            if param == "pat_length" and shift:
+                # SHIFT + the length knob: the picked row's own length, so it loops on its own cycle
+                self._edit((number, "lane", pitch))
+                v = seq.change_lane_length(pitch, clicks)
+                e.seq_changed()
+                own = pitch in seq.pattern.lane_len
+                self.t.say("%s  LANE LENGTH %d%s" % (notes.note_name(pitch), v, "" if own else "  (SAME AS THE PATTERN)"), 2)
+                return
             if param in ("pat_length", "rate"):
                 self._edit((number,))
                 v = seq.change_track("length" if param == "pat_length" else "rate", clicks if param == "pat_length" else delta)
@@ -270,9 +294,13 @@ class SynthPage:
         e, seq = self.e, self.seq
         step, pitch = self.picked()
         n = seq.note(step, pitch)
+        shown_pitch = seq.shown_notes()[self.row]
         boxes = [("CURSOR", "STEP %d" % (self.cursor + 1) if self.showing_cursor() else "PLAYING", False)]
         for p in self.params()[:8]:
             if self.mode == 0:
+                if p == "pat_length" and self.t.shift_held():
+                    boxes.append(("LANE LEN " + notes.note_name(shown_pitch), str(seq.pattern.lane_length(shown_pitch)), False))
+                    continue
                 if p == "pat_length":
                     v = str(seq.pattern.length)
                 elif p == "rate":
@@ -313,7 +341,7 @@ class SynthPage:
                 surf.blit(v, (x + (w - v.get_width()) // 2, 58))
             x += w + gap
         p = seq.pattern
-        info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   %s %s   ·   ARROWS: OCTAVE   ·   SHIFT+CUT: UNDO" % (
+        info = "KNOBS: %s  (PUSH KNOB 1)   ·   %s  %d STEPS  %s   ·   %s %s   ·   ARROWS: OCTAVE   ·   SHIFT+KNOB 6: LANE LENGTH   ·   SHIFT+CUT: UNDO" % (
             self.mode_name(), self.d.title, p.length, sequencer.RATES[p.rate][0], notes.NAMES[seq.root],
             notes.SCALES[seq.scale][0])
         surf.blit(tiny.render(info, True, grey), (20, 84))
@@ -329,11 +357,13 @@ class SynthPage:
         if self.showing_cursor() and first <= self.cursor < first + VISIBLE:
             cx = col_x(self.cursor - first)
             pygame.draw.rect(surf, white, (cx - 4, top - 6, cw + 8, notes.ROWS * row_h + 4), 2, border_radius=6)
-        playing = seq.position(e._heard_frame(), e.frames_per_beat())[0] if e.playing else None
+        raw = seq.raw_step(e._heard_frame(), e.frames_per_beat()) if e.playing else None
         for r in range(notes.ROWS):
             row = notes.ROWS - 1 - r                     # the lowest note at the bottom
             y = top + r * row_h
             pitch = shown[row]
+            lane_len = p.lane_length(pitch)                  # this row's own length, or the pattern's
+            playing = raw % lane_len if raw is not None else None
             root = (pitch - seq.root) % 12 == 0
             tag = colour if root else tuple(round(c * 0.7) for c in colour)
             pygame.draw.rect(surf, tag, (20, y, 46, ch), border_radius=5)
@@ -342,22 +372,23 @@ class SynthPage:
             if row == self.row:
                 pygame.draw.rect(surf, white, (14, y - 4, col_x(VISIBLE - 1) + cw + 6 - 14, ch + 8), 2, border_radius=7)
             for c in range(1, VISIBLE):
-                if (first + c) % group == 0 and first + c < p.length:
+                if (first + c) % group == 0 and first + c < lane_len:
                     gx = col_x(c) - (pitch_w - cw + 1) // 2 - 1
                     pygame.draw.line(surf, (88, 94, 104), (gx, y - 2), (gx, y + ch + 1), 2)
             for c in range(VISIBLE):
                 i = first + c
                 cx = col_x(c)
-                if i >= p.length:
-                    pygame.draw.rect(surf, (32, 34, 40), (cx, y, cw, ch), 1, border_radius=5)
+                if i >= lane_len:
+                    if i == lane_len and lane_len != p.length:         # a row with its own length: its end
+                        pygame.draw.line(surf, (125, 131, 140), (cx - 3, y), (cx - 3, y + ch), 2)
                 else:
                     pygame.draw.rect(surf, (40, 43, 50), (cx, y, cw, ch), 1, border_radius=5)
             # the notes: a bar from its step over its length (clipped to the screen and the pattern)
-            for start in range(max(0, first - notes.MAX_LENGTH), min(p.length, first + VISIBLE)):
+            for start in range(max(0, first - notes.MAX_LENGTH), min(lane_len, first + VISIBLE)):
                 n = p.at(start).get(pitch)
                 if n is None:
                     continue
-                a, b = max(start, first), min(start + n.length, p.length, first + VISIBLE)
+                a, b = max(start, first), min(start + n.length, lane_len, first + VISIBLE)
                 if a >= b:
                     continue
                 bx, bw = col_x(a - first), col_x(b - first) - col_x(a - first) - (pitch_w - cw)

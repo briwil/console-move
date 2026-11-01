@@ -1,7 +1,9 @@
 """The synth sequencer: 16 patterns of notes, like the Deluge's: each row of the grid is a note of the scale,
 and a step can have any number of notes (a chord), each with its own length.
 
-A pattern has one length (1-64 steps) and rate for all its notes. Each note: its length in steps (it
+A pattern has one length (1-64 steps) and rate for all its notes. Any row (lane) can have a length of its
+own (SHIFT + the pattern-length knob), so it loops on its own cycle against the rest, as on the Deluge.
+Each note: its length in steps (it
 holds over the steps after it), velocity, chance, ratchets and parameter locks (synth settings for that
 note only), as the drum sequencer's steps have.
 
@@ -52,6 +54,10 @@ class NotePattern:
         self.length = length
         self.rate = 0                    # index into RATES
         self.notes = {}                  # step -> {MIDI note: Note}
+        self.lane_len = {}               # MIDI note -> its own length in steps (no entry: the pattern's)
+
+    def lane_length(self, pitch):
+        return self.lane_len.get(pitch, self.length)
 
     def steps_per_beat(self):
         return RATES[self.rate][1]
@@ -202,6 +208,17 @@ class NoteSequencer:
             n.locks[param] = int(value)
             return n
 
+    def change_lane_length(self, pitch, delta):
+        """One row's own length (steps). Back at the pattern's length, it follows the pattern again."""
+        with self.lock:
+            p = self.pattern
+            n = max(1, min(MAX_STEPS, p.lane_length(pitch) + delta))
+            if n == p.length:
+                p.lane_len.pop(pitch, None)
+            else:
+                p.lane_len[pitch] = n
+            return n
+
     def change_track(self, what, delta):
         """The pattern's "length" (steps) or "rate". Returns the new value."""
         with self.lock:
@@ -213,6 +230,9 @@ class NoteSequencer:
                 p.rate = max(0, min(len(RATES) - 1, p.rate + (1 if delta > 0 else -1)))
                 old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(p.steps_per_beat(), self.bar_beats)
                 if old_bar and new_bar and p.length % old_bar == 0 and p.length // old_bar * new_bar <= MAX_STEPS:
+                    for pitch, ln in list(p.lane_len.items()):          # the rows with their own length scale too
+                        if ln % old_bar == 0 and ln // old_bar * new_bar <= MAX_STEPS:
+                            p.lane_len[pitch] = ln // old_bar * new_bar
                     p.length = p.length // old_bar * new_bar
             return getattr(p, what)
 
@@ -222,7 +242,7 @@ class NoteSequencer:
             p = self.pattern
             step_frames = frames_per_beat / p.steps_per_beat()
             k = round((tape_frame - self.anchor) / step_frames)
-            i = k % p.length
+            i = k % p.lane_length(note)
             p.notes.setdefault(i, {})[note] = Note(length)
             if self.anchor + k * step_frames > tape_frame:
                 self._skip.add((note, k))
@@ -283,8 +303,12 @@ class NoteSequencer:
         first = math.floor((a - self.anchor) / step_frames)
         last = math.floor((b - self.anchor) / step_frames)
         for k in range(first, last + 1):
-            i = k % p.length
-            for pitch, n in p.at(i).items():
+            hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items() if pitch not in p.lane_len]
+            for pitch, ln in p.lane_len.items():                  # a row with its own length loops on its own
+                n = p.at(k % ln).get(pitch)
+                if n is not None:
+                    hits.append((pitch, n, k // ln))
+            for pitch, n, loop in hits:
                 if (pitch, k) in self._skip:
                     if self.anchor + (k + 1) * step_frames <= b:
                         self._skip.discard((pitch, k))
@@ -296,7 +320,7 @@ class NoteSequencer:
                     if a <= t < b:
                         key = (pitch, k)
                         if key not in self._decided:
-                            self._decided[key] = chance_passes(n.chance, k // p.length)
+                            self._decided[key] = chance_passes(n.chance, loop)
                         if self._decided[key]:
                             # a ratchet's notes share the note's length; the last one holds to its end
                             gate = each * 0.9 if r < n.ratchet - 1 else n.length * step_frames - r * each - 1
@@ -312,6 +336,11 @@ class NoteSequencer:
             p = self.pattern
             return [math.floor((tape_frame - self.anchor) / (frames_per_beat / p.steps_per_beat())) % p.length]
 
+    def raw_step(self, tape_frame, frames_per_beat):
+        """How many steps have played since the pattern began (a row with its own length wraps it itself)."""
+        with self.lock:
+            return math.floor((tape_frame - self.anchor) / (frames_per_beat / self.pattern.steps_per_beat()))
+
     # ------------------------------------------------------------ saving
     def to_json(self):
         with self.lock:
@@ -322,7 +351,8 @@ class NoteSequencer:
                     for pitch, n in ns.items():
                         notes.setdefault(str(step), {})[str(pitch)] = [
                             n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}]
-                pats.append({"length": p.length, "rate": p.rate, "notes": notes})
+                pats.append({"length": p.length, "rate": p.rate, "notes": notes,
+                             "lanes": {str(k): v for k, v in p.lane_len.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
                     "low": self.low, "patterns": pats}
 
@@ -339,6 +369,8 @@ class NoteSequencer:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     p.length = max(1, min(MAX_STEPS, int(pd.get("length", 16))))
                     p.rate = max(0, min(len(RATES) - 1, int(pd.get("rate", 0))))
+                    p.lane_len = {int(k): max(1, min(MAX_STEPS, int(v))) for k, v in (pd.get("lanes") or {}).items()
+                                  if 0 <= int(k) <= 127 and int(v) != p.length}
                     for step, ns in (pd.get("notes") or {}).items():
                         step = int(step)
                         if not 0 <= step < MAX_STEPS:

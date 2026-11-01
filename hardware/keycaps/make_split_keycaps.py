@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Two-piece snap-fit keycaps with Lato numbers, built from basic-keycap-1u.stl (cut from your basickeycap.stl).
+"""Two-piece keycaps (24 of them): the round top is its own piece, the rest of the cap prints flat on the bed.
+Built from basic-keycap-1u.stl (cut from your basickeycap.stl), with Lato numbers.
 
-  body      the keycap without its round top: the stem, skirt and ribs are your STL, untouched. The round top
-            is replaced by a round pocket with a floor, and six small grooves in the pocket wall.
-  insert    the round top with the number on it (Lato ExtraBold, small and centred). Six little bumps on its
-            edge click into the grooves.
-  number    the digit alone, to print in a second colour (it fills the recess in the insert exactly).
+  body      your keycap with the round top cut off flat (at the cap's own top plane, z = 6). The stem, skirt and
+            ribs are your STL exactly. The top is one flat face, so the body prints face down on the bed.
+  insert    the round top: your dome, whole, with the number or icon let in 0.4 mm, and a little cross-shaped
+            post under it that presses into the top of the stem socket (the socket is open at the top now).
+            It sits flat on the body, so it can't tilt or go in too far.
+  symbol    the number or icon alone, to print in a second colour (it fills the recess exactly)
 
 Everything is built on a 0.05 mm grid as a 2.5D solid (each grid cell has one or more [bottom, top] intervals)
 and meshed into watertight STLs; no CAD library needed. Run:  python3 make_split_keycaps.py
 Output goes to ./out-split/  (STL files, plus Bambu Studio .3mf plates).
 
-Printing: the body goes up the way it is (open end down). The insert goes face down on the bed, so the number is
-the first layers and is perfectly flat. The .3mf files already have the inserts flipped.
+Printing: both pieces go face down on the bed (already turned in the .3mf files).
 """
 import io, os, struct, sys, uuid, zipfile
 import numpy as np
@@ -35,18 +36,14 @@ q = lambda v: np.round(np.asarray(v) / RES) * RES       # heights live on the gr
 
 # ------------------------------------------------------------------ the design (mm)
 TOP = 8.0                       # the top of the round part (your STL)
-FLOOR = 7.0                     # the pocket floor / the underside of the insert
-POCKET_R = 6.25                 # pocket wall radius (the round top in your STL is about 7.1 across the rim)
-GAP = 0.10                      # the insert is this much smaller all round
-INSERT_R = POCKET_R - GAP
-BUMPS = 6                       # bumps / grooves round the edge
-BUMP_Z0, BUMP_Z1 = 7.10, 7.60   # a bump's height range at its base (45 degree flanks, so it prints without support)
-BUMP_HALF_ANGLE = 10.0          # degrees: where a bump fades out to nothing
-GROOVE_EXTRA = 0.08             # the groove is this much bigger than the bump all round
-GROOVE_HALF_ANGLE = BUMP_HALF_ANGLE + 3.0
-BUMP_H = {"standard": 0.22, "loose": 0.15}     # how far a bump sticks out (about 0.12 / 0.05 mm into the wall)
-BUMP_ANGLES = [30.0 + 60.0 * k for k in range(BUMPS)]
-GROOVE_BUMP_H = max(BUMP_H.values())
+SPLIT = 6.0                     # where the round part comes off: the cap's own top plane
+MIN_BODY = 0.4                  # body roof thinner than this is dropped (it would only print as a thin skin)
+MIN_DOME = 0.3                  # same for the little flare at the foot of the dome
+DOME_FLAT_R = 6.3               # the flat top of the dome (the number / icon must stay inside it)
+SOCKET_ARM_W, SOCKET_ARM_L = 1.3, 4.25         # the cross-shaped stem socket (measured from your STL)
+POST_LEN = 1.6                  # the post goes this far into the socket (a switch stem needs 3.6 of the 6.0)
+POST_CLEAR = {"tight": 0.05, "standard": 0.10, "loose": 0.15}   # how much smaller than the socket, per side
+CHAMFER_CELLS = 2               # the post's tip is eased by this many cells (0.1 mm) for starting it in
 
 DIGIT_H = 2.6                   # digit height (mm): small and centred
 FONT = os.path.join(HERE, "fonts", "Lato-ExtraBold.ttf")
@@ -115,65 +112,62 @@ def digit_mask(digit):
         m ^= Path((pg - [cx, cy]) * k).contains_points(pts)
     return clean(m.reshape(X.shape))
 
+# the 16 icon keys come from make_keycaps.py (same 0.05 mm grid, just a different size of grid: they are
+# placed on this one by their offset)
+import make_keycaps as old
+ICONS = {name: fn for name, fn, ref in old.KEYS[:16]}
+ICON_ORDER = [name for name, fn, ref in old.KEYS[:16]]       # keys 1-16; keys 17-24 are the numbers 1-8
+OX, OY = int(round((HALF - old.CAP_W / 2) / RES)), int(round((HALF - old.CAP_H / 2) / RES))
+
+def key_mask(key):
+    """A digit (1-8, in Lato) or the name of an icon key, as a mask on this grid."""
+    if isinstance(key, int):
+        return digit_mask(key)
+    m = np.zeros((N, N), bool)
+    m[OX:OX + old.NX, OY:OY + old.NY] = old.clean(ICONS[key]())
+    return m
+
 # ------------------------------------------------------------------ the pieces
-def angdiff(a, b):
-    return (a - b + 180.0) % 360.0 - 180.0
-
-def bump_profile(bump_h):
-    """(radial height of the bump, where it is) in every cell outside the insert's edge: a pyramid-ish bump,
-    fading out sideways."""
-    h = np.zeros_like(R)
-    for ang in BUMP_ANGLES:
-        fade = np.clip(1.0 - np.abs(angdiff(TH, ang)) / BUMP_HALF_ANGLE, 0.0, 1.0)
-        h = np.maximum(h, bump_h * fade)
-    return h
-
 def body_layers(orig_b, orig_t):
-    """Your keycap, with a pocket instead of the round top. Two layers: the second is the ceiling of a groove."""
-    b1, t1 = orig_b.copy(), orig_t.copy()
-    inside = ~np.isnan(b1)
-    pocket = inside & (R < POCKET_R)
-    t1[pocket] = FLOOR
-    assert (t1[pocket] - b1[pocket]).min() >= 0.45, "the pocket floor would be too thin"
-    b2 = np.full_like(b1, np.nan)
-    t2 = np.full_like(b1, np.nan)
-    # six grooves in the wall, matching the bumps (a little bigger all round)
-    r_g = INSERT_R + GROOVE_BUMP_H + GROOVE_EXTRA
-    near = np.zeros_like(R, bool)
-    for ang in BUMP_ANGLES:
-        near |= np.abs(angdiff(TH, ang)) <= GROOVE_HALF_ANGLE
-    groove = inside & near & (R >= POCKET_R) & (R <= r_g)
-    h = np.minimum(R - INSERT_R, GROOVE_BUMP_H)
-    lo = q(BUMP_Z0 + h - GROOVE_EXTRA)
-    hi = q(BUMP_Z1 - h + GROOVE_EXTRA)
-    wall_top = orig_t.copy()
-    assert (wall_top[groove] - hi[groove]).min() >= 0.3, "the lip above a groove would be too thin"
-    t1[groove] = lo[groove]
-    b2[groove], t2[groove] = hi[groove], wall_top[groove]
-    return [(b1, t1), (b2, t2)]
+    """Your keycap with the round top cut off flat at z = 6."""
+    b, t = orig_b.copy(), np.minimum(orig_t, SPLIT)
+    gone = np.isnan(b) | (t - b < MIN_BODY - 1e-9)
+    b[gone] = np.nan
+    t[gone] = np.nan
+    from scipy import ndimage
+    lab, n = ndimage.label(~np.isnan(b))
+    assert n == 1, f"the body came apart into {n} pieces"
+    return [(b, t)]
 
-def insert_layers(digit, bump_name, recess=True):
-    """The round top: a disc with six bumps, and the number let in 0.4 mm (so the colour part drops in)."""
+def post_mask(clear):
+    hw, hl = SOCKET_ARM_W / 2 - clear, SOCKET_ARM_L / 2 - clear
+    return ((np.abs(X) <= hw) & (np.abs(Y) <= hl)) | ((np.abs(Y) <= hw) & (np.abs(X) <= hl))
+
+def insert_layers(key, fit, recess=True):
+    """The round top: your dome (from z = 6 up), the number or icon let in, and the cross post underneath."""
+    ob, ot = ORIGINAL
     b = np.full((N, N), np.nan)
     t = np.full((N, N), np.nan)
-    disc = R <= INSERT_R
-    b[disc], t[disc] = FLOOR, TOP
-    h = bump_profile(BUMP_H[bump_name])
-    rr = R - INSERT_R
-    bump = (R > INSERT_R) & (rr <= h)
-    b[bump] = q(BUMP_Z0 + rr[bump])
-    t[bump] = q(BUMP_Z1 - rr[bump])
-    if recess and digit is not None:
-        m = digit_mask(digit) & disc
+    dome = ~np.isnan(ot) & (ot >= SPLIT + MIN_DOME)
+    b[dome], t[dome] = SPLIT, ot[dome]
+    from scipy import ndimage
+    post = post_mask(POST_CLEAR[fit]) & dome
+    b[post] = SPLIT - POST_LEN
+    tip = post & ~ndimage.binary_erosion(post, iterations=CHAMFER_CELLS)
+    b[tip] = SPLIT - POST_LEN + 0.2
+    if recess and key is not None:
+        m = key_mask(key) & (R <= DOME_FLAT_R)
         t[m] = q(TOP - INLAY)
     return [(b, t)]
 
-def inlay_layers(digit):
+def inlay_layers(key):
     b = np.full((N, N), np.nan)
     t = np.full((N, N), np.nan)
-    m = digit_mask(digit) & (R <= INSERT_R)
+    m = key_mask(key) & (R <= DOME_FLAT_R)
     b[m], t[m] = q(TOP - INLAY), TOP
     return [(b, t)]
+
+ORIGINAL = None          # your keycap on the grid, filled in by build_all()
 
 # ------------------------------------------------------------------ meshing (several [bottom, top] spans per cell)
 def mesh_layers(layers):
@@ -355,11 +349,11 @@ NS = ('xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" '
       'xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" '
       'xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"')
 
-def flipped(v):
-    """Turn the part over (top face down) and rest it on z = 0."""
+def flipped(v, top=TOP):
+    """Turn the part over (top face down) and rest it on z = 0; `top` is the height of its top face."""
     out = v.copy()
     out[:, 1] *= -1
-    out[:, 2] = TOP - out[:, 2]
+    out[:, 2] = top - out[:, 2]
     return out
 
 def rested(v):
@@ -376,15 +370,14 @@ def mesh_xml(obj_id, v, f, name):
     buf.write('   </triangles>\n  </mesh>\n </object>\n')
     return buf.getvalue()
 
-def write_3mf(path, title, body, inserts, bodies):
+def write_3mf(path, title, body, inserts, bodies, cols=4):
     """body = (verts, tris) printed upright, `bodies` copies of it (instances of one object);
-    inserts = [(label, disc (v, f), number (v, f) or None)], each already face-down.
-    Filament slots: 1 = the keycap, 2 = the number."""
+    inserts = [(label, disc (v, f), number (v, f) or None, filament of the disc)], each already face-down.
+    Filament slots: 1 = the keycap, 2 = the number, 3 = the red record key."""
     files, rels, resources, items, cfg_objects, cfg_instances = {}, [], [], [], [], []
     next_id = 1
     m16 = "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"
     ident = "1 0 0 0 1 0 0 0 1 0 0 0"
-    cols = 4
     pitch_x, pitch_y = 22.0, 22.0
 
     def add_object(label, parts):
@@ -422,19 +415,23 @@ def write_3mf(path, title, body, inserts, bodies):
             f'      <metadata key="identify_id" value="{obj_id * 100 + inst}"/>\n    </model_instance>')
 
     # the bodies: one object, several instances, in rows at the back of the bed
-    bv = rested(body[0])
-    body_id = add_object("keycap body", [("body", bv, body[1], 1)])
-    for n in range(bodies):
-        r, c = divmod(n, cols)
-        place(body_id, PLATE_C[0] + (c - (cols - 1) / 2) * pitch_x, PLATE_C[1] + 20 + r * pitch_y, n)
-    # the inserts: in rows at the front
-    for n, (label, disc, number) in enumerate(inserts):
-        parts = [("top", disc[0], disc[1], 1)]
+    if bodies:
+        body_id = add_object("keycap body", [("body", body[0], body[1], 1)])
+        rows = (bodies + cols - 1) // cols
+        for n in range(bodies):
+            r, c = divmod(n, cols)
+            place(body_id, PLATE_C[0] + (c - (cols - 1) / 2) * pitch_x,
+                  PLATE_C[1] + ((rows - 1) / 2 - r) * pitch_y, n)
+    # the inserts, in rows
+    rows = (len(inserts) + cols - 1) // cols
+    for n, (label, disc, number, slot) in enumerate(inserts):
+        parts = [("top", disc[0], disc[1], slot)]
         if number is not None:
             parts.append(("number", number[0], number[1], 2))
         oid = add_object(label, parts)
         r, c = divmod(n, cols)
-        place(oid, PLATE_C[0] + (c - (cols - 1) / 2) * pitch_x * 0.8, PLATE_C[1] - 15 - r * pitch_y * 0.8, 0)
+        place(oid, PLATE_C[0] + (c - (cols - 1) / 2) * pitch_x * 0.8,
+              PLATE_C[1] + ((rows - 1) / 2 - r) * pitch_y * 0.8, 0)
 
     files["3D/3dmodel.model"] = (
         f'<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" {NS} requiredextensions="p">\n'
@@ -468,37 +465,46 @@ def write_3mf(path, title, body, inserts, bodies):
             z.writestr(name, data)
 
 # ------------------------------------------------------------------ main
+KEYS24 = ICON_ORDER + [1, 2, 3, 4, 5, 6, 7, 8]          # keys 1-16 the icons (SW1-SW16), 17-24 the numbers (SW17-SW24)
+FITS = list(POST_CLEAR)
+
+def key_name(idx, key):
+    return f"{idx:02d}-{key if isinstance(key, str) else 'track%d' % key}"
+
 def build_all():
+    global ORIGINAL
     os.makedirs(OUT, exist_ok=True)
-    ob, ot = rasterize(load_stl(os.path.join(HERE, "source", "basic-keycap-1u.stl")))
+    ORIGINAL = rasterize(load_stl(os.path.join(HERE, "source", "basic-keycap-1u.stl")))
+    ob, ot = ORIGINAL
     print("keycap rasterised:", int((~np.isnan(ob)).sum()), "cells")
 
     body_v, body_f, vol = make(body_layers(ob, ot), "body")
-    write_stl(os.path.join(OUT, "keycap-body.stl"), body_v, body_f, "keycap body (print upright)")
+    body_v = flipped(body_v, SPLIT)                              # face down, as it prints
+    write_stl(os.path.join(OUT, "keycap-body.stl"), body_v, body_f, "keycap body (face down)")
     print(f"keycap-body.stl          {len(body_f):7d} triangles  {vol:7.1f} mm3")
 
-    sets = {}
-    for variant in BUMP_H:
+    for fit in FITS:
         row = []
-        for d in range(1, 9):
-            tv, tf, vol_t = make(insert_layers(d, variant), f"insert {d}")
-            nv, nf, vol_n = make(inlay_layers(d), f"number {d}")
+        for idx, key in enumerate(KEYS24, 1):
+            name = key_name(idx, key)
+            tv, tf, vol_t = make(insert_layers(key, fit), f"insert {name}")
+            nv, nf, vol_n = make(inlay_layers(key), f"symbol {name}")
             tv_f, nv_f = flipped(tv), flipped(nv)             # face down, as they print
-            write_stl(os.path.join(OUT, f"insert-{d}-{variant}.stl"), tv_f, tf, f"insert {d} (face down)")
-            if variant == "standard":
-                write_stl(os.path.join(OUT, f"number-{d}.stl"), nv_f, nf, f"number {d} (face down, second colour)")
-            row.append((f"insert {d}", (tv_f, tf), (nv_f, nf)))
-            print(f"insert {d} {variant:9s}  {len(tf):7d} + {len(nf):5d} triangles  {vol_t:6.1f} + {vol_n:4.2f} mm3")
-        sets[variant] = row
-        write_3mf(os.path.join(OUT, f"console-keycaps-snap-{variant}.3mf"),
-                  f"Console keycaps, two-piece ({variant} snap)", (body_v, body_f), row, 8)
-    # a fit test: one body and a blank insert of each kind
+            write_stl(os.path.join(OUT, f"insert-{name}-{fit}.stl"), tv_f, tf, f"insert {name} (face down)")
+            if fit == "standard":
+                write_stl(os.path.join(OUT, f"symbol-{name}.stl"), nv_f, nf, f"symbol {name} (face down, second colour)")
+            row.append((name, (tv_f, tf), (nv_f, nf), 3 if key == "record" else 1))
+            print(f"{name:16s} {fit:9s}  {len(tf):7d} + {len(nf):5d} triangles  {vol_t:6.1f} + {vol_n:4.2f} mm3")
+        write_3mf(os.path.join(OUT, f"console-keycap-tops-{fit}.3mf"),
+                  f"Console keycap tops, 24 ({fit} fit)", None, row, 0, cols=6)
+    write_3mf(os.path.join(OUT, "console-keycap-bodies.3mf"), "Console keycap bodies, 24",
+              (body_v, body_f), [], 24, cols=6)
+    # a fit test: one body and a blank top of each fit
     blank = []
-    for variant in BUMP_H:
-        tv, tf, _ = make(insert_layers(None, variant, recess=False), "blank")
-        blank.append((f"blank insert {variant}", (flipped(tv), tf), None))
-    write_3mf(os.path.join(OUT, "fit-test.3mf"), "Console keycap snap fit test", (body_v, body_f), blank, 2)
-    return ob, ot, body_layers(ob, ot)
+    for fit in FITS:
+        tv, tf, _ = make(insert_layers(None, fit, recess=False), "blank")
+        blank.append((f"blank top {fit}", (flipped(tv), tf), None, 1))
+    write_3mf(os.path.join(OUT, "fit-test.3mf"), "Console keycap fit test", (body_v, body_f), blank, 3)
 
 if __name__ == "__main__":
     build_all()

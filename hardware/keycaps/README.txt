@@ -28,34 +28,35 @@ Stem: two prongs 1.2 x 3.0 mm, 5.7 mm apart, 3 mm long (Kailh Choc V1).
      placed into the engraving (top 0.6 mm), as one multi-material object.
 
 
-TWO-PIECE KEYCAPS WITH LATO NUMBERS (snap-fit)  -  split/
-=========================================================
-Made from your basickeycap.stl (the 18 x 18 mm cap, saved in source/basic-keycap-1u.stl). The stem, skirt and
-ribs are your STL exactly. Only the round top changed: it is now its own piece.
+TWO-PIECE KEYCAPS WITH LATO NUMBERS  -  split/
+=============================================
+Made from your basickeycap.stl (18 x 18 mm cap, saved in source/basic-keycap-1u.stl). The stem, skirt and ribs
+are your STL exactly. The cap is cut flat at z = 6 mm, where the round dome starts:
 
-  keycap body   the cap without its round top: a round pocket with a floor and six small grooves in the wall
-  insert        the round top, with its number let in 0.4 mm. Six small bumps on its edge click into the grooves
-  number        the digit alone, for a second colour (it fills the recess exactly)
+  body   everything below the dome: skirt, ribs and stem. Its cut face is one flat plane, so it prints
+         flat on the bed, face down, with nothing under it.
+  top    the whole round dome (z 6 - 8 mm) with a small cross-shaped post underneath. The post pushes
+         into the cross socket of the stem. The number or icon is let into the dome 0.4 mm deep.
+  symbol the number/icon alone, for a second colour (it fills the recess exactly).
 
-Numbers 1-8 are Lato ExtraBold, 2.6 mm tall, centred. (Change DIGIT_H or FONT at the top of
-make_split_keycaps.py and run it again.)
+24 keys: 01-16 = the 4x4 function grid, 17-24 = track keys 1-8. Numbers are Lato ExtraBold, 2.6 mm tall.
+(Change DIGIT_H or FONT at the top of make_split_keycaps.py and run it again.)
+
+HOW IT HOLDS: the post is a press fit in the stem socket (friction), not a click. A drop of glue is fine
+if you want it permanent.
 
 1. PRINT THE FIT TEST FIRST   split/fit-test.3mf
-   One body with a blank insert of each kind: "standard" (bumps 0.22 mm) and "loose" (0.15 mm). Press the insert
-   in with your thumb; it should click in and stay put, and come out again with a fingernail or a hobby knife
-   in the 0.1 mm gap round it. Use whichever you like:
-     standard holds well          -> console-keycaps-snap-standard.3mf
-     too tight / insert won't go  -> console-keycaps-snap-loose.3mf
-   The bodies are the same in both; only the inserts differ.
+   One body and three blank tops: tight (0.05 mm clearance), standard (0.10), loose (0.15). Press each on.
+   It should go in with firm thumb pressure and stay put. Then print the matching tops file:
+     console-keycap-tops-tight.3mf / -standard.3mf / -loose.3mf
 
-2. PRINT THE SET   (8 bodies + 8 inserts on one plate, 256 x 256 bed)
-   Open the .3mf in Bambu Studio. Filament 1 = the keycap (body and insert), filament 2 = the number.
-   - Bodies print the way up they are (open end down), like your original cap.
-   - Inserts are already turned face down: the number is the first layers, so it is flat and sharp.
-   - PLA is fine; PETG gives the snap a little more give. 0.12-0.16 mm layers; keep elephant-foot
-     compensation on (it keeps the insert from growing at its face).
-   If the .3mf won't open the way you expect, the same parts are in split/console-keycaps-split-stl.zip
-   (keycap-body.stl x 8, insert-N-standard.stl / insert-N-loose.stl, number-N.stl - the inserts and numbers
-   are already face down; put each number on top of its insert).
+2. PRINT THE SET (24 of each, on two plates)
+   split/console-keycap-bodies.3mf   - 24 bodies, flat face down.
+   split/console-keycap-tops-<fit>.3mf - 24 tops, already turned face down, symbol on the first layers.
+   Filament 1 = the cap, filament 2 = the symbol (the record key's symbol is filament 3, for red).
+   PLA is fine; 0.12-0.16 mm layers; keep elephant-foot compensation on.
+   The .3mf files have not been tested in Bambu Studio itself. If one won't open as expected, the same parts
+   are in split/console-keycaps-split-stl.zip (keycap-body.stl, insert-NN-name-standard.stl, symbol-NN-name.stl;
+   the tops and symbols are already face down).
 
 Rebuild:  python3 make_split_keycaps.py   (writes ./out-split/)

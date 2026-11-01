@@ -53,6 +53,12 @@ import drumparams
 import notes
 import sequencer
 
+# On the Ableton Move the sound goes out through JACK (console mode) instead of ALSA, and the input is
+# the instruments only (no USB audio devices).
+MOVE = os.environ.get("CONSOLE_PLATFORM") == "move" or os.path.exists("/dev/ablspi0.0")
+if MOVE:
+    import jackout
+
 TRACKS = 8
 RIGHT = TRACKS           # a stereo track's right channel is at track index + RIGHT
 CHANNELS = 2 * TRACKS
@@ -517,6 +523,8 @@ class Engine:
     def __init__(self, song=None, bpm=120.0, prefer_device=None):
         self.settings = self._load_settings()
         self.rate = 44100
+        if MOVE:
+            self.PHONES_BOOST = 1.0             # the Move's speaker and jack: 100% is the mix level
         # opens the last project used; None is a new song that hasn't been saved with a name yet
         self.song = song if song is not None else self.settings.get("last_song", "Song 1")
         self.prefer = prefer_device
@@ -681,6 +689,8 @@ class Engine:
 
     def find_input(self):
         """The input to use now: the chosen one if it's there, else the first USB device, else None."""
+        if MOVE:
+            return drum_device(INST_CHANNELS) if self.drums else None
         if self.input_choice == DRUMS_ID and self.drums:
             return drum_device(INST_CHANNELS)
         return find_device(None if self.input_choice == DRUMS_ID else self.input_choice)
@@ -876,6 +886,8 @@ class Engine:
 
     def _want_route(self, dev):
         """Where the tape should play: (route, details), or (None, None) if there's nowhere."""
+        if MOVE:
+            return "jack", None
         key = self.output_choice
         dev_out = bool(dev and dev.get("playback"))
         if key == "phones":
@@ -918,7 +930,10 @@ class Engine:
         self._close_port()
         self.route, self.output_label = None, ""
         try:
-            if route == "phones":
+            if route == "jack":
+                self.port = jackout.JackPort(self.rate)
+                self.port.gain = self.phones_volume ** 2 * self.PHONES_BOOST
+            elif route == "phones":
                 self.port = OutPort("phones", "hdmi:CARD=%s,DEV=0" % info, 2, "S16_LE", self.rate, self.rate,
                                     self.PHONES_LABEL)
                 self.port.gain = self.phones_volume ** 2 * self.PHONES_BOOST
@@ -2335,7 +2350,6 @@ class Engine:
         self._close_port()
 
     def _run(self):
-        import alsaaudio
         while not self._stop:
             dev = self.find_input()
             if dev and dev.get("virtual"):
@@ -2347,6 +2361,7 @@ class Engine:
                     self.status = "NO AUDIO DEVICE"
                     time.sleep(2)
                 continue
+            import alsaaudio                            # only the Pi has it (and needs it here)
             cap_fmt = dev["capture"]["format"]
             rate = pick_rate(dev["capture"]["rates"])
             if rate != self.rate:

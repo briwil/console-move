@@ -24,7 +24,7 @@ libs in `/data/UserData/rnbo/lib`) whose Move driver exposes:
 Control map (all channel 16):
 | Control | Message |
 |---|---|
-| Pads | notes 68-99, velocity = how hard |
+| Pads | notes 68-99, velocity = how hard. 68-75 is the bottom row (left to right), 92-99 the top |
 | Knobs 1-8 turn | CC 71-78; 1 = one click right, 127 = one click left |
 | Knob touch | notes 0-9, 127 touched / 0 released |
 | Step buttons | notes 16-31 |
@@ -47,3 +47,11 @@ Our programs can't get real-time priority or lock memory (warnings at start); so
   `python3 /data/UserData/move_test.py`
 - `RNBOLauncher` — the launcher above.
 - `screen_mockups.py` / `screen-mockups.png` — first screen design proposal (recorder, drum list, drum knob turn).
+
+## The C sound core (pi-app/core)
+`core.c` is a JACK client whose process callback makes the sound, 128 frames at a time: instruments (as
+"sources"), effects, the Move's controls in, lights and screen out. Python (`core.py`, `instruments.py`) sets
+it up and sends timed events; it never runs in the audio path. Measured on the Move: LXR + Dexed + Plaits +
+Braids jamming = 8-9% JACK load (the Python engine needed ~61% for the same). Pads feel immediate.
+Events can arrive in any order (steps sent ~100 ms ahead, pad hits for now): the core sorts them by frame.
+Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quiet` = pads only).

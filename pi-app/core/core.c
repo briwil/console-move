@@ -490,7 +490,8 @@ static int process(jack_nframes_t n, void *arg) {
     }
 
     /* mix: the slots (making their recording inputs too), sources on their own, the tape */
-    memset(mix, 0, sizeof(float) * 2 * n);
+    memset(mix[0], 0, sizeof(float) * n);
+    memset(mix[1], 0, sizeof(float) * n);
     if (capture_on) for (int p = 0; p < CAP_PARTS; p++) memset(cap_now[p], 0, sizeof(float) * n);
     memset(send_l, 0, sizeof(float) * 2 * MAX_BLOCK);
     memset(send_d, 0, sizeof(float) * 2 * MAX_BLOCK);

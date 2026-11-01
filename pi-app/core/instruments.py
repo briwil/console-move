@@ -1,0 +1,262 @@
+"""The instrument slots, played by the sound core (core.c) instead of rendered in Python.
+
+Each machine keeps working as before from the app's side: set_param(), hit(), note_on() and the rest still
+just queue things up (machine._pending). What changes is who acts on them. Instead of machine.render() doing
+the work in Python, this file turns the queue, and the sequencer's steps, into the core's timed events:
+calls into the machine's library at the right frame (settings and step locks), and triggers / MIDI notes.
+
+Every machine has two copies, as before: "seq" (the sequencer plays it) and "live" (your hands do). Each
+copy is one core source.
+"""
+import time
+
+import drums
+from core import Core  # noqa: F401  (for type hints in docs)
+
+sw_modules = drums.schwung_modules         # schwung/modules.py, as drums.py loaded it (None if it couldn't)
+
+NOTE_LEN = 4410            # how long a drum module's pad note is held (frames): they only need the start
+
+
+class _Calls:
+    """Stands in for an instrument library: every call becomes a core event at frame `at`."""
+
+    def __init__(self, core, lib, at=0):
+        self._core, self._lib, self._at = core, lib, at
+
+    def __getattr__(self, name):
+        fn = getattr(self._lib, name)
+        core, at = self._core, self._at
+        return lambda *args: core.call(fn, *[a if isinstance(a, (bytes, int)) else int(a) for a in args], at=at)
+
+
+class _InstCalls:
+    """Stands in for a Schwung module instance (modules.Instance): set() becomes a core event."""
+
+    def __init__(self, core, inst, at=0):
+        self._core, self._inst, self._at = core, inst, at
+
+    def set(self, key, value):
+        h = sw_modules.host()
+        self._core.call(h.sh_set, self._inst.ptr, key.encode(), str(value).encode(), at=self._at)
+
+
+def kind(m):
+    if isinstance(m, drums.LXR):
+        return "lxr"
+    if sw_modules and isinstance(m, sw_modules.SynthModule):
+        return "synth"
+    if sw_modules and isinstance(m, sw_modules.Module):
+        return "module"
+    return "engine"                         # the 606, 808, Machinedrum (Schwung class in drums.py)
+
+
+class Slot:
+    """One machine in the core: its two sources, and how its steps and settings turn into events."""
+
+    def __init__(self, core, machine):
+        self.core, self.m, self.kind = core, machine, kind(machine)
+        m = machine
+        if self.kind == "lxr":
+            self.seq_lib, self.live_lib = drums._lib, drums._live
+            self.seq = core.add_engine(drums._lib.drums_render, drums._lib.drums_trigger, drums.VOICES)
+            self.live = (core.add_engine(drums._live.drums_render, drums._live.drums_trigger, drums.VOICES)
+                         if drums._live is not drums._lib else self.seq)
+        elif self.kind == "engine":
+            self.seq_lib, self.live_lib = m._lib, m._live
+            self.seq = core.add_engine(m._lib.sw_render, m._lib.sw_trigger, m.voices)
+            self.live = core.add_engine(m._live.sw_render, m._live.sw_trigger, m.voices) \
+                if m._live is not m._lib else self.seq
+        else:
+            h = sw_modules.host()
+            self.seq = core.add_module(h.sh_render, h.sh_midi, m._seq.ptr)
+            self.live = core.add_module(h.sh_render, h.sh_midi, m._live.ptr) if m._live is not m._seq else self.seq
+        self._refresh_after = None          # (event count) a module re-reads its settings once the core has them
+        self.sync_mix()
+        core.on(self.seq)
+        core.on(self.live)
+
+    def sources(self):
+        return {self.seq, self.live}
+
+    def remove(self):
+        for s in self.sources():
+            self.core.remove(s)
+
+    def sync_mix(self, gain=0.8):
+        """Pans and effect sends, from the machine (call when they may have changed)."""
+        pans = self.m.pans()
+        rev, dly = self.m.sends()
+        for s in self.sources():
+            for v in range(len(pans)):
+                self.core.pan(s, v, float(pans[v][0]), float(pans[v][1]))
+                if v < len(rev):
+                    self.core.sends(s, v, float(rev[v]), float(dly[v]))
+            self.core.gain(s, gain)
+
+    # ---- what's queued on the machine (settings, hits by hand), now
+    def flush(self):
+        m = self.m
+        with m._lock:
+            todo, m._pending = m._pending, []
+        if not todo:
+            return
+        c = self.core
+        for t in todo:
+            what = t[0]
+            if self.kind in ("lxr", "engine"):
+                libs = [self.seq_lib] + ([self.live_lib] if self.live_lib is not self.seq_lib else [])
+                if what == "hit":
+                    lane = t[1]
+                    if self.kind == "lxr":
+                        c.trigger(self.live, lane, t[2])
+                    elif 0 <= lane < m.lanes:
+                        c.trigger(self.live, m.lane_voice[lane], t[2])
+                elif what == "param":
+                    for lib in libs:
+                        if self.kind == "lxr":
+                            c.call(lib.drums_set_param, t[1], t[2])
+                        else:
+                            m._set(_Calls(c, lib), t[1], t[2])
+                    if self.kind == "lxr":
+                        m._pans = None
+                elif what == "bpm" and self.kind == "lxr":
+                    for lib in libs:
+                        c.call(lib.drums_set_bpm, t[1])
+            else:
+                insts = [m._seq] + ([m._live] if m._live is not m._seq else [])
+                if what == "hit" and 0 <= t[1] < m.lanes:
+                    note = sw_modules.FIRST_PAD + t[1]
+                    at = c.now()
+                    c.midi(self.live, 0x90, note, max(1, min(127, t[2])))
+                    c.midi(self.live, 0x80, note, 0, at=at + NOTE_LEN)
+                elif what == "on":
+                    c.midi(self.live, 0x90, max(0, min(127, t[1])), max(1, min(127, t[2])))
+                elif what == "off":
+                    c.midi(self.live, 0x80, t[1], 0)
+                elif what == "all_off":
+                    for s in self.sources():
+                        c.midi(s, 0xB0, 123, 0)
+                elif what == "param":
+                    for inst in insts:
+                        m._apply(_InstCalls(c, inst), t[1], t[2])
+                elif what == "refresh":
+                    self._refresh_after = c._pushed
+        self.sync_mix()
+
+    def tick(self):
+        """Call now and then: finishes jobs that wait for the core (a module re-reading its settings)."""
+        if self._refresh_after is not None and self.core.lib.core_events_done() >= self._refresh_after:
+            self._refresh_after = None
+            self.m._refresh()
+
+    # ---- the sequencer's steps, at their frames
+    def play(self, events, base):
+        """events: from the sequencer, [(offset, lane or note, velocity, locks)]; base: the core frame offset 0
+        is at."""
+        m, c = self.m, self.core
+        for offset, lane, vel, locks in events:
+            at = int(base + offset)
+            if self.kind == "lxr":
+                voice = min(lane, drums.VOICES - 1)
+                lib = _Calls(c, self.seq_lib, at)
+                for p in m._locked[voice] - set(locks):
+                    lib.drums_set_param(p, m.values[p])
+                for p, v in locks.items():
+                    lib.drums_set_param(p, v)
+                if locks or m._locked[voice]:
+                    m._pans = None
+                m._locked[voice] = set(locks)
+                c.trigger(self.seq, lane, vel, at=at)
+            elif self.kind == "engine":
+                if not 0 <= lane < m.lanes:
+                    continue
+                voice = m.lane_voice[lane]
+                lib = _Calls(c, self.seq_lib, at)
+                for p in m._locked[voice] - set(locks):
+                    m._set(lib, p, m.values[p])
+                for p, v in locks.items():
+                    if 0 <= p < m.param_count:
+                        m._set(lib, p, v)
+                m._locked[voice] = set(p for p in locks if 0 <= p < m.param_count)
+                c.trigger(self.seq, voice, vel, at=at)
+            elif self.kind == "module":
+                if not 0 <= lane < m.lanes:
+                    continue
+                inst = _InstCalls(c, m._seq, at)
+                for p in m._locked[lane] - set(locks):
+                    m._apply(inst, p, m.values[p])
+                for p, v in locks.items():
+                    if 0 <= p < m.param_count:
+                        m._apply(inst, p, v)
+                m._locked[lane] = set(p for p in locks if 0 <= p < m.param_count)
+                note = sw_modules.FIRST_PAD + lane
+                c.midi(self.seq, 0x90, note, max(1, min(127, vel)), at=at)
+                c.midi(self.seq, 0x80, note, 0, at=at + NOTE_LEN)
+            else:                                            # a synth: lane is the note
+                if not 0 <= lane <= 127:
+                    continue
+                locks = dict(locks)
+                gate = max(1, int(locks.pop("gate", 4410)))
+                inst = _InstCalls(c, m._seq, at)
+                for p in m._locked[0] - set(locks):
+                    m._apply(inst, p, m.values[p])
+                for p, v in locks.items():
+                    if isinstance(p, int) and 0 <= p < m.param_count:
+                        m._apply(inst, p, v)
+                m._locked[0] = set(p for p in locks if isinstance(p, int) and 0 <= p < m.param_count)
+                c.midi(self.seq, 0x90, lane, max(1, min(127, vel)), at=at)
+                c.midi(self.seq, 0x80, lane, 0, at=at + gate)
+
+
+class Scheduler:
+    """Plays sequencers through the core: every few milliseconds, the steps falling in the next LOOKAHEAD
+    frames are sent with their exact frames.
+
+        sched = Scheduler(core)
+        sched.start(slots_and_sequencers, frames_per_beat)   # at the next moment possible
+    """
+
+    LOOKAHEAD = 4410                       # 100 ms
+
+    def __init__(self, core):
+        self.core = core
+        self.playing = False
+        self.start_frame = 0               # the core frame the sequencer's frame 0 is at
+        self.sent = 0                      # sequencer frames sent so far
+
+    def start(self, delay=1024):
+        self.start_frame = self.core.now() + delay
+        self.sent = 0
+        self.playing = True
+
+    def stop(self):
+        self.playing = False
+
+    def seq_frame(self):
+        """Where the sequencer is now, in its own frames."""
+        return max(0, self.core.now() - self.start_frame)
+
+    def tick(self, plays, frames_per_beat):
+        """plays: [(Slot, sequencer)]. Sends what falls before now + LOOKAHEAD."""
+        if not self.playing:
+            return
+        want = self.core.now() + self.LOOKAHEAD - self.start_frame
+        if want <= self.sent:
+            return
+        n = int(want - self.sent)
+        for slot, seq in plays:
+            ev = seq.events(self.sent, n, frames_per_beat)
+            if ev:
+                slot.play(ev, self.start_frame + self.sent)
+        self.sent += n
+
+
+def run_forever(core, slots, plays_fn, fpb_fn, sched, stop, period=0.005):
+    """A simple loop for tests: flushes each slot and drives the scheduler until stop() is true."""
+    while not stop():
+        for s in slots:
+            s.flush()
+            s.tick()
+        sched.tick(plays_fn(), fpb_fn())
+        time.sleep(period)

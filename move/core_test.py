@@ -152,6 +152,8 @@ try:
 except KeyboardInterrupt:
     pass
 finally:
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)       # a second Ctrl+C can't stop the tidying up
     stop = True
     for n in range(PAD0, PAD0 + 32):
         c.send_midi(bytes((0x9F, n, 0)))

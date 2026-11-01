@@ -29,6 +29,28 @@ HOLES = [(0.0, 0.0, 1.8), (0.0, 4.5, 1.0), (0.0, -4.5, 1.0)]       # x, y, radiu
 CLEAR = {"tight": 0.05, "standard": 0.10, "loose": 0.15}           # peg is this much smaller per side
 PRONG_W, PRONG_L, PRONG_SEP, PRONG_LEN = 1.2, 3.0, 5.7, 3.0
 
+ICON_MAX = 3.6                   # icons are shrunk so their longest side is this (digits are 2.6 mm tall)
+ICON_MIN_STROKE = 0.4            # thin lines are thickened back up to about this
+
+_digit_or_icon = s.key_mask
+def key_mask(key):
+    m = _digit_or_icon(key)
+    if isinstance(key, int):
+        return m
+    ii, jj = np.nonzero(m)
+    ci, cj = (ii.min() + ii.max()) / 2, (jj.min() + jj.max()) / 2
+    k = min(1.0, ICON_MAX / (max(ii.max() - ii.min(), jj.max() - jj.min() + 1) * RES))
+    # sample the big icon at 1/k spacing around the centre (a shrink about the centre of its bounding box)
+    c = N / 2 - 0.5
+    mat = np.diag([1 / k, 1 / k])
+    off = np.array([ci, cj]) - mat @ np.array([c, c])
+    small = ndimage.affine_transform(m.astype(float), mat, offset=off, order=1) > 0.5
+    r = max(0, int(round((ICON_MIN_STROKE - 0.75 * k) / 2 / RES)))
+    if r:
+        small = ndimage.binary_dilation(small, structure=ndimage.generate_binary_structure(2, 1), iterations=r)
+    return s.clean(small)
+s.key_mask = key_mask
+
 def disk(cx, cy, r):
     return np.hypot(X - cx, Y - cy) <= r
 

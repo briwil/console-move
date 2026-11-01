@@ -55,3 +55,11 @@ it up and sends timed events; it never runs in the audio path. Measured on the M
 Braids jamming = 8-9% JACK load (the Python engine needed ~61% for the same). Pads feel immediate.
 Events can arrive in any order (steps sent ~100 ms ahead, pad hits for now): the core sorts them by frame.
 Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quiet` = pads only).
+
+## Updating
+- From the Mac, in one go: `bash ~/update-move.sh` (Pi builds, Mac copies, Move unpacks).
+- On the Move itself: `python3 /data/UserData/console/move/move-update.py` downloads the latest from GitHub and
+  builds the sound core and effects with Zig (installed once with `... move-update.py setup` into
+  /data/UserData/zig). Needs a GitHub fine-grained access key, read-only "Contents" on console-move only,
+  saved in /data/UserData/console/github-token. The drum machines and synths stay as built on the Pi
+  (`build-for-move.sh`, full) until they need rebuilding.

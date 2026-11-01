@@ -20,7 +20,7 @@ if [ "$1" = "update" ]; then
     set -e
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq && apt-get install -y -qq gcc libc6-dev >/dev/null
-    gcc -O2 -shared -fPIC -o /out/libconsolefx.so /src/pi-app/fx/fx.c -lm
+    gcc -O2 -mtune=cortex-a72 -shared -fPIC -o /out/libconsolefx.so /src/pi-app/fx/fx.c -lm
     chown '"$(id -u):$(id -g)"' /out/libconsolefx.so'
   rm -rf "$HOME/move-update" && mkdir -p "$HOME/move-update/console-move"
   (cd "$REPO" && tar cf - --exclude='pi-app/splash' --exclude='pi-app/fonts' --exclude='*.so' --exclude='__pycache__' \
@@ -42,6 +42,10 @@ sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
   set -e
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq && apt-get install -y -qq gcc g++ make cmake git python3 ca-certificates binutils >/dev/null
+  # tune every C/C++ build for the Move'"'"'s processor (Cortex-A72; tuning only, so it runs on any 64-bit ARM),
+  # and give the LXR drum synth faster maths (same sound, tested)
+  for c in gcc g++; do printf "#!/bin/sh\nexec /usr/bin/%s -mtune=cortex-a72 \"\$@\"\n" $c > /usr/local/bin/$c; chmod +x /usr/local/bin/$c; done
+  export DRUMS_CFLAGS="-O3 -ffast-math -fno-finite-math-only"
   cp -r /src/pi-app /build && cd /build
   find . -name "*.so" -delete
   rm -rf schwung/modules schwung/src

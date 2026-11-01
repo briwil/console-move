@@ -1108,6 +1108,7 @@ class Transport:
             if was and not self._playing:           # stopped by the tape end, or by MIDI stop
                 self.stop()
             self.follow_tempo()
+            e.refresh_levels()
             if self.link and self.link.message:
                 self.say(self.link.message, 3)
                 self.link.message = ""

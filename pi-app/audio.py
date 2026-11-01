@@ -1174,11 +1174,20 @@ class Engine:
             if self.playing or abs(bpm - self.bpm) < 0.05:
                 return False
             self.bpm = float(bpm)
-            self._set_beats_len()
-            for t in self.channels_in_use():
-                self._update_levels(t, 0, self._extent(self.tracks[t]))
+            self._set_beats_len()               # the waveforms are redrawn a moment after the last change
+            self._levels_due = time.monotonic() + 0.4      # (each turn of the knob used to redo them all: very laggy)
             self.dirty.add(-1)                  # -1: only project.json changed
         return True
+
+    def refresh_levels(self):
+        """After a tempo change, once the tempo has stopped changing: redraw every track's waveform for it."""
+        due = getattr(self, "_levels_due", None)
+        if due is None or time.monotonic() < due:
+            return
+        with self.lock:
+            self._levels_due = None
+            for t in self.channels_in_use():
+                self._update_levels(t, 0, self._extent(self.tracks[t]))
 
     def load(self):
         """Load the song's tracks and settings from its folder, if it has them."""

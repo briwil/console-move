@@ -311,6 +311,7 @@ def main():
     T.mseq = moveseq.MoveSeq(T)
     T.song_page = False
     T.song = movesong.Song(T)
+    T.key("DRUMS")                                   # start on left button 1: the instruments
     frame = Frame()
     lights = Lights(core)
     print("Console on the Move: running. Ctrl+C quits (the song is saved).")

@@ -1042,9 +1042,9 @@ class Engine:
             first = self.drums.machine if self.drums else "lxr"
             self.seq = self._new_seq(first)             # ... and empty patterns
             self.seqs = {first: self.seq}
-            # its instruments: that machine in slot 1
-            self.slots = [self.drums.machine if self.drums else None] + [None] * (SLOTS - 1)
-            self.slot = 0 if self.drums else None
+            # no instruments: the INSTRUMENTS page (left button 1) starts empty, and you load what you want
+            self.slots = [None] * SLOTS
+            self.slot = None
             self.slot_mutes = set()
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
@@ -1056,8 +1056,8 @@ class Engine:
     def is_empty(self):
         """Nothing in this song: no audio, no sequencer steps, and the drum kit as a new song has it."""
         seqs = list(self.seqs.values()) + [self.seq]
-        if self.has_audio() or not all(p.empty() for s in seqs for p in s.patterns):
-            return False
+        if self.has_audio() or not all(p.empty() for s in seqs for p in s.patterns) or any(self.slots):
+            return False                                # (an instrument loaded counts: a new song has none)
         return not self.drums or all(self.drums.is_init_kit(m, k) for m, k in self.drums.machine_kits().items())
 
     def _drop_if_empty(self):

@@ -220,6 +220,7 @@ class CoreBridge:
             if have:
                 have[1].remove()
                 del self.slots[k]
+            self._monitor.pop(k, None)               # the new instrument in this slot isn't heard until it's told so
             if mid:
                 m = e.drums.get(mid)
                 if m is not None:

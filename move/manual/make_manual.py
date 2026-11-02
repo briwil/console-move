@@ -14,11 +14,12 @@ from reportlab.platypus import (Image, KeepTogether, PageBreak, Paragraph, Simpl
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "Console-on-Move-Manual.pdf")
 
-INK = colors.HexColor("#1b1f1c")
-MUTED = colors.HexColor("#5d6661")
-ACCENT = colors.HexColor("#2f6f5e")
-LINE = colors.HexColor("#cfd4cd")
-SHADE = colors.HexColor("#eef1ec")
+INK = colors.HexColor("#f2f4f2")
+MUTED = colors.HexColor("#9aa39e")
+ACCENT = colors.HexColor("#7fd1b4")
+LINE = colors.HexColor("#3a403d")
+SHADE = colors.HexColor("#1c201e")
+PAGE = colors.black
 
 H1 = ParagraphStyle("h1", fontName="Helvetica-Bold", fontSize=22, leading=26, textColor=INK, spaceAfter=6)
 H2 = ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=ACCENT, spaceBefore=14,
@@ -52,7 +53,11 @@ def table(rows, widths=(1.9 * inch, 4.6 * inch)):
 
 def screen(name, caption, width=3.0 * inch):
     img = Image(os.path.join(HERE, "screen-%s.png" % name), width=width, height=width / 2)
-    return [img, p(caption, SMALL)]
+    framed = Table([[img]], colWidths=[width + 6])          # a thin frame, so the screen stands off the page
+    framed.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.75, MUTED), ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    return [framed, Spacer(1, 3), p(caption, SMALL)]
 
 
 def screens(*pairs):
@@ -65,6 +70,8 @@ def screens(*pairs):
 
 def footer(canvas, doc):
     canvas.saveState()
+    canvas.setFillColor(PAGE)                        # black pages (drawn first, under everything)
+    canvas.rect(0, 0, letter[0], letter[1], stroke=0, fill=1)
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(MUTED)
     canvas.drawString(0.75 * inch, 0.5 * inch, "Console on the Ableton Move - controls")

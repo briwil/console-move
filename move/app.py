@@ -59,6 +59,7 @@ SHIFT, BACK, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 55, 54, 14, 79
 KNOBS = range(71, 79)                      # knobs 1-8
 STEPS = range(16, 32)                      # step buttons 1-16 (notes)
 PADS = range(68, 100)                      # pads, bottom row first
+WHITE, RED = 120, 127                      # the Move's light colours (velocity of the light message)
 
 
 class MoveBoard:
@@ -233,7 +234,8 @@ class Lights:
             elif T.mseq.active():
                 v = seq_lights[i]
             elif i < 8:
-                v = 127 if i == T.armed - 1 else (40 if e and i in e.arm_extra else 0)
+                sel, armed = i == T.armed - 1, bool(e and i in e.arm_extra)
+                v = (RED if not sel or int(time.monotonic() * 2) % 2 else WHITE) if armed else WHITE if sel else 0
             self.note(16 + i, v)
         # pads
         out = [0] * 32
@@ -300,6 +302,7 @@ def main():
     if getattr(e, "core", None) is None:
         sys.exit("The sound core didn't start: is console mode running? (%s)" % e.status)
     core = e.core
+    e.select_arms = False                            # selecting a track doesn't arm it: Shift + step button does
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
     T = console.Transport(screen, e)
     m = menu_mod.Menu(os.path.join(APP, "layouts", "menu.ui"), T)
@@ -403,6 +406,19 @@ def handle(name, T, m, e):
         T.phones_volume(name[1] * 0.02)
         return
     ms = T.mseq
+    if name == "RECORD" and e and not T.recording and not e.record_tracks():
+        T.say("ARM A TRACK FIRST: SHIFT + STEP BUTTON", 3)
+        return
+    if isinstance(name, tuple) and name[0] == "KNOB" and not (m.open or m.kits.open):
+        n = name[1]
+        zoomed = T.focus.track is not None and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page
+                                                    or T.song_page)
+        if (zoomed and n <= 3) or n == 10:
+            # a mode or a list (mono / stereo, the input, the grid, the pattern): several clicks per choice
+            way = knobgate.gate(("knob", n, zoomed), name[2], False, 5 if zoomed else 3)
+            if not way:
+                return
+            name = ("KNOB", n, way, name[3])
     if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8 and T.drum_page and not (
             T.seq_page or T.fx_page or T.inst_page or m.open or m.kits.open) and e and e.drums):
         # a setting that picks a mode (DIST, CHOKE...): several clicks per choice

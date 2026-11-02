@@ -9,7 +9,7 @@ PAUSE = 0.7                       # seconds without a click: the count starts ag
 _acc = {}
 
 
-def gate(key, delta, shift=False):
+def gate(key, delta, shift=False, clicks=CLICKS):
     """The clicks to apply now: 0 until enough have come, then 1 or -1."""
     if shift:
         return 1 if delta > 0 else -1
@@ -18,7 +18,7 @@ def gate(key, delta, shift=False):
     if now - last > PAUSE or (total and (total > 0) != (delta > 0)):
         total = 0
     total += 1 if delta > 0 else -1
-    if abs(total) >= CLICKS:
+    if abs(total) >= clicks:
         _acc[key] = (0, now)
         return 1 if total > 0 else -1
     _acc[key] = (total, now)

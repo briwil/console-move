@@ -125,7 +125,7 @@ def tape_page(f, T):
         else:
             f.text(2, top, str(n + 1))
         if n in e.arm_extra:
-            f.dot(9, top + 3, 1)
+            f.rect(9, top + 1, 2, 5)                 # armed (Shift + step button): a bar beside the number
         if not e.audible(n):
             f.rect(1, top + 8, 7, 1)                 # muted: a line under the number
         f.rect(x0, top + 8, x1 - x0, 1)              # the track's line

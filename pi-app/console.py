@@ -404,7 +404,7 @@ class Transport:
             if n == self.armed or self.focus.track:
                 self.focus.toggle(n)              # the selected track's key again: zoom in / out
             self.armed = n
-            if e and not self.recording:
+            if e and not self.recording and e.select_arms:
                 e.arm_extra = set()               # a plain press arms just this track
         elif name == "ARM_ALL" and e:
             every = set(range(8))

@@ -580,6 +580,7 @@ class Engine:
         self.rec_mode = "replace"               # "replace" writes over the tape, "overdub" adds to it
         self.armed = 4                          # the selected track, 1-8
         self.arm_extra = set()                  # other armed tracks (0-7), recording along with it
+        self.select_arms = True                 # True: the selected track records too. The Move: only armed tracks
         self.in_peaks = np.zeros(max(CHANNELS, INST_CHANNELS), np.float32)
         self.device = None                      # dict from find_device, while connected
         self.status = "NO AUDIO DEVICE"
@@ -1543,7 +1544,7 @@ class Engine:
 
     def targets(self):
         """What each armed track records: {track index: channel, None for the mix, or (left, right)}."""
-        return {t: self.source(t) for t in self.armed_tracks()}
+        return {t: self.source(t) for t in self.record_tracks()}
 
     def in_channels(self):
         return self.device["capture"]["channels"] if self.device else 0
@@ -1645,8 +1646,13 @@ class Engine:
             return self.pans[track - 1]
 
     def armed_tracks(self):
-        """The armed tracks, 0-7: the selected one plus any others."""
+        """The armed tracks, 0-7: the selected one plus any others (what the edits, LIFT / CUT / SPLICE, take)."""
         return sorted({self.armed - 1} | self.arm_extra)
+
+    def record_tracks(self):
+        """The tracks a recording goes onto: the armed ones (the Move: only those armed with SHIFT + a step key,
+        selecting a track doesn't arm it)."""
+        return self.armed_tracks() if self.select_arms else sorted(self.arm_extra)
 
 
     def start_recording(self):

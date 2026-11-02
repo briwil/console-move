@@ -83,6 +83,8 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   settings (OP-XY style: velocity, chance, multiply, pulse, hold, jump, random, ramp up / down, then the drum's
   sound locks); tap a pad = on (knob 1 sets it), again = off; tap a step = done. Pulse / hold / jump / pitch
   play in pi-app/sequencer.py (Step.comp, _path / _slot).
+- Tracks: step buttons select (white); Shift + step arms (red; both: blinking). Record only records armed tracks
+  (engine.select_arms = False, engine.record_tracks()); the selected track still takes Copy / Cut / Splice.
 - Knobs on settings that pick a mode (DIST, CHOKE, a wave, on / off): 5 clicks the same way per choice (move/knobgate.py;
   Shift + turn: one a click).
 - Song mode: rows of a pattern per instrument and a repeat count; step buttons = rows, knobs 1-7 patterns,

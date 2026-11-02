@@ -175,7 +175,7 @@ class CoreBridge:
 
     def _sync_arms(self):
         e = self.e
-        armed = set(e.armed_tracks())
+        armed = set(e.record_tracks())
         now = []
         for t in range(len(e.volumes)):
             src = e.source(t) if t in armed else None
@@ -311,7 +311,7 @@ class CoreBridge:
         the new recording."""
         e, c = self.e, self.core
         chans = []
-        for t in e.armed_tracks():
+        for t in e.record_tracks():
             chans += e.chans(t)
         with e.lock:
             if e.rec_mode == "overdub" and e._rec_undo is not None:

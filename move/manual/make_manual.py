@@ -140,17 +140,20 @@ story += [
             ("zoom", "Left button 4 again: the selected track zoomed, its sound as a waveform; a splice is an "
              "I-beam. The notch in the ruler is the playhead.")),
     table([
-        ("Step buttons 1-8", "Select a track. The screen shows tracks 1-4 or 5-8, whichever group it's in."),
-        ("Shift + step 1-8", "Arm or disarm a track: armed tracks record too, and Copy / Delete / Sample take "
-         "them along. A dot beside the number marks it."),
+        ("Step buttons 1-8", "Select a track (its light is white). Selecting doesn't arm it."),
+        ("Shift + step 1-8", "Arm or disarm a track: <b>armed tracks are red</b> (selected and armed: red and "
+         "white blinking) and have a bar beside the number on the screen. <b>Record only records armed tracks</b> "
+         "(arm every track you want: say a drum and a synth together). Armed tracks' instruments sound on the tape "
+         "page, and Copy / Delete / Sample take them along."),
         ("Knobs 1-8", "Track volumes.  Shift + knob: pan."),
         ("Record", "Start / stop recording on the selected track and any armed tracks."),
         ("Splices", "A splice shows as a thin divider between two boxes (zoomed in: an I-beam through the sound)."),
     ]),
     p("The zoomed track (left button 4, twice)", H2),
     table([
-        ("Knob 1", "Mono / stereo."),
-        ("Knob 2", "The input: an instrument's drum, its kit, all kits (and on a stereo track, its left side)."),
+        ("Knob 1", "Mono / stereo (about 5 clicks to switch)."),
+        ("Knob 2", "The input: an instrument's drum, its kit, all kits (and on a stereo track, its left side). "
+         "About 5 clicks per choice."),
         ("Knob 3", "A stereo track's right input."),
         ("Knobs 4-6", "The box under the playhead: gain, fade in, fade out.  Shift + touch knob 4: normalize."),
         ("Left button 4 / Back", "Back to the tape."),
@@ -171,7 +174,9 @@ story += [
         ("+ / -", "The next / previous page of settings."),
         ("Shift + touch a knob", "That setting back to its starting value."),
         ("Settings that pick a mode", "DIST, CHOKE, a wave, on / off: it takes 5 clicks the same way to move to "
-         "the next choice, so you don't skip past. Shift + turn: one choice a click."),
+         "the next choice, so you don't skip past. Shift + turn: one choice a click. Lists get 3 clicks a choice: "
+         "the lane's RATE, MULTIPLY / PULSE / HOLD / JUMP and the pitch ones, song-mode patterns, the grid "
+         "and the pattern (Shift + wheel). Numbers (volume, velocity, tune...) are still one click each."),
         ("Reverb and delay", "Each drum's REVERB and DELAY knobs on its sound page set how much of that drum goes "
          "to the effect. The effects' own settings (size, time, tone, feedback, level) are on left button 3."),
         ("Pads", "Play the drums (or the synth)."),

@@ -198,6 +198,11 @@ class MoveSeq:
         sp, seq, e = self.sp, self.seq, self.T.engine
         lane, i = sp.lane, self.held
         clicks = self.T.knob_clicks(1, delta, shift)
+        if isinstance(key, str) and key != "vel" and key != "chance":     # short lists (multiply, pulse, jump...)
+            one = knobgate.gate(("comp", key), delta, shift, 3)
+            if not one:
+                return
+            delta = one
         if not isinstance(key, str) and knobgate.is_choice(e.drums, key):
             clicks = knobgate.gate(("step", key), delta, shift)      # a mode, not a number: several clicks each
             if not clicks:
@@ -318,6 +323,11 @@ class MoveSeq:
         if self.held is None:
             if number > len(LANE_KNOBS):
                 return
+            if LANE_KNOBS[number - 1] == "rate":                  # a list of speeds: 3 clicks each
+                delta = knobgate.gate(("rate",), delta, shift, 3)
+                if not delta:
+                    return
+                shift = True
             sp.mode, sp.held = 0, {}
             sp.knob(2 + seqpage.STEP_PARAMS.index(LANE_KNOBS[number - 1]), delta, shift)
             return

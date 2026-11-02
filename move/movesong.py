@@ -14,6 +14,8 @@ import json
 import os
 import time
 
+import knobgate
+
 PATTERNS = 16
 MAX_ROWS = 16
 REPEAT_KNOB = 8
@@ -113,12 +115,9 @@ class Song:
             self.T.say("PRESS STEP BUTTON 1 TO ADD A ROW", 2)
             return
         row = self.rows[self.pick]
-        # one click a turn: these are small numbers
-        now = time.monotonic()
-        if now - self._turned.get(number, 0) < 0.08:
+        way = knobgate.gate(("song", number), delta, False, 3 if number != REPEAT_KNOB else 2)   # a few clicks a choice
+        if not way:
             return
-        self._turned[number] = now
-        way = 1 if delta > 0 else -1
         if number == REPEAT_KNOB:
             row["repeat"] = max(1, min(16, row["repeat"] + way))
             self.T.say("ROW %d PLAYS %d TIME%s" % (self.pick + 1, row["repeat"], "" if row["repeat"] == 1 else "S"), 2)

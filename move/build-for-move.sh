@@ -16,7 +16,7 @@ OUT="$HOME/move-libs.tgz"
 if [ "$1" = "update" ]; then
   command -v docker >/dev/null || { echo "Run it without 'update' first."; exit 1; }
   echo "Building the effects and the sound core for the Move..."
-  sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
+  sudo docker run --rm ${DOCKER_PLATFORM:+--platform $DOCKER_PLATFORM} -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
     set -e
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq && apt-get install -y -qq gcc libc6-dev >/dev/null
@@ -35,13 +35,13 @@ if [ "$1" = "update" ]; then
   exit 0
 fi
 
-if ! command -v docker >/dev/null; then
+if ! command -v docker >/dev/null && [ -z "$CI" ]; then
   echo "Installing Docker (one time)..."
   sudo apt update && sudo apt install -y docker.io
 fi
 
 echo "Building in Ubuntu 22.04 (first run downloads it and the compilers: a few minutes)..."
-sudo docker run --rm -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
+sudo docker run --rm ${DOCKER_PLATFORM:+--platform $DOCKER_PLATFORM} -v "$REPO":/src:ro -v "$HOME":/out ubuntu:22.04 bash -c '
   set -e
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq && apt-get install -y -qq gcc g++ make cmake git python3 ca-certificates binutils >/dev/null

@@ -6,16 +6,19 @@
 It downloads briwil/console-move from GitHub (a private repo: it needs a read-only access key, saved in
 /data/UserData/console/github-token), puts the app's files in /data/UserData/console, and builds the C parts
 that change most (the sound core and the effects) with Zig, a compiler that is a single download and builds
-for exactly the Move's system (glibc 2.35). The rest (drum machines, synths) were built once on the Pi and
-stay as they are.
+for exactly the Move's system (glibc 2.35). The drum machines and synths are built by GitHub itself
+(.github/workflows/move-libs.yml publishes them as the "libs-latest" release); this downloads them, and
+installs numpy and Pillow (pip --user) if they are missing. No Pi, no Mac.
 """
 import io
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tarfile
 import time
+import urllib.error
 import urllib.request
 
 BASE = "/data/UserData"
@@ -72,6 +75,74 @@ def download():
         return r.read()
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _api(url, accept="application/vnd.github+json"):
+    key = open(TOKEN).read().strip()
+    return urllib.request.Request(url, headers={"Authorization": "Bearer " + key, "Accept": accept,
+                                                "User-Agent": "console-move-updater"})
+
+
+def fetch_libs():
+    """The drum machines, synths and the rest of the .so files, built by GitHub (release "libs-latest").
+    Skipped when this one is already installed."""
+    stamp = os.path.join(CONSOLE, "libs-version")
+    try:
+        with urllib.request.urlopen(_api("https://api.github.com/repos/%s/releases/tags/libs-latest" % REPO),
+                                    timeout=60) as r:
+            rel = json.load(r)
+        asset = [a for a in rel.get("assets", []) if a["name"] == "move-libs.tgz"][0]
+    except Exception as e:
+        say("No built libraries on GitHub yet (%s). Run the 'Build Move libraries' action on GitHub." % e)
+        return False
+    version = "%s %s" % (asset["id"], asset["updated_at"])
+    if os.path.exists(stamp) and open(stamp).read() == version:
+        say("Libraries are up to date.")
+        return True
+    say("Downloading the synths and drum machines (%d MB)..." % (asset["size"] // 1048576))
+    try:
+        # GitHub answers with a redirect to its file storage, which must not get the access key
+        opener = urllib.request.build_opener(_NoRedirect)
+        try:
+            data = opener.open(_api(asset["url"], "application/octet-stream"), timeout=60).read()
+        except urllib.error.HTTPError as e:
+            if e.code not in (301, 302, 303, 307, 308):
+                raise
+            data = urllib.request.urlopen(e.headers["Location"], timeout=600).read()
+    except Exception as e:
+        say("Couldn't download the libraries: %s" % e)
+        return False
+    app = os.path.join(CONSOLE, "pi-app")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as t:
+        members = [m for m in t.getmembers() if ".." not in m.name.split("/") and not os.path.isabs(m.name)]
+        t.extractall(app, members=members)
+    with open(stamp, "w") as f:
+        f.write(version)
+    say("Installed %d library files." % len(members))
+    return True
+
+
+def ensure_python_parts():
+    """numpy and Pillow, with pip --user (as the ableton user), if the app can't find them."""
+    def have():
+        return subprocess.run([sys.executable, "-c", "import numpy, PIL"], capture_output=True).returncode == 0
+    if have():
+        return
+    say("Installing numpy and Pillow (a few minutes)...")
+    if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode != 0:
+        if subprocess.run([sys.executable, "-m", "ensurepip", "--user"], capture_output=True).returncode != 0:
+            tmp = os.path.join(BASE, "Scratch", "get-pip.py")
+            os.makedirs(os.path.dirname(tmp), exist_ok=True)
+            urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", tmp)
+            subprocess.run([sys.executable, tmp, "--user"], check=False)
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "numpy", "Pillow"])
+    say("numpy and Pillow are installed." if r.returncode == 0 and have() else
+        "Couldn't install numpy / Pillow: tell Claude what is printed above.")
+
+
 def unpack(data):
     """Puts pi-app/, move/ and the simulator's stand-ins (tools/sim/stubs/, the Move app uses them) from the archive into /data/UserData/console, over what's there (files that
     aren't in the archive, like the built libraries, stay)."""
@@ -119,11 +190,22 @@ def install_launcher():
     say("Updated the console-mode launcher.")
 
 
+def mark_built(app):
+    """The libraries must look newer than their code, or the app tries to rebuild them (with a compiler it
+    doesn't have)."""
+    now = time.time()
+    for root, _dirs, files in os.walk(app):
+        for f in files:
+            if f.endswith(".so"):
+                os.utime(os.path.join(root, f), (now, now))
+
+
 def build():
-    if not os.path.exists(ZIG):
-        say("No compiler yet (run with 'setup'): the C parts weren't rebuilt.")
-        return False
     app = os.path.join(CONSOLE, "pi-app")
+    if not os.path.exists(ZIG):
+        say("No compiler (fine: the libraries come from GitHub). The core and effects weren't rebuilt here.")
+        mark_built(app)
+        return True
     jobs = [("the sound core", ["core/core.c"], "core/libconsolecore.so", ["-ldl", "-lm"]),
             ("the effects", ["fx/fx.c"], "fx/libconsolefx.so", ["-lm"])]
     ok = True
@@ -138,13 +220,7 @@ def build():
             ok = False
             continue
         os.replace(os.path.join(app, out + ".new"), os.path.join(app, out))
-    # the libraries must look newer than their code, or the app tries to rebuild them (with a compiler it
-    # doesn't have)
-    now = time.time()
-    for root, _dirs, files in os.walk(app):
-        for f in files:
-            if f.endswith(".so"):
-                os.utime(os.path.join(root, f), (now, now))
+    mark_built(app)
     return ok
 
 
@@ -154,4 +230,6 @@ if __name__ == "__main__":
     else:
         unpack(download())
         install_launcher()
+        ensure_python_parts()
+        fetch_libs()
         say("Done." if build() else "Done (see above).")

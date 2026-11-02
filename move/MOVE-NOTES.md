@@ -66,8 +66,11 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
 - On the Move itself: `python3 /data/UserData/console/move/move-update.py` downloads the latest from GitHub and
   builds the sound core and effects with Zig (installed once with `... move-update.py setup` into
   /data/UserData/zig). Needs a GitHub fine-grained access key, read-only "Contents" on console-move only,
-  saved in /data/UserData/console/github-token. The drum machines and synths stay as built on the Pi
-  (`build-for-move.sh`, full) until they need rebuilding.
+  saved in /data/UserData/console/github-token. It also installs numpy/Pillow (pip --user) if missing and downloads
+  the synths, drum machines and other libraries that GitHub builds (`.github/workflows/move-libs.yml`, the
+  "libs-latest" release; Actions > Build Move libraries > Run workflow to rebuild by hand, 1-3 hours).
+- After a factory restore: install RNBO, `mkdir -p /data/UserData/console`, save the token in
+  `console/github-token`, fetch `move/move-update.py` (see below), then run it. No Pi needed.
 
 ## The app's controls (move/app.py)
 - Left buttons, top to bottom: tape; instruments (press again: the drum's sound, again: its sequencer); FX;

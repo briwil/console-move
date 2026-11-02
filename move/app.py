@@ -318,6 +318,15 @@ def main():
     m = menu_mod.Menu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits = kitmenu.KitMenu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits.main = m
+    kit_turn = m.kits.turn
+
+    def kit_list_turn(delta, k=m.kits):                # the drums menu's list stops at its ends (it wrapped round)
+        if k.mode == "list":
+            k.choice = max(0, min(kitmenu.ALL - 1, k.choice + delta))
+            k.msg = ""
+        else:
+            kit_turn(delta)
+    m.kits.turn = kit_list_turn
     m.open = False                                   # start on the tape, not the project menu
     keys = queue.Queue()
     board = MoveBoard(keys, T)
@@ -566,6 +575,8 @@ def handle(name, T, m, e):
     elif m.open:
         m.key("PLAY" if name == "HOME" else name)    # pushing the wheel chooses, as PLAY does
     elif m.kits.open:
+        if m.kits.mode == "list" and name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
+            return                                   # (the Pi's two columns: here it's one list)
         m.kits.key("PLAY" if name == "HOME" else name)
     elif name == "FILE" and T.inst_page and T.instp.mode:
         T.instp.cancel()

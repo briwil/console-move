@@ -20,7 +20,10 @@ def draw(f, T, menu=None):
         if menu is not None and menu.open:
             text_page(f, menu.s, getattr(menu, "msg", ""))
         elif menu is not None and menu.kits.open:
-            text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
+            if menu.kits.mode == "list":
+                kit_list(f, menu.kits)
+            else:
+                text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
         elif T.seq_page:
             seq_page(f, T)
         elif T.drum_page:
@@ -321,9 +324,9 @@ def inst_page(f, T):
     listing(f, rows, ip.row, top=11)
 
 
-def listing(f, rows, pick, top=11, line=7):
+def listing(f, rows, pick, top=11, line=7, fit=None):
     """A list in small letters, the picked row inverted, scrolled to keep it on screen."""
-    fit = (H - top) // line
+    fit = fit or (H - top) // line
     first = max(0, min(pick - fit // 2, len(rows) - fit))
     for i in range(fit):
         k = first + i
@@ -492,6 +495,22 @@ def fx_page(f, T):
 
 
 # ------------------------------------------------------------------ the menus (any of the Pi's menu screens)
+
+def kit_list(f, k):
+    """The drums menu (Menu on a sound page): its choices and the project's, in one list (the wheel stops at the
+    ends)."""
+    import kitmenu
+    rows = [kitmenu.TEXTS[key].upper() for key, _ in kitmenu.ITEMS] + \
+           [kitmenu.MAIN_TEXTS[key].upper() for key, _ in kitmenu.MAIN]
+    f.rect(0, 0, W, 9, 1)
+    f.text(1, 1, "DRUMS MENU", 0)
+    f.right(W - 2, 2, "%d/%d" % (k.choice + 1, len(rows)), small=True, c=0)
+    listing(f, rows, k.choice, top=11, line=7, fit=6)       # (the bottom line is for messages)
+    msg = getattr(k, "msg", "")
+    if msg:
+        f.rect(0, H - 8, W, 8, 1)
+        f.small(1, H - 6, str(msg).upper()[:31], 0)
+
 
 def text_page(f, s, msg=""):
     """A Pi menu screen: its texts, row by row (from top to bottom), the highlighted row inverted."""

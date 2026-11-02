@@ -92,3 +92,9 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
 - Menu: the project menu (SETTINGS > SOFTWARE UPDATE: move/moveupdater.py runs move-update.py, then the app
   exits with 75 and RNBOLauncher starts it again). Shift + Menu: export.
 - Shift + Back: save, quit and hand the Move back.
+
+## Step icon test
+The icons printed under the 16 step buttons are lights of their own (controller numbers 16-31, channel 16, the value
+is the colour: 120 white, 118 light grey). To see which icon is which: `touch /data/UserData/console/icontest`
+lights them one at a time (the screen says which step button it is under); `echo all > ...icontest` lights all 16;
+`rm /data/UserData/console/icontest` ends it. (Octave on the original Move OS: the Up / Down buttons, CC 55 / 54.)

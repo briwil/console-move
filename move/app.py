@@ -41,7 +41,7 @@ import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
 updater.Updater = moveupdater.Updater   # SETTINGS > SOFTWARE UPDATE: from GitHub with move-update.py
-from screen import Frame          # noqa: E402
+from screen import Frame, W       # noqa: E402
 
 FPS_SCREEN = 20
 
@@ -213,6 +213,14 @@ class Lights:
             self.sent[("n", num)] = v
             self.core.send_midi(bytes((0x9F, num, v)))
 
+    def icons(self, which):
+        """The icons under the step buttons (controller numbers 16-31): which = a set of 0-15, lit white."""
+        for k in range(16):
+            v = 120 if k in which else 0
+            if self.sent.get(("icon", k)) != v:
+                self.sent[("icon", k)] = v
+                self.core.send_midi(bytes((0xBF, 16 + k, v)))
+
     def update(self, T, board):
         e = T.engine
         self.cc(85, T.playing)
@@ -265,6 +273,7 @@ class Lights:
 # ---------------------------------------------------------------- the app
 
 PIDFILE = "/data/UserData/console/app.pid"
+ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
 
 
 def already_running():
@@ -322,6 +331,7 @@ def main():
     last = time.monotonic()
     next_screen = 0.0
     next_lights = 0.0
+    next_icon_check, icon_test = 0.0, None
     hand_back = False
     try:
         while True:
@@ -353,6 +363,31 @@ def main():
             T.tick(now - last)
             last = now
             e.inst_view = e.inst_view or T.song_page         # the instruments play on the song page too
+            if now >= next_icon_check:
+                next_icon_check = now + 0.5
+                try:
+                    mode = open(ICONFILE).read().strip().lower() if os.path.exists(ICONFILE) else None
+                except OSError:
+                    mode = None
+                if mode is None and icon_test is not None:
+                    lights.icons(set())                      # finished: the icons go dark
+                icon_test = mode
+            if icon_test is not None:
+                # the icon test: each icon in turn for 2 seconds (or all of them: put "all" in the file)
+                k = int(now / 2) % 16
+                lit = set(range(16)) if icon_test == "all" else {k}
+                lights.icons(lit)
+                if now >= next_screen:
+                    next_screen = now + 1 / FPS_SCREEN
+                    frame.clear()
+                    frame.rect(0, 0, W, 9, 1)
+                    frame.text(1, 1, "ICON TEST", 0)
+                    frame.centre(64, 20, "ALL ON" if icon_test == "all" else "ICON %d OF 16" % (k + 1))
+                    frame.small(1, 40, "UNDER STEP BUTTON %s" % ("1-16" if icon_test == "all" else k + 1))
+                    frame.small(1, 52, "DELETE THE FILE TO END")
+                    core.display(frame.bytes())
+                time.sleep(0.005)
+                continue
             if now >= next_screen:
                 next_screen = now + 1 / FPS_SCREEN
                 menu_tick(m)

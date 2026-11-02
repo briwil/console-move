@@ -29,7 +29,7 @@ def draw(f, T, menu=None):
             inst_page(f, T)
         elif T.fx_page:
             fx_page(f, T)
-        elif T.focus.active:
+        elif T.focus.track is not None:
             focus_page(f, T)
         else:
             tape_page(f, T)
@@ -124,9 +124,17 @@ def tape_page(f, T):
                 rb = int(round(mid + (b - t.pos) * ppb))
                 if rb < x0 or ra > x1:
                     continue
-                ra, rb = max(x0, ra), min(x1 - 1, rb)
+                # each box drawn on its own, with its ends and a pixel's gap where two boxes touch (a splice)
+                left_end, right_end = ra >= x0, rb - 1 <= x1 - 1
+                ra, rb = max(x0, ra), min(x1 - 1, rb - 1)
+                if rb < ra:
+                    continue
                 f.rect(ra, y, rb - ra + 1, 1)
                 f.rect(ra, y + LANE_H - 2, rb - ra + 1, 1)
+                if left_end:
+                    f.rect(ra, y, 1, LANE_H - 1)
+                if right_end:
+                    f.rect(rb, y, 1, LANE_H - 1)
                 if lv is not None:
                     for x in range(ra, rb + 1):
                         beat = t.pos + (x - mid) / ppb
@@ -157,19 +165,19 @@ def tape_page(f, T):
 
 
 def focus_page(f, T):
-    """The zoomed track: its settings, the eight knobs' jobs."""
+    """The zoomed track: what each of the eight knobs does and its value, one knob a line (knob 1 MONO /
+    STEREO, 2 the input, 3 a stereo track's right input, 4-6 the box under the playhead)."""
     n = T.focus.shown
     header(f, "TRACK %d" % n, "ZOOM")
-    lines = [str(x) for x in (T.panel_lines() or [])][:2]
-    for i, s in enumerate(lines):
-        f.small(1, 11 + i * 6, s[:31])
     knobs = T.knob_labels() or []
     for i, item in enumerate(knobs[:8]):
         name, value = (item[0], item[1]) if isinstance(item, (tuple, list)) else (str(item), "")
-        col, row = divmod(i, 4)
-        x, y = col * 64, 25 + row * 9
-        f.small(x + 1, y, "%d %s" % (i + 1, str(name)[:6]))
-        f.right(x + 62, y, str(value)[:6], small=True)
+        live = item[2] if isinstance(item, (tuple, list)) and len(item) > 2 else True
+        y = 11 + i * 6
+        name = {"MONO / STEREO": "MONO/ST"}.get(name, name)
+        f.small(1, y, "%d %s" % (i + 1, name[:8]))
+        if live:
+            f.right(W - 1, y, str(value)[:20], small=True)
 
 
 # ------------------------------------------------------------------ instruments

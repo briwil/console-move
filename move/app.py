@@ -9,7 +9,7 @@ with the simulator's stand-in pygame, and pages.py draws the Move's screen from 
 Controls (see MOVE-NOTES.md):
   Play / Record / Loop / Undo, Shift for their second jobs; Copy = LIFT, Delete = CUT, Capture = DROP,
   Sample = SPLICE, Mute = mute (Shift: solo); Menu = the project menu, Back = back; + / - = the Pi's knob 9;
-  left buttons (top to bottom): tape, instruments, FX, input; knobs 1-8; jog wheel = the big knob (push to
+  left buttons (top to bottom): tape, instruments, FX, the selected track's page (its input); knobs 1-8; jog wheel = the big knob (push to
   choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the sequencer the 16 steps;
   pads play the instrument you're on. Shift + touch a knob = push it. Shift + Back: save and quit.
 """
@@ -288,6 +288,14 @@ def handle(name, T, m, e):
         e.seq.toggle(lane, name[1] - 1)
         e.seq_changed()
         return
+    if name == "INPUT" and not (m.open or m.kits.open):
+        # left button 4: the selected track's own page (knob 1 mono / stereo, knob 2 its input); again to leave
+        for _ in range(4):
+            if T.seq_page or T.drum_page or T.inst_page:
+                T.key("DRUMS_BACK")
+        T.fx_page = None
+        T.key("FOCUS")
+        return
     if name == "TAPE":                               # the top left button: straight back to the tape
         m.open = False
         m.kits.open = False
@@ -295,7 +303,7 @@ def handle(name, T, m, e):
             if T.seq_page or T.drum_page or T.inst_page:
                 T.key("DRUMS_BACK")
         T.fx_page = None
-        if T.focus.active:
+        if T.focus.track is not None:
             T.key("FOCUS")
         return
     if name == "BACK":
@@ -309,7 +317,7 @@ def handle(name, T, m, e):
             T.key("DRUMS_BACK")
         elif T.fx_page:
             T.fx_page = None
-        elif T.focus.active:
+        elif T.focus.track is not None:
             T.key("FOCUS")
         return
     if (m.open or m.kits.open) and isinstance(name, tuple) and name[0] in ("HOLD", "RELEASE"):

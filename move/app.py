@@ -37,6 +37,7 @@ import kitmenu                    # noqa: E402
 import pages                      # noqa: E402
 import moveseq                    # noqa: E402
 import movesong                   # noqa: E402
+import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
 updater.Updater = moveupdater.Updater   # SETTINGS > SOFTWARE UPDATE: from GitHub with move-update.py
@@ -402,6 +403,16 @@ def handle(name, T, m, e):
         T.phones_volume(name[1] * 0.02)
         return
     ms = T.mseq
+    if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8 and T.drum_page and not (
+            T.seq_page or T.fx_page or T.inst_page or m.open or m.kits.open) and e and e.drums):
+        # a setting that picks a mode (DIST, CHOKE...): several clicks per choice
+        pages = T.drum_pages()
+        params = pages[min(T.drum_tab, len(pages) - 1)][1]
+        if name[1] <= len(params) and knobgate.is_choice(e.drums, params[name[1] - 1]):
+            way = knobgate.gate(("drum", params[name[1] - 1]), name[2], name[3])
+            if not way:
+                return
+            name = ("KNOB", name[1], way, True)          # one choice (as with Shift: no speeding up)
     if isinstance(name, tuple) and name[0] == "STEP":
         if ms.active():
             ms.step(name[1], name[2], name[3])

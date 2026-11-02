@@ -14,6 +14,7 @@ It works through the Pi app's own SeqPage (T.seqp), so the pattern, undo and sav
 """
 import time
 
+import knobgate
 import seqpage
 import sequencer
 
@@ -197,6 +198,10 @@ class MoveSeq:
         sp, seq, e = self.sp, self.seq, self.T.engine
         lane, i = sp.lane, self.held
         clicks = self.T.knob_clicks(1, delta, shift)
+        if not isinstance(key, str) and knobgate.is_choice(e.drums, key):
+            clicks = knobgate.gate(("step", key), delta, shift)      # a mode, not a number: several clicks each
+            if not clicks:
+                return
         sp._edit(("knob1", self.sel, i))
         one = 1 if delta > 0 else -1
         for j in self.selected:

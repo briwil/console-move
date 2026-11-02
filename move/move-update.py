@@ -100,6 +100,25 @@ def unpack(data):
     say("Updated %d files." % n)
 
 
+LAUNCHER = os.path.join(BASE, "rnbo", "bin", "RNBOLauncher")
+
+
+def install_launcher():
+    """Console mode's launcher (move/RNBOLauncher) in RNBO's place, if it was put there once by hand (the
+    original kept as RNBOLauncher.orig) and has changed. Swapped in as a new file, so a running one is safe."""
+    mine = os.path.join(CONSOLE, "move", "RNBOLauncher")
+    if not (os.path.exists(LAUNCHER + ".orig") and os.path.exists(mine)):
+        return
+    new = open(mine, "rb").read()
+    if os.path.exists(LAUNCHER) and open(LAUNCHER, "rb").read() == new:
+        return
+    with open(LAUNCHER + ".new", "wb") as out:
+        out.write(new)
+    os.chmod(LAUNCHER + ".new", 0o755)
+    os.replace(LAUNCHER + ".new", LAUNCHER)
+    say("Updated the console-mode launcher.")
+
+
 def build():
     if not os.path.exists(ZIG):
         say("No compiler yet (run with 'setup'): the C parts weren't rebuilt.")
@@ -134,4 +153,5 @@ if __name__ == "__main__":
         setup()
     else:
         unpack(download())
+        install_launcher()
         say("Done." if build() else "Done (see above).")

@@ -40,7 +40,8 @@ Pad lights: note on, channel 16, note = pad, velocity = colour (127 worked); 0 =
 RNBO's manager (`rnbomovecontrol`) unplugs anyone else from the screen and pads, so we replace it.
 `RNBOLauncher` here is a modified copy of `/data/UserData/rnbo/bin/RNBOLauncher` (original kept on the Move as
 `RNBOLauncher.orig`). If `/data/UserData/console/ENABLED` exists, choosing RNBO in the Move's settings
-(Shift + Step 2, bottom of the list) starts only JACK and waits; `touch /data/UserData/console/STOP` ends it and
+(Shift + Step 2, bottom of the list) starts JACK and the Console app (log: console/app.log); when the app ends
+(Shift + Back) the launcher stops and the Move goes back to normal. Also `touch /data/UserData/console/STOP` ends it and
 the Move goes back to normal (the app's Shift + Back does this too, after saving). `rm /data/UserData/console/ENABLED` brings RNBO back.
 
 Our programs can't get real-time priority or lock memory (warnings at start); so far that has been fine
@@ -49,7 +50,7 @@ Our programs can't get real-time priority or lock memory (warnings at start); so
 ## Files
 - `move_test.py` — hardware test: tone per pad, pad lights, screen text, prints every control message.
   `python3 /data/UserData/move_test.py`
-- `RNBOLauncher` — the launcher above.
+- `RNBOLauncher` — the launcher above. `move-update.py` installs changes to it (once the original is saved as .orig).
 - `screen_mockups.py` / `screen-mockups.png` — first screen design proposal (recorder, drum list, drum knob turn).
 
 ## The C sound core (pi-app/core)

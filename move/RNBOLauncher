@@ -6,19 +6,36 @@ export SQLITE_TMPDIR=/data/UserData/Scratch/
 export TMPDIR=/data/UserData/Scratch/
 export ROCKET_CONFIG=/data/UserData/rnbo/share/rnbo-runner-panel/Rocket.toml
 
-# --- console: if /data/UserData/console/ENABLED exists, start only JACK (no RNBO)
-# and wait until /data/UserData/console/STOP appears (or JACK dies). Then exit,
-# which should hand the Move back. Delete ENABLED to get RNBO back as normal.
+# --- console: if /data/UserData/console/ENABLED exists, start only JACK (no RNBO) and the Console app.
+# When the app ends (Shift + Back, or if it ever crashes), or /data/UserData/console/STOP appears, or JACK
+# dies: stop and exit, which hands the Move back. Delete ENABLED to get RNBO back as normal.
 C=/data/UserData/console
 if [ -f "$C/ENABLED" ]; then
   rm -f "$C/STOP"
   /data/UserData/rnbo/bin/jackd -d move > "$C/jackd.log" 2>&1 &
   JACKPID=$!
-  echo "jackd started, pid $JACKPID" >> "$C/launcher.log"
-  while [ ! -f "$C/STOP" ] && kill -0 "$JACKPID" 2>/dev/null; do
+  echo "$(date) jackd started, pid $JACKPID" >> "$C/launcher.log"
+  sleep 2
+  alive() {   # running (a finished program stays listed as a "zombie" until we collect it: that's not running)
+    [ -r "/proc/$1/status" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/$1/status"
+  }
+  # numpy and Pillow were installed with pip --user as ableton: let Python find them whoever runs this
+  UHOME=$(awk -F: '$1 == "ableton" {print $6}' /etc/passwd)
+  [ -n "$UHOME" ] && [ -d "$UHOME/.local" ] && export PYTHONUSERBASE="$UHOME/.local"
+  PY=$(command -v python3 || echo /usr/bin/python3)
+  "$PY" "$C/move/app.py" > "$C/app.log" 2>&1 &
+  APPPID=$!
+  echo "$(date) app started, pid $APPPID" >> "$C/launcher.log"
+  while [ ! -f "$C/STOP" ] && alive "$JACKPID" && alive "$APPPID"; do
     sleep 1
   done
-  echo "stopping" >> "$C/launcher.log"
+  echo "$(date) stopping" >> "$C/launcher.log"
+  if alive "$APPPID"; then                        # STOP from outside: the app saves, then quits
+    kill "$APPPID" 2>/dev/null
+    for i in 1 2 3 4 5 6 7 8 9 10; do alive "$APPPID" || break; sleep 1; done
+    alive "$APPPID" && kill -9 "$APPPID" 2>/dev/null
+  fi
+  wait "$APPPID" 2>/dev/null
   kill "$JACKPID" 2>/dev/null
   wait "$JACKPID"
   rm -f "$C/STOP"

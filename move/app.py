@@ -210,7 +210,36 @@ class Lights:
 
 # ---------------------------------------------------------------- the app
 
+PIDFILE = "/data/UserData/console/app.pid"
+
+
+def already_running():
+    """The pid of another copy of the app that's still running (the one the Move started), or None."""
+    try:
+        pid = int(open(PIDFILE).read().strip())
+        if pid != os.getpid() and os.path.exists("/proc/%d" % pid) and \
+                "app.py" in open("/proc/%d/cmdline" % pid).read():
+            return pid
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def main():
+    other = already_running()
+    if other:
+        sys.exit("Console is already running on the Move (it starts by itself in console mode). "
+                 "Shift + Back on the Move quits it.")
+    try:
+        with open(PIDFILE, "w") as fh:
+            fh.write(str(os.getpid()))
+    except OSError:
+        pass
+    import signal
+
+    def stop_signal(*_):
+        raise KeyboardInterrupt                      # asked to stop (the launcher): save and quit as Ctrl+C does
+    signal.signal(signal.SIGTERM, stop_signal)
     e = audio.Engine()
     e.start()
     deadline = time.time() + 15
@@ -269,8 +298,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        import signal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         T.playing = False
         e.save(wait=True)
         frame.clear()

@@ -62,6 +62,18 @@ PADS = range(68, 100)                      # pads, bottom row first
 WHITE, RED = 120, 127                      # the Move's light colours (velocity of the light message)
 
 
+def _shuffled(colours, seed):
+    import random
+    out = list(colours)
+    random.Random(seed).shuffle(out)                 # the same "random" order every time, so a pad keeps its colour
+    return out
+
+
+# the drum pads: bright colours, in a random order; the chromatic pads: pastels, in another random order
+DRUM_COLOURS = _shuffled([1, 3, 8, 9, 11, 13, 15, 16, 17, 21, 22, 23, 25, 26, 7, 12], 606)
+NOTE_COLOURS = _shuffled([47, 44, 46, 50, 52, 37, 38, 43, 42, 36, 51, 48, 40, 39, 45, 49], 808)
+
+
 class MoveBoard:
     def __init__(self, keys, T):
         self.keys, self.T = keys, T
@@ -262,11 +274,12 @@ class Lights:
                 lanes, picked = e.drums.lanes, T.seqp.lane
                 for p in range(32):
                     r, c = divmod(p, 8)
-                    if c < 4:
+                    if c < 4:                                  # the drums: each its own colour, the picked one white
                         lane = r * 4 + c
-                        out[p] = 127 if lane == picked else 20 if lane < lanes else 0
-                    else:
-                        out[p] = 127 if (r * 4 + c - 4) % 12 == 0 else 20
+                        out[p] = WHITE if lane == picked else DRUM_COLOURS[lane] if lane < lanes else 0
+                    else:                                      # the chromatic pads: another set (pastels), roots white
+                        k = r * 4 + c - 4
+                        out[p] = WHITE if k % 12 == 0 else NOTE_COLOURS[k]
         for p in range(32):
             self.note(68 + p, out[p])
 

@@ -328,6 +328,7 @@ class Transport:
             self.message_until = 0
         if isinstance(name, tuple):
             if name[0] == "KNOB":
+                self.glide = None                 # turning a knob or the wheel stops the playhead gliding too
                 self.knob(*name[1:])
             elif name[0] == "LANE":
                 self.sp().lane_key(*name[1:])

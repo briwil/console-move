@@ -134,10 +134,15 @@ class Song:
             self.T.say("ROW %d  %s  %s" % (self.pick + 1, self.short(s), "-" if v < 0 else "PATTERN %d" % (v + 1)), 2)
         self.save()
 
+    def set_on(self, on):
+        if on != self.on:
+            self.toggle()
+
     def toggle(self):
         self.on = not self.on
         self._ready = False
-        self.T.say("SONG MODE %s" % ("ON: PLAY STARTS AT ROW 1" if self.on else "OFF"), 2)
+        self.T.say(("SONG MODE ON: PLAY STARTS AT ROW 1" if self.rows else "SONG MODE ON: ADD ROWS FIRST (STEPS)")
+                   if self.on else "SONG MODE OFF: THE PICKED PATTERN PLAYS", 2)
         self.save()
 
     # ------------------------------------------------------------ playing
@@ -197,6 +202,9 @@ class Song:
             else:
                 self._loops += 1
         row = self.rows[min(self.playing_row, len(self.rows) - 1)]
+        into = (e.seq_clock - m.anchor) % max(1, length)
+        if into < 0.15 * length:
+            return                                         # let this row's first pass begin before queuing the next
         if not self._queued and self._loops >= row["repeat"] - 1:
             self.apply((self.playing_row + 1) % len(self.rows), True)
             self._queued = True

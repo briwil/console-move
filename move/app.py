@@ -50,7 +50,7 @@ PRESS = {85: ("PLAY", "HOME"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_R
          62: ("LEFT", "LOOP_IN"), 63: ("RIGHT", "LOOP_OUT"), 56: ("UNDO", "UNDO"),
          52: ("DROP", "DROP_INSERT"), 118: ("SPLICE", "SPLICE_ALL"), 88: ("MUTE", "SOLO"),
          50: ("FILE", "EXPORT"), 3: ("HOME", "HOME_PUSH_SHIFT"),
-         43: ("DRUMS", "DRUMS_BACK"), 42: ("SONG", "SONG"), 41: ("FX", "FX"), 40: ("TAPE", "ARM_ALL")}
+         43: ("DRUMS", "DRUMS_BACK"), 42: ("SONG", "SONG_TOGGLE"), 41: ("FX", "FX"), 40: ("TAPE", "ARM_ALL")}
 HOLD = {60: "COPY", 119: "CUT"}            # hold and move to take several boxes (Shift + Copy: select)
 SHIFT, BACK, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 55, 54, 14, 79
 # left buttons, top to bottom: 1 instruments (again: the drum's sound, its sequencer), 2 song, 3 FX,
@@ -348,6 +348,7 @@ def main():
             T.song.tick()
             T.tick(now - last)
             last = now
+            e.inst_view = e.inst_view or T.song_page         # the instruments play on the song page too
             if now >= next_screen:
                 next_screen = now + 1 / FPS_SCREEN
                 menu_tick(m)
@@ -430,8 +431,11 @@ def handle(name, T, m, e):
             T.song.knob(name[1], name[2])
             return
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
-            T.song.toggle()
+            T.song.set_on(name[2] > 0)                     # +: song mode on, -: off
             return
+    if name == "SONG_TOGGLE":                          # Shift + left button 2: song mode on / off, from any page
+        T.song.toggle()
+        return
     if name == "SONG" and not menus:                 # left button 2: song mode
         for _ in range(4):
             if T.seq_page or T.drum_page or T.inst_page:

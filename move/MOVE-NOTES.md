@@ -84,7 +84,7 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   sound locks); tap a pad = on (knob 1 sets it), again = off; tap a step = done. Pulse / hold / jump / pitch
   play in pi-app/sequencer.py (Step.comp, _path / _slot).
 - Song mode: rows of a pattern per instrument and a repeat count; step buttons = rows, knobs 1-7 patterns,
-  8 repeats, + / - on / off. Saved in data/songmode/<song>.json.
+  8 repeats, + on / - off (Shift + left button 2: on / off from any page; the instruments play on the song page). Saved in data/songmode/<song>.json.
 - Menu: the project menu (SETTINGS > SOFTWARE UPDATE: move/moveupdater.py runs move-update.py, then the app
   exits with 75 and RNBOLauncher starts it again). Shift + Menu: export.
 - Shift + Back: save, quit and hand the Move back.

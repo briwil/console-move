@@ -227,7 +227,8 @@ story += [
         ("Delete + step button", "Take that row out."),
         ("Knobs 1-7", "The row's pattern for instruments 1-7 (all the way down: -, leave it as it is)."),
         ("Knob 8", "How many times the row plays (1-16)."),
-        ("+ / -", "Song mode on / off."),
+        ("+ / -", "+ switches song mode on, - off. <b>Shift + left button 2</b> does the same from any page "
+         "(the tape shows SONG in its top line while it's on). Off: the picked pattern plays, as usual."),
     ]),
     p("Synths: the synth sequencer screen isn't done yet on the Move (its pads play the synth).", SMALL),
 

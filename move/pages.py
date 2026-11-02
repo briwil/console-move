@@ -72,6 +72,8 @@ def tape_header(f, T):
     f.text(1, 1, state, 0)
     bpm = "%.0f" % (e.bpm if e else 120)
     f.small(30, 2, bpm + " BPM", 0)
+    if getattr(T, "song", None) is not None and T.song.on and T.song.rows:
+        f.small(61, 2, "SONG", 0)
     f.right(W - 2, 2, T.position_text(t.pos)[:12], small=True, c=0)
 
 

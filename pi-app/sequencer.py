@@ -43,13 +43,23 @@ def chance_index(saved):
         except ValueError:
             pass
     return 0
-MAX_RATCHET = 4
+MAX_RATCHET = 8         # MULTIPLY: 1-8 hits in the step (0: a random number of them)
 UNDO_STEPS = 10
-DEFAULT_VELOCITY = 100
+DEFAULT_VELOCITY = 100  # (velocity 0: random)
+
+# Step components (OP-XY style, set on the Move): name -> its options (a step stores the option's place)
+#   pulse  play the step again this many times before moving on    hold   wait this many steps, silent
+#   jump   then go to this step (once round the lane)                rand / rup / rdown  the drum's pitch:
+#   random, or a ramp up / down, over N steps of 1 or 3 octaves (each time round the lane)
+_N9 = [str(n) for n in range(1, 10)] + ["RND"]
+_PITCH = ["%d/%dOCT" % (n, o) for o in (1, 3) for n in range(2, 7)]
+COMPONENTS = {"pulse": _N9, "hold": _N9, "jump": ["1", "5", "9", "13", "+1", "-1", "+/-", "RND"],
+              "rand": _PITCH, "rup": _PITCH, "rdown": _PITCH}
+PITCH = None            # set by the Move app: PITCH(lane, locks, semitones) -> locks with the pitch moved
 
 
 class Step:
-    __slots__ = ("on", "vel", "chance", "ratchet", "locks")
+    __slots__ = ("on", "vel", "chance", "ratchet", "locks", "comp")
 
     def __init__(self):
         self.on = False
@@ -57,9 +67,11 @@ class Step:
         self.chance = 0
         self.ratchet = 1
         self.locks = {}                      # drum parameter number -> value, for this step only
+        self.comp = {}                       # step components: name -> option (see COMPONENTS)
 
     def blank(self):
-        return not self.on and not self.locks and self.vel == DEFAULT_VELOCITY and not self.chance and self.ratchet == 1
+        return not self.on and not self.locks and self.vel == DEFAULT_VELOCITY and not self.chance and \
+            self.ratchet == 1 and not self.comp
 
 
 def bar_steps(steps_per_beat, bar_beats):
@@ -130,6 +142,8 @@ class Sequencer:
         self._decided = {}                   # (lane, k) -> chance result, so ratchets agree across blocks
         self._skip = set()                   # (lane, k): a step recorded live just before it came round
         self.undo_stack = []                 # (pattern number, copy of it before an edit), newest last
+        self._cyc = {}                       # lane -> [time round, its first slot, its path, previous start, path]
+        self.seed = random.randrange(1 << 30)
 
     @property
     def pattern(self):
@@ -281,6 +295,7 @@ class Sequencer:
             self.anchor = 0.0
             self._decided.clear()
             self._skip.clear()
+            self._cyc.clear()
 
     # ------------------------------------------------------------ playing (from the audio thread)
 
@@ -301,12 +316,68 @@ class Sequencer:
                     self.current, self.queued = self.queued, None
                     self.anchor = boundary
                     self._decided.clear()
+                    self._cyc.clear()
                     out += self._events(boundary, end, start, frames_per_beat)
                     return out
             out += self._events(start, end, start, frames_per_beat)
             if len(self._decided) > 512:
                 self._decided.clear()
         return out
+
+    # ---- the order a lane plays its steps in (pulse, hold and jump change it)
+
+    def _path(self, li, ln, cycle):
+        """One time round the lane: [(step, plays)]. Random choices are the same for the same time round."""
+        L = ln.length
+        rng = random.Random(hash((self.seed, li, cycle)))
+        path, i, used = [], 0, set()
+        while i < L and len(path) < 4 * L:
+            c = ln.steps[i].comp
+            path.append((i, True))
+            if "pulse" in c:
+                n = c["pulse"] + 1 if c["pulse"] < 9 else rng.randint(1, 9)
+                path += [(i, True)] * n
+            if "hold" in c:
+                n = c["hold"] + 1 if c["hold"] < 9 else rng.randint(1, 9)
+                path += [(i, False)] * n
+            nxt = i + 1
+            if "jump" in c and i not in used:
+                used.add(i)
+                j = COMPONENTS["jump"][c["jump"]]
+                if j in ("1", "5", "9", "13"):
+                    nxt = int(j) - 1
+                elif j == "+1":
+                    nxt = i + 2
+                elif j == "-1":
+                    nxt = max(0, i - 1)
+                elif j == "+/-":
+                    nxt = i + 2 if rng.random() < 0.5 else max(0, i - 1)
+                else:
+                    nxt = rng.randrange(L)
+            i = nxt
+        return path or [(0, True)]
+
+    def _slot(self, li, ln, k):
+        """Slot k (counting from PLAY) of a lane: (step, plays, time round the lane)."""
+        L = ln.length
+        if not any(ln.steps[i].comp.keys() & {"pulse", "hold", "jump"} for i in range(L)):
+            self._cyc.pop(li, None)
+            return k % L, True, k // L
+        st = self._cyc.get(li)
+        if st and st[3] is not None and st[3] <= k < st[1]:
+            i, plays = st[4][k - st[3]]
+            return i, plays, st[0] - 1
+        if st is None or k < st[1]:
+            st = self._cyc[li] = [0, 0, None, None, None]
+        while True:
+            path = self._path(li, ln, st[0])
+            if k < st[1] + len(path):
+                st[2] = path
+                i, plays = path[k - st[1]]
+                return i, plays, st[0]
+            st[3], st[4] = st[1], path
+            st[1] += len(path)
+            st[0] += 1
 
     def _events(self, a, b, block_start, fpb):
         out = []
@@ -315,31 +386,50 @@ class Sequencer:
             first = math.floor((a - self.anchor) / step_frames)
             last = math.floor((b - self.anchor) / step_frames)
             for k in range(first, last + 1):
-                i = k % ln.length
+                if k < 0:
+                    continue
+                i, plays, cycle = self._slot(li, ln, k)
                 s = ln.steps[i]
-                if not s.on:
+                if not s.on or not plays:
                     continue
                 if (li, k) in self._skip:
                     if self.anchor + k * step_frames + step_frames <= b:
                         self._skip.discard((li, k))
                     continue
                 t0 = self.anchor + k * step_frames
-                for r in range(s.ratchet):
-                    t = t0 + r * step_frames / s.ratchet
+                rng = random.Random(hash((self.seed, li, k)))
+                hits = s.ratchet if s.ratchet else rng.randint(1, MAX_RATCHET)
+                vel = s.vel if s.vel else rng.randint(1, 127)
+                locks = dict(s.locks)
+                c = s.comp
+                if PITCH and c.keys() & {"rand", "rup", "rdown"}:
+                    name = "rand" if "rand" in c else "rup" if "rup" in c else "rdown"
+                    n, octs = (int(v) for v in COMPONENTS[name][c[name]].replace("OCT", "").split("/"))
+                    d = rng.randrange(n) if name == "rand" else cycle % n
+                    semis = round(d * 12 * octs / n) * (-1 if name == "rdown" else 1)
+                    try:
+                        locks = PITCH(li, locks, semis)
+                    except Exception:
+                        pass
+                for r in range(hits):
+                    t = t0 + r * step_frames / hits
                     if a <= t < b:
                         key = (li, k)
                         if key not in self._decided:
-                            self._decided[key] = chance_passes(s.chance, k // ln.length)
+                            self._decided[key] = chance_passes(s.chance, cycle)
                         if self._decided[key]:
-                            out.append((int(t - block_start), li, s.vel, dict(s.locks)))
+                            out.append((int(t - block_start), li, vel, locks))
         out.sort(key=lambda e: e[0])
         return out
 
     def position(self, tape_frame, frames_per_beat):
         """Which step each lane is on at this tape frame: [step index] (for the screen)."""
         with self.lock:
-            return [math.floor((tape_frame - self.anchor) / (frames_per_beat / ln.steps_per_beat())) % ln.length
-                    for ln in self.pattern.lanes]
+            out = []
+            for li, ln in enumerate(self.pattern.lanes):
+                k = math.floor((tape_frame - self.anchor) / (frames_per_beat / ln.steps_per_beat()))
+                out.append(self._slot(li, ln, k)[0] if k >= 0 else k % ln.length)
+            return out
 
     # ------------------------------------------------------------ saving
 
@@ -352,7 +442,8 @@ class Sequencer:
                     steps = {}
                     for i, s in enumerate(ln.steps):
                         if not s.blank():
-                            steps[str(i)] = [int(s.on), s.vel, CHANCES[s.chance], s.ratchet, {str(k): v for k, v in s.locks.items()}]
+                            steps[str(i)] = [int(s.on), s.vel, CHANCES[s.chance], s.ratchet,
+                                             {str(k): v for k, v in s.locks.items()}, dict(s.comp)]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
                 pats.append({"lanes": lanes})
             return {"current": self.current, "patterns": pats}
@@ -375,8 +466,10 @@ class Sequencer:
                             if 0 <= i < MAX_STEPS:
                                 s = ln.steps[i]
                                 s.on, s.vel, s.chance, s.ratchet = bool(v[0]), int(v[1]), chance_index(v[2]), int(v[3])
-                                s.ratchet = max(1, min(MAX_RATCHET, s.ratchet))
+                                s.ratchet = max(0, min(MAX_RATCHET, s.ratchet))
                                 s.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
+                                s.comp = {k: int(x) for k, x in (v[5] if len(v) > 5 else {}).items()
+                                          if k in COMPONENTS and 0 <= int(x) < len(COMPONENTS[k])}
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))
             except (TypeError, ValueError, KeyError, IndexError, AttributeError) as e:
                 print("Sequencer: couldn't read the saved patterns:", e)

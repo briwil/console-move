@@ -93,8 +93,9 @@ story += [
         ("Quit", "<b>Shift + Back</b>. Saves the song, quits and gives the Move back to its normal software."),
         ("If something goes wrong", "If the app ever crashes, the Move goes back to normal by itself. What it "
          "printed is saved in /data/UserData/console/app.log."),
-        ("Update", "From the Mac: <font face='Courier'>ssh ableton@move.local \"python3 "
-         "/data/UserData/console/move/move-update.py\"</font>. Quit Console first."),
+        ("Update", "On the Move: Menu, SETTINGS, SOFTWARE UPDATE (push to check, push again to install; "
+         "Console restarts). Or from the Mac: <font face='Courier'>ssh ableton@move.local \"python3 "
+         "/data/UserData/console/move/move-update.py\"</font>."),
     ]),
 
     p("The Move's controls at a glance", H2),
@@ -117,9 +118,9 @@ story += [
         ("Menu", "The project menu (songs, tempo, settings). On the drum page: the kit menu.  "
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
-        ("Left buttons (top to bottom)", "1 Tape.  2 Instruments (press again: the instrument's sound, again: "
-         "its sequencer; Shift: back).  3 FX (reverb, then delay, then off).  4 The selected track zoomed "
-         "(Shift: arm all tracks)."),
+        ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
+         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, then delay, then off).  4 The recorder "
+         "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
         ("Shift + touch a knob", "Pushes that knob (the Pi's knob push): on the tape it mutes that track."),
         ("+ / -", "The Pi's knob 9: on the tape, zoom in / out. Shift: sweep the in / out points a bar at a time."),
@@ -128,14 +129,15 @@ story += [
         ("Volume knob", "Headphone / speaker volume."),
         ("Step buttons", "On the tape: 1-8 select a track (press the selected one again to zoom in); Shift + "
          "step: arm a track. On the drum sequencer: the 16 steps."),
-        ("Pads", "Play the instrument you're on (a drum a pad, bottom row first; a synth plays a scale). On "
-         "the drum sequencer they pick the drum."),
+        ("Pads", "Drums: the left 4 x 4 are the drums (bottom left first; tapping one picks it), the right "
+         "4 x 4 play the picked drum chromatically, a semitone a pad (bright pads: the root). A synth plays a "
+         "scale.  <b>Shift + pad 1-16: the instrument's pattern.</b>"),
     ]),
 
     p("The tape", H2),
     screens(("tape", "The tape page: four tracks at a time (the selected track's group) as solid boxes; a "
              "splice is a thin divider. The dotted line is the playhead. Bottom: volume and pan."),
-            ("zoom", "Left button 4: the selected track zoomed, its sound as a waveform; a splice is an "
+            ("zoom", "Left button 4 again: the selected track zoomed, its sound as a waveform; a splice is an "
              "I-beam. The notch in the ruler is the playhead.")),
     table([
         ("Step buttons 1-8", "Select a track. The screen shows tracks 1-4 or 5-8, whichever group it's in."),
@@ -145,7 +147,7 @@ story += [
         ("Record", "Start / stop recording on the selected track and any armed tracks."),
         ("Splices", "A splice shows as a thin divider between two boxes (zoomed in: an I-beam through the sound)."),
     ]),
-    p("The zoomed track (left button 4)", H2),
+    p("The zoomed track (left button 4, twice)", H2),
     table([
         ("Knob 1", "Mono / stereo."),
         ("Knob 2", "The input: an instrument's drum, its kit, all kits (and on a stereo track, its left side)."),
@@ -155,13 +157,13 @@ story += [
     ]),
 
     p("Instruments", H2),
-    p("Left button 2 opens the INSTRUMENTS page: 8 slots, each a drum machine or a synth. Recording an "
+    p("Left button 1 opens the INSTRUMENTS page: 8 slots, each a drum machine or a synth. Recording an "
       "instrument onto the tape uses the zoomed track's input (knob 2).", BODY),
     table([
         ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 2 again", "The picked instrument's sound page; again: its sequencer."),
+        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer."),
     ]),
     p("An instrument's sound", H2),
     table([
@@ -177,12 +179,13 @@ story += [
     p("The drum sequencer", H2),
     p("The steps live on the 16 step buttons, the screen shows what the knobs do. Each drum (lane) has its "
       "own length, up to 64 steps, and its own speed.", BODY),
-    screens(("seq-lane", "No step held: the drum's 16 steps (small, at the top) and the lane's settings."),
-            ("seq-hold", "A step held: that step's velocity, chance and ratchets.")),
+    screens(("seq-lane", "The drum's 16 steps (small, at the top) and the lane's settings."),
+            ("seq-hold", "Shift + steps 1 and 5 tapped: they blink, and the pads are their settings.")),
     Spacer(1, 6),
     table([
-        ("Pads", "Pick the drum (its pad lights brighter) and hear it."),
-        ("Step buttons", "Press and let go: the step on / off. While playing, the playhead moves along them."),
+        ("Pads", "Left 4 x 4: pick the drum (its pad lights brighter) and hear it.  Shift + pad: the pattern."),
+        ("Step buttons", "Tap: the step on / off. While playing, the playhead moves along them."),
+        ("Shift + step buttons", "Select steps to set (below)."),
         ("Left / Right arrows", "Steps 17-32, 33-48, 49-64 (for lanes longer than 16)."),
         ("Knob 1", "LENGTH: the lane's number of steps (1-64)."),
         ("Knob 2", "RATE: the lane's speed (1/16, 1/16 triplets, 1/8, 1/8 triplets, 1/32)."),
@@ -191,19 +194,40 @@ story += [
         ("+ / -", "The pattern (1-16). While playing, the next one waits its turn (shown as PAT 1>2)."),
         ("Undo", "Undo the last pattern edit."),
     ]),
-    p("Holding a step", H2),
-    screens(("seq-lock", "A step held, + pressed: the drum's sound page. Turning a knob locks that setting "
-             "to this step (shown highlighted).")),
+    p("Step settings (OP-XY style)", H2),
+    p("Hold Shift and tap one or more steps: they blink. Let go of Shift. Now the pads are the steps' settings, "
+      "bottom left first. Tap a pad: that setting is on and <b>knob 1</b> sets it. Tap the same pad again: "
+      "it's off (back to normal). Lit pads: settings the step has; the picked one blinks. "
+      "<b>Tap any step to finish.</b>", BODY),
+    screens(("seq-lock", "PULSE picked on two steps: knob 1 sets how many times they repeat.")),
     table([
-        ("Knob 1", "VELOCITY of the step."),
-        ("Knob 2", "CHANCE: how often it plays (100% down to 0%, or 1:2, 2:3... = the 1st of every 2 times "
+        ("Pad 1  VELOCITY", "How hard (1-127, turned all the way down: RND, random)."),
+        ("Pad 2  CHANCE", "How often it plays: 100% down to 0%, or 1:2, 2:3... (the 1st of every 2 times "
          "round, and so on)."),
-        ("Knob 3", "RATCHETS: the step plays 1-4 times."),
-        ("+ / - (still holding)", "Go through the drum's sound pages. Their knobs then set the sound for "
-         "this step only (a parameter lock)."),
-        ("Let go", "If you turned a knob, the step stays as it was (on or off). If you didn't, it's an "
-         "ordinary press: on / off."),
-        ("Another step while holding", "Switches that step on / off."),
+        ("Pad 3  MULTIPLY", "Hits inside the step: x1 to x8, or RND."),
+        ("Pad 4  PULSE", "Play the step again 1-9 times (or RND) before moving on."),
+        ("Pad 5  HOLD", "Wait 1-9 steps (or RND) after it, silent."),
+        ("Pad 6  JUMP", "Then go to step 1, 5, 9 or 13, skip one (+1), back one (-1), either (+/-), or RND. "
+         "Once each time round the lane."),
+        ("Pad 7  RANDOM", "A random pitch each time: 2-6 notes over 1 or 3 octaves."),
+        ("Pad 8  RAMP UP", "The pitch goes up each time round: 2-6 notes over 1 or 3 octaves."),
+        ("Pad 9  RAMP DOWN", "The same, going down. (One of RANDOM / RAMP UP / RAMP DOWN at a time.)"),
+        ("Pads 10-32", "The drum's own sound settings (TUNE, DECAY...): a parameter lock for these steps."),
+    ]),
+    p("Pitch moves use the drum's TUNE (or PITCH) setting, so how far a semitone goes depends on the drum "
+      "machine. BEND, PORTAMENTO and TONALITY are for the synth sequencer, still to come.", SMALL),
+
+    p("Song mode (left button 2)", H2),
+    p("A list of rows, OP-XY style: each row picks a pattern for every instrument and says how many times it "
+      "plays. With song mode on, Play starts at row 1 and goes through the rows, then round again.", BODY),
+    screens(("song", "Row 2: the LXR plays pattern 3, twice.")),
+    table([
+        ("Step buttons", "The rows. Press one past the end: a new row (a copy of the last). Lit: the rows; "
+         "the playing one blinks."),
+        ("Delete + step button", "Take that row out."),
+        ("Knobs 1-7", "The row's pattern for instruments 1-7 (all the way down: -, leave it as it is)."),
+        ("Knob 8", "How many times the row plays (1-16)."),
+        ("+ / -", "Song mode on / off."),
     ]),
     p("Synths: the synth sequencer screen isn't done yet on the Move (its pads play the synth).", SMALL),
 

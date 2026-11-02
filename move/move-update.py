@@ -146,10 +146,11 @@ def ensure_python_parts():
 def unpack(data):
     """Puts pi-app/, move/ and the simulator's stand-ins (tools/sim/stubs/, the Move app uses them) from the archive into /data/UserData/console, over what's there (files that
     aren't in the archive, like the built libraries, stay)."""
-    n = 0
+    n, top = 0, ""
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as t:
         for m in t.getmembers():
             parts = m.name.split("/", 1)                 # the archive's top folder is "<owner>-<repo>-<commit>"
+            top = top or parts[0]
             if len(parts) < 2:
                 continue
             rel = parts[1]
@@ -169,6 +170,9 @@ def unpack(data):
                     os.chmod(dest, 0o755)
                 n += 1
     say("Updated %d files." % n)
+    if top:                                              # the version (the menu's SOFTWARE UPDATE compares it)
+        with open(os.path.join(CONSOLE, "version"), "w") as f:
+            f.write("%s %s" % (top.rsplit("-", 1)[-1], time.strftime("%b %d %Y")))
 
 
 LAUNCHER = os.path.join(BASE, "rnbo", "bin", "RNBOLauncher")
@@ -178,8 +182,13 @@ def install_launcher():
     """Console mode's launcher (move/RNBOLauncher) in RNBO's place, if it was put there once by hand (the
     original kept as RNBOLauncher.orig) and has changed. Swapped in as a new file, so a running one is safe."""
     mine = os.path.join(CONSOLE, "move", "RNBOLauncher")
-    if not (os.path.exists(LAUNCHER + ".orig") and os.path.exists(mine)):
+    if not os.path.exists(mine) or not os.path.exists(LAUNCHER):
         return
+    if not os.path.exists(LAUNCHER + ".orig"):
+        if not os.path.exists(os.path.join(CONSOLE, "ENABLED")):
+            return                                   # console mode isn't wanted (yet): leave RNBO alone
+        shutil.copy2(LAUNCHER, LAUNCHER + ".orig")   # first time (or after a factory reset): keep RNBO's
+        say("Kept RNBO's own launcher as RNBOLauncher.orig.")
     new = open(mine, "rb").read()
     if os.path.exists(LAUNCHER) and open(LAUNCHER, "rb").read() == new:
         return

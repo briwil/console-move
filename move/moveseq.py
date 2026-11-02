@@ -1,32 +1,68 @@
-"""The drum sequencer the Move's way: the 16 step buttons are the steps, the knobs set the lane (or, while a
-step button is held, that step), and the screen shows what the knobs do.
+"""The drum sequencer the Move's way: the 16 step buttons are the steps, the knobs set the lane, and the
+screen shows what the knobs do.
 
-  pads (bottom rows)     pick the lane (and play its drum)
-  step buttons 1-16      press and let go: the step on / off. Hold one: the knobs set that step
+  pads (left 4 x 4)      pick the drum (and play it)
+  step buttons 1-16      tap: the step on / off
+  Shift + tap steps      select them (they blink). Then the pads are their settings (OP-XY style), bottom left
+                         first: VELOCITY, CHANCE, MULTIPLY, PULSE, HOLD, JUMP, RANDOM, RAMP UP, RAMP DOWN, then the
+                         drum's own sound settings (parameter locks). Tap a pad: it's on, knob 1 sets it; the same
+                         pad again: off (back to normal). Lit pads: what the steps have. Tap any step: done
   <- / ->                the lane's steps 1-16, 17-32, 33-48, 49-64
-  knobs (no step held)   1 LENGTH, 2 RATE (length scale), 3 EUCLID, 4 SHIFT
-  knobs (step held)      page STEP: 1 VELOCITY, 2 CHANCE, 3 RATCHETS; the drum's sound pages: its settings,
-                         locked to that step. + / - change the page while the step is held
-  + / - (no step held)   the pattern
+  knobs                  1 LENGTH, 2 RATE (length scale), 3 EUCLID, 4 SHIFT
+  + / -                  the pattern
 It works through the Pi app's own SeqPage (T.seqp), so the pattern, undo and saving are the same.
 """
 import time
 
 import seqpage
+import sequencer
 
 PAGE = 16                                          # step buttons
 LANE_KNOBS = ["length", "rate", "hits", "rotate"]  # knobs 1-4, no step held
-STEP_KNOBS = ["vel", "chance", "ratchet"]          # knobs 1-3, a step held, page STEP
 LABELS = dict(seqpage.STEP_LABELS, rate="RATE", hits="EUCLID", rotate="SHIFT")
+# the pads while a step is held, bottom left first: (key, label). Then the drum's sound settings
+STEP_PADS = [("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("pulse", "PULSE"),
+             ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"), ("rdown", "RAMP DOWN")]
+RATCHETS = [1, 2, 3, 4, 5, 6, 7, 8, 0]            # MULTIPLY's values in knob order (0: random)
+SEMI = 2                                          # knob clicks of a drum's pitch setting per semitone (a guess)
+PITCH_WORDS = ("TUNE", "PITCH", "COARSE", "FREQ", "NOTE")
 
 
 class MoveSeq:
     def __init__(self, T):
         self.T = T
         self.page = {}             # lane -> which 16 steps the buttons show (0-3)
-        self.held = None           # the step being held (index in the lane), or None
-        self.turned = False        # a knob turned while it was held (then letting go doesn't toggle)
+        self.selected = []         # the steps picked with Shift (their settings are on the pads)
         self.knob_page = 0         # while a step is held: 0 STEP, 1.. the drum's sound pages
+        self.sel = None            # while a step is held: the pad picked (its setting is on knob 1)
+        self._pitch = {}           # voice -> its pitch setting (or None)
+        sequencer.PITCH = self.pitch_locks
+
+    # ------------------------------------------------------------ pitch (RANDOM / RAMPS and the right-hand pads)
+
+    def pitch_param(self, voice):
+        if voice not in self._pitch:
+            d, found = self.T.engine.drums, None
+            for _name, params in d.pages(voice):
+                for p in params:
+                    if any(w in d.label(p).upper() for w in PITCH_WORDS):
+                        found = p
+                        break
+                if found is not None:
+                    break
+            self._pitch[voice] = found
+        return self._pitch[voice]
+
+    def pitch_locks(self, lane, locks, semis):
+        """locks, with the lane's drum moved by some semitones (its pitch setting locked)."""
+        d = self.T.engine.drums
+        lv = d.lane_voice
+        p = self.pitch_param(lv[min(len(lv) - 1, lane)])
+        if p is None or not semis:
+            return locks
+        out = dict(locks)
+        out[p] = d.stepped(p, locks.get(p, d.get_param(p)), semis * SEMI)
+        return out
 
     # ------------------------------------------------------------ what's shown
 
@@ -64,15 +100,150 @@ class MoveSeq:
         if self.held is None:
             return [(LABELS[p], sp.step_value(p, lane), False) for p in LANE_KNOBS]
         self._aim()
-        if self.knob_page == 0:
-            return [(LABELS[p], sp.step_value(p, lane), False) for p in STEP_KNOBS]
-        st = self.seq.step(lane, self.held)
-        out = []
-        for p in self.sound_pages()[self.knob_page - 1][1][:8]:
-            if p in st.locks:
-                out.append((e.drums.label(p), e.drums.value_text(p, st.locks[p]), True))
+        items = self.pad_items()
+        if self.sel is None or self.sel >= len(items):
+            return []
+        key, label = items[self.sel]
+        return [(label, self.item_value(key), self.engaged(key))]
+
+    # ------------------------------------------------------------ a held step's settings on the pads
+
+    def pad_items(self):
+        """[(key, label)] for pads 0-31 while a step is held: the step settings, then the drum's sound ones."""
+        e = self.T.engine
+        items = list(STEP_PADS)
+        for _name, params in self.sound_pages():
+            for p in params:
+                if len(items) >= 32:
+                    return items
+                if e.drums.lockable(p) and all(p != k for k, _l in items):
+                    items.append((p, e.drums.label(p)))
+        return items
+
+    def held_step(self):
+        return self.seq.step(self.sp.lane, self.held)
+
+    def engaged(self, key):
+        st = self.held_step()
+        if key == "vel":
+            return st.vel != sequencer.DEFAULT_VELOCITY
+        if key == "chance":
+            return st.chance != 0
+        if key == "ratchet":
+            return st.ratchet != 1
+        if isinstance(key, str):
+            return key in st.comp
+        return key in st.locks
+
+    def item_value(self, key):
+        st, d = self.held_step(), self.T.engine.drums
+        if key == "vel":
+            return "RND" if st.vel == 0 else str(st.vel)
+        if key == "chance":
+            return sequencer.CHANCES[st.chance]
+        if key == "ratchet":
+            return "RND" if st.ratchet == 0 else "x%d" % st.ratchet
+        if isinstance(key, str):
+            return sequencer.COMPONENTS[key][st.comp[key]] if key in st.comp else "OFF"
+        return d.value_text(key, st.locks[key]) if key in st.locks else d.value_text(key)
+
+    def step_pad(self, p):
+        """A pad while a step is held: pick that setting (it's on), or the picked one again: off."""
+        if self.held is None:
+            return
+        items = self.pad_items()
+        if p >= len(items):
+            return
+        key, label = items[p]
+        sp, seq, e = self.sp, self.seq, self.T.engine
+        lane, i = sp.lane, self.held
+        sp._edit(("pad", p, i, time.monotonic()))
+        off = self.sel == p
+        for j in self.selected:
+            self._pad_one(lane, j, p, key, off)
+        if off:
+            self.sel = None
+            self.T.say("%s  %s OFF" % (self.which(), label), 2)
+        else:
+            self.sel = p
+            self.T.say("%s  %s  %s  (KNOB 1)" % (self.which(), label, self.item_value(key)), 2)
+        e.seq_changed()
+
+    def which(self):
+        return "STEP %d" % (self.held + 1) if len(self.selected) == 1 else "%d STEPS" % len(self.selected)
+
+    def _pad_one(self, lane, i, p, key, off):
+        seq, e = self.seq, self.T.engine
+        if i >= seq.lane(lane).length:
+            return
+        with seq.lock:
+            st = seq.step(lane, i)
+            if off:
+                if key == "vel":
+                    st.vel = sequencer.DEFAULT_VELOCITY
+                elif key == "chance":
+                    st.chance = 0
+                elif key == "ratchet":
+                    st.ratchet = 1
+                elif isinstance(key, str):
+                    st.comp.pop(key, None)
+                else:
+                    st.locks.pop(key, None)
             else:
-                out.append((e.drums.label(p), e.drums.value_text(p), False))
+                st.on = True
+                if isinstance(key, str) and key in sequencer.COMPONENTS:
+                    st.comp.setdefault(key, 0)
+                    if key in ("rand", "rup", "rdown"):              # one pitch movement at a time
+                        for other in ("rand", "rup", "rdown"):
+                            if other != key:
+                                st.comp.pop(other, None)
+                elif not isinstance(key, str):
+                    st.locks.setdefault(key, e.drums.get_param(key))
+
+    def set_selected(self, delta, shift):
+        """Knob 1 while a step is held and a pad picked: that setting."""
+        key, label = self.pad_items()[self.sel]
+        sp, seq, e = self.sp, self.seq, self.T.engine
+        lane, i = sp.lane, self.held
+        clicks = self.T.knob_clicks(1, delta, shift)
+        sp._edit(("knob1", self.sel, i))
+        one = 1 if delta > 0 else -1
+        for j in self.selected:
+            if j < seq.lane(lane).length:
+                self._knob_one(lane, j, key, clicks, one)
+        e.seq_changed()
+        if not isinstance(key, str):
+            sp.audition(lane, i)
+        self.T.say("%s  %s  %s" % (self.which(), label, self.item_value(key)), 2)
+
+    def _knob_one(self, lane, i, key, clicks, one):
+        seq, e = self.seq, self.T.engine
+        with seq.lock:
+            st = seq.step(lane, i)
+            st.on = True
+            if key == "vel":
+                st.vel = max(0, min(127, (st.vel or 0) + clicks))
+            elif key == "chance":
+                st.chance = max(0, min(len(sequencer.CHANCES) - 1, st.chance + one))
+            elif key == "ratchet":
+                at = RATCHETS.index(st.ratchet) if st.ratchet in RATCHETS else 0
+                st.ratchet = RATCHETS[max(0, min(len(RATCHETS) - 1, at + one))]
+            elif isinstance(key, str):
+                st.comp[key] = max(0, min(len(sequencer.COMPONENTS[key]) - 1, st.comp.get(key, 0) + one))
+            else:
+                st.locks[key] = e.drums.stepped(key, st.locks.get(key, e.drums.get_param(key)), clicks)
+
+    def pad_lights(self):
+        """32 pad lights while a step is held: picked bright, on medium, the rest dim."""
+        items = self.pad_items()
+        out = []
+        for p in range(32):
+            if p >= len(items):
+                out.append(0)
+            elif p == self.sel:
+                out.append(127 if int(time.monotonic() * 4) % 2 else 0)
+            else:
+                out.append(127 if self.engaged(items[p][0]) else 20)
         return out
 
     def playing_step(self):
@@ -100,25 +271,35 @@ class MoveSeq:
         self.T.drum_voice = sp.voice()
         self.knob_page = 0
 
-    def step(self, n, down):
-        """Step button n (1-16) pressed or let go."""
+    @property
+    def held(self):
+        """The first selected step (its settings are the ones shown), or None."""
+        return self.selected[0] if self.selected else None
+
+    def step(self, n, down, shift=False):
+        """Step button n (1-16). Shift + tap: select steps (they blink) to set them with the pads; tap any step
+        (without Shift) to finish. Otherwise a tap turns the step on or off."""
+        if not down:
+            return
         i = self.first() + n - 1
         lane = self.sp.lane
         length = self.seq.lane(lane).length
-        if down:
-            if self.held is None:
-                self.held, self.turned, self.knob_page = i, False, 0
-            elif i < length:                                  # another step while holding: on / off now
-                self._toggle(lane, i)
-            return
-        if i != self.held:
-            return
-        if not self.turned:
-            if i < length:
-                self._toggle(lane, i)
-            else:
+        if shift:
+            if i >= length:
                 self.T.say("STEP %d IS PAST THE END (LENGTH %d: KNOB 1)" % (i + 1, length), 2)
-        self.held, self.knob_page = None, 0
+            elif i in self.selected:
+                self.selected.remove(i)
+            else:
+                self.selected.append(i)
+                self.sel = None
+            return
+        if self.selected:                                     # finished setting the selected steps
+            self.selected, self.sel = [], None
+            return
+        if i < length:
+            self._toggle(lane, i)
+        else:
+            self.T.say("STEP %d IS PAST THE END (LENGTH %d: KNOB 1)" % (i + 1, length), 2)
 
     def _toggle(self, lane, i):
         sp = self.sp
@@ -135,30 +316,14 @@ class MoveSeq:
             sp.mode, sp.held = 0, {}
             sp.knob(2 + seqpage.STEP_PARAMS.index(LANE_KNOBS[number - 1]), delta, shift)
             return
-        self.turned = True
         self._aim()
-        if self.knob_page == 0:
-            if number > len(STEP_KNOBS):
-                return
-            sp.mode = 0
-            knob = 2 + seqpage.STEP_PARAMS.index(STEP_KNOBS[number - 1])
-        else:
-            sp.mode = self.knob_page
-            knob = number + 1
-        sp.held = {sp.lane: True}
-        try:
-            sp.knob(knob, delta, shift)
-        finally:
-            sp.held = {}
-            sp.mode = 0
+        if number == 1 and self.sel is not None:
+            self.set_selected(delta, shift)
 
     def plus_minus(self, way):
         """+ / -: the knob page while a step is held, else the pattern."""
         if self.held is not None:
-            n = len(self.sound_pages()) + 1
-            self.knob_page = (self.knob_page + way) % n
-            self.turned = True
-            self.T.say("KNOBS: %s  (STEP %d)" % (self.page_name(), self.held + 1), 2)
+            return
         else:
             self.sp.knob(10, way, False)
 
@@ -184,8 +349,8 @@ class MoveSeq:
             i = first + k
             if i >= ln.length:
                 v = 0
-            elif i == self.held:
-                v = 127
+            elif i in self.selected:
+                v = 127 if int(time.monotonic() * 4) % 2 else 0
             else:
                 on = ln.steps[i].on
                 v = 127 if on else 0

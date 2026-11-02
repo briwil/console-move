@@ -73,10 +73,18 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   `console/github-token`, fetch `move/move-update.py` (see below), then run it. No Pi needed.
 
 ## The app's controls (move/app.py)
-- Left buttons, top to bottom: tape; instruments (press again: the drum's sound, again: its sequencer); FX;
-  the selected track zoomed (knob 1 mono / stereo, 2 its input, 4-6 the box under the playhead).
-- Drum sequencer (move/moveseq.py): pads pick the drum; step buttons are its 16 steps (<- / -> for 17-64);
-  knobs 1 length, 2 rate, 3 euclid, 4 shift; + / - the pattern. Hold a step: knobs 1 velocity, 2 chance,
-  3 ratchets; + / - go through the drum's sound pages, whose knobs then lock to that step.
-- Menu: the project menu. Shift + Menu: export (data/exports/<song>/: a stereo mix and each track).
+- Left buttons, top to bottom: 1 instruments (again: the drum's sound, again: its sequencer); 2 song mode
+  (move/movesong.py); 3 FX; 4 the recorder (the tape; again: the selected track zoomed: knob 1 mono / stereo,
+  2 its input, 4-6 the box under the playhead).
+- Drum pads: left 4 x 4 the drums (bottom left first), right 4 x 4 the picked drum chromatically (its TUNE /
+  PITCH setting locked, SEMI clicks a semitone). Shift + pad 1-16: the instrument's pattern.
+- Drum sequencer (move/moveseq.py): step buttons = 16 steps (<- / -> for 17-64), tap on / off; knobs 1 length,
+  2 rate, 3 euclid, 4 shift; + / - the pattern. Shift + tap steps: select them; the pads are then their step
+  settings (OP-XY style: velocity, chance, multiply, pulse, hold, jump, random, ramp up / down, then the drum's
+  sound locks); tap a pad = on (knob 1 sets it), again = off; tap a step = done. Pulse / hold / jump / pitch
+  play in pi-app/sequencer.py (Step.comp, _path / _slot).
+- Song mode: rows of a pattern per instrument and a repeat count; step buttons = rows, knobs 1-7 patterns,
+  8 repeats, + / - on / off. Saved in data/songmode/<song>.json.
+- Menu: the project menu (SETTINGS > SOFTWARE UPDATE: move/moveupdater.py runs move-update.py, then the app
+  exits with 75 and RNBOLauncher starts it again). Shift + Menu: export.
 - Shift + Back: save, quit and hand the Move back.

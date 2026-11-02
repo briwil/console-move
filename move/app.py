@@ -9,9 +9,9 @@ with the simulator's stand-in pygame, and pages.py draws the Move's screen from 
 Controls (see MOVE-NOTES.md):
   Play / Record / Loop / Undo, Shift for their second jobs; Copy = LIFT, Delete = CUT, Capture = DROP,
   Sample = SPLICE, Mute = mute (Shift: solo); Menu = the project menu (Shift: export), Back = back; + / - = the Pi's knob 9;
-  left buttons (top to bottom): tape, instruments, FX, the selected track's page (its input); knobs 1-8; jog wheel = the big knob (push to
-  choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the drum sequencer the 16 steps (see moveseq.py);
-  pads play the instrument you're on. Shift + touch a knob = push it. Shift + Back: save, quit and go back to the normal Move
+  left buttons (top to bottom): instruments, song mode, FX, the recorder (again: the selected track zoomed); knobs 1-8; jog wheel = the
+  big knob (push to choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the drum sequencer the 16 steps
+  (see moveseq.py), on song mode its rows; pads: drums on the left 4 x 4, the picked drum chromatically on the right (Shift + pad: pattern). Shift + touch a knob = push it. Shift + Back: save, quit and go back to the normal Move
   (Ctrl+C over SSH only quits the app).
 """
 import os
@@ -36,6 +36,10 @@ import menu as menu_mod           # noqa: E402
 import kitmenu                    # noqa: E402
 import pages                      # noqa: E402
 import moveseq                    # noqa: E402
+import movesong                   # noqa: E402
+import moveupdater                # noqa: E402
+import updater                    # noqa: E402
+updater.Updater = moveupdater.Updater   # SETTINGS > SOFTWARE UPDATE: from GitHub with move-update.py
 from screen import Frame          # noqa: E402
 
 FPS_SCREEN = 20
@@ -46,9 +50,11 @@ PRESS = {85: ("PLAY", "HOME"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_R
          62: ("LEFT", "LOOP_IN"), 63: ("RIGHT", "LOOP_OUT"), 56: ("UNDO", "UNDO"),
          52: ("DROP", "DROP_INSERT"), 118: ("SPLICE", "SPLICE_ALL"), 88: ("MUTE", "SOLO"),
          50: ("FILE", "EXPORT"), 3: ("HOME", "HOME_PUSH_SHIFT"),
-         42: ("DRUMS", "DRUMS_BACK"), 41: ("FX", "FX"), 40: ("INPUT", "ARM_ALL")}
+         43: ("DRUMS", "DRUMS_BACK"), 42: ("SONG", "SONG"), 41: ("FX", "FX"), 40: ("TAPE", "ARM_ALL")}
 HOLD = {60: "COPY", 119: "CUT"}            # hold and move to take several boxes (Shift + Copy: select)
-SHIFT, BACK, TAPE, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 43, 55, 54, 14, 79
+SHIFT, BACK, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 55, 54, 14, 79
+# left buttons, top to bottom: 1 instruments (again: the drum's sound, its sequencer), 2 song, 3 FX,
+# 4 the recorder (the tape; again: the selected track zoomed)
 KNOBS = range(71, 79)                      # knobs 1-8
 STEPS = range(16, 32)                      # step buttons 1-16 (notes)
 PADS = range(68, 100)                      # pads, bottom row first
@@ -103,8 +109,6 @@ class MoveBoard:
             k.put(("KNOB", 9, 1 if num == PLUS else -1, self.shift))
         elif num == BACK:
             k.put("QUIT" if self.shift else "BACK")
-        elif num == TAPE:
-            k.put("TAPE")
         elif num in PRESS:
             k.put(PRESS[num][1 if self.shift else 0])
 
@@ -112,8 +116,12 @@ class MoveBoard:
         T, e, k = self.T, self.T.engine, self.keys
         if num in STEPS:
             n = num - 15                                   # 1-16
+            if getattr(T, "song_page", False) and not T.seq_page:
+                if val:
+                    k.put(("ROW", n, "CUT" in self.held))  # song mode's rows (Delete + a row: take it out)
+                return
             if T.seq_page and not T.synth_shown():
-                k.put(("STEP", n, bool(val)))              # pressed and let go (hold one: its settings)
+                k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
             if not val:
                 return
@@ -132,6 +140,10 @@ class MoveBoard:
         T, e = self.T, self.T.engine
         if e is None or e.slot is None or not e.drums:
             return
+        if self.shift and p < 16:                          # Shift + pad: the instrument's pattern 1-16
+            if vel:
+                self.keys.put(("PATTERN", p))
+            return
         mid = e.slots[e.slot]
         if e.is_synth(mid):
             if vel:
@@ -149,15 +161,35 @@ class MoveBoard:
                     (T.midi_note if T.drum_page else lambda n, v: e.note_off(n))(note, 0)
             return
         d = e.drums
-        if p >= d.lanes:
+        ms = T.mseq
+        if ms.active() and ms.held is not None:            # steps selected: the pads are their settings
+            if vel:
+                self.keys.put(("STEP_PAD", p))
             return
-        if vel:
-            e.hit(p, vel)
-            voice = d.lane_voice[p] if p < len(d.lane_voice) else 0
-            T.drum_voice = voice
-            T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()
-        if T.seq_page and vel:
-            self.keys.put(("PICK_LANE", p))
+        r, c = divmod(p, 8)
+        if c < 4:                                          # left 4 x 4: the drums, bottom left first
+            lane = r * 4 + c
+            if lane >= d.lanes:
+                return
+            if vel:
+                e.hit(lane, vel)
+                voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
+                T.drum_voice = voice
+                T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()
+                self.keys.put(("PICK_LANE", lane))
+            return
+        if vel:                                            # right 4 x 4: the picked drum, a semitone a pad
+            lane = min(T.seqp.lane, d.lanes - 1)
+            semis = r * 4 + (c - 4)
+            e._auditions.append((0, lane, vel, ms.pitch_locks(lane, {}, semis)))
+
+
+def pattern_seq(T):
+    """The shown instrument's sequencer (its patterns), or None."""
+    e = T.engine
+    if not e or e.slot is None or not e.slots[e.slot]:
+        return None
+    return e.seqs.get(e.slots[e.slot])
 
 
 # ---------------------------------------------------------------- lights
@@ -186,26 +218,45 @@ class Lights:
         self.cc(58, bool(e and e.loop_on))
         self.cc(88, bool(e and not e.audible(T.armed - 1)))
         self.cc(49, board.shift)
-        page = 43 if not (T.inst_page or T.drum_page or T.seq_page or T.fx_page) else \
-            41 if T.fx_page else 42
+        page = 41 if T.fx_page else 43 if (T.inst_page or T.drum_page or T.seq_page) else \
+            42 if getattr(T, "song_page", False) else 40
         for b in (43, 42, 41, 40):
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
         seq_lights = T.mseq.step_lights() if T.mseq.active() else None
+        song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
         for i in range(16):
             v = 0
-            if T.mseq.active():
+            if song:
+                v = song[i]
+            elif T.mseq.active():
                 v = seq_lights[i]
             elif i < 8:
                 v = 127 if i == T.armed - 1 else (40 if e and i in e.arm_extra else 0)
             self.note(16 + i, v)
-        # pads: the drums the instrument has
-        lanes = 0
-        if e and e.slot is not None and e.drums:
-            lanes = 32 if e.is_synth(e.slots[e.slot]) else e.drums.lanes
-        picked = T.seqp.lane if T.mseq.active() else -1
+        # pads
+        out = [0] * 32
+        q = pattern_seq(T)
+        if board.shift and q is not None:                  # Shift: the patterns (the current one bright)
+            for p in range(16):
+                pat = q.patterns[p]
+                out[p] = 127 if p == q.current else 20 if not pat.empty() else 0
+        elif T.mseq.active() and T.mseq.held is not None:
+            out = T.mseq.pad_lights()
+        elif e and e.slot is not None and e.drums:
+            if e.is_synth(e.slots[e.slot]):
+                out = [20] * 32
+            else:
+                lanes, picked = e.drums.lanes, T.seqp.lane
+                for p in range(32):
+                    r, c = divmod(p, 8)
+                    if c < 4:
+                        lane = r * 4 + c
+                        out[p] = 127 if lane == picked else 20 if lane < lanes else 0
+                    else:
+                        out[p] = 127 if (r * 4 + c - 4) % 12 == 0 else 20
         for p in range(32):
-            self.note(68 + p, 127 if p == picked else 20 if p < lanes else 0)
+            self.note(68 + p, out[p])
 
 
 # ---------------------------------------------------------------- the app
@@ -258,6 +309,8 @@ def main():
     board = MoveBoard(keys, T)
     T.shift_held = lambda: board.shift
     T.mseq = moveseq.MoveSeq(T)
+    T.song_page = False
+    T.song = movesong.Song(T)
     frame = Frame()
     lights = Lights(core)
     print("Console on the Move: running. Ctrl+C quits (the song is saved).")
@@ -279,6 +332,11 @@ def main():
                     quit_now = True
                     break
                 handle(name, T, m, e)
+            if m.restart and not quit_now:          # a software update was installed: start the new version
+                frame.clear()
+                frame.centre(64, 28, "RESTARTING...")
+                core.display(frame.bytes())
+                break
             if quit_now:
                 hand_back = True
                 frame.clear()
@@ -286,6 +344,7 @@ def main():
                 core.display(frame.bytes())
                 break
             now = time.monotonic()
+            T.song.tick()
             T.tick(now - last)
             last = now
             if now >= next_screen:
@@ -315,6 +374,9 @@ def main():
                 print("Handing the Move back.")
             except OSError as ex:
                 print("Couldn't hand the Move back (%s)" % ex)
+        elif m.restart:
+            print("Restarting with the new version...")
+            sys.exit(moveupdater.RESTART_CODE)
 
 
 def handle(name, T, m, e):
@@ -325,12 +387,46 @@ def handle(name, T, m, e):
     ms = T.mseq
     if isinstance(name, tuple) and name[0] == "STEP":
         if ms.active():
-            ms.step(name[1], name[2])
+            ms.step(name[1], name[2], name[3])
+        return
+    if isinstance(name, tuple) and name[0] == "STEP_PAD":
+        if ms.active():
+            ms.step_pad(name[1])
         return
     if isinstance(name, tuple) and name[0] == "PICK_LANE":
-        if ms.active():
-            ms.pick_lane(name[1])
+        if ms.held is None and e and e.drums and name[1] < e.drums.lanes:
+            T.seqp.lane = name[1]
+            T.drum_voice = T.seqp.voice()
         return
+    if isinstance(name, tuple) and name[0] == "PATTERN":
+        q = pattern_seq(T)
+        if q is not None:
+            q.choose_pattern(name[1], e.playing)
+            e.seq_changed()
+            T.say("PATTERN %d%s" % (name[1] + 1, "  (NEXT)" if e.playing and q.queued is not None else ""), 2)
+        return
+    if isinstance(name, tuple) and name[0] == "ROW":
+        T.song.row_button(name[1], name[2])
+        return
+    menus = m.open or m.kits.open
+    if T.song_page and not menus and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            T.song.knob(name[1], name[2])
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
+            T.song.toggle()
+            return
+    if name == "SONG" and not menus:                 # left button 2: song mode
+        for _ in range(4):
+            if T.seq_page or T.drum_page or T.inst_page:
+                T.key("DRUMS_BACK")
+        T.fx_page = None
+        if T.focus.track is not None:
+            T.key("FOCUS")
+        T.song_page = True
+        return
+    if name in ("DRUMS", "FX", "DRUMS_BACK"):
+        T.song_page = False
     if ms.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             ms.knob(name[1], name[2], name[3])
@@ -341,22 +437,18 @@ def handle(name, T, m, e):
         if name in ("LEFT", "RIGHT"):
             ms.arrows(-1 if name == "LEFT" else 1)
             return
-    if name == "INPUT" and not (m.open or m.kits.open):
-        # left button 4: the selected track's own page (knob 1 mono / stereo, knob 2 its input); again to leave
-        for _ in range(4):
-            if T.seq_page or T.drum_page or T.inst_page:
-                T.key("DRUMS_BACK")
-        T.fx_page = None
-        T.key("FOCUS")
-        return
-    if name == "TAPE":                               # the top left button: straight back to the tape
+    if name == "TAPE":                               # left button 4: the recorder; again: the track zoomed
         m.open = False
         m.kits.open = False
+        on_tape = not (T.song_page or T.seq_page or T.drum_page or T.inst_page or T.fx_page)
+        T.song_page = False
         for _ in range(4):
             if T.seq_page or T.drum_page or T.inst_page:
                 T.key("DRUMS_BACK")
         T.fx_page = None
-        if T.focus.track is not None:
+        if on_tape:
+            T.key("FOCUS")                           # zoom in, or (zoomed) back out
+        elif T.focus.track is not None:
             T.key("FOCUS")
         return
     if name == "BACK":
@@ -370,6 +462,8 @@ def handle(name, T, m, e):
             T.key("DRUMS_BACK")
         elif T.fx_page:
             T.fx_page = None
+        elif T.song_page:
+            T.song_page = False
         elif T.focus.track is not None:
             T.key("FOCUS")
         return

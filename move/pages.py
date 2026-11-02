@@ -29,6 +29,8 @@ def draw(f, T, menu=None):
             inst_page(f, T)
         elif T.fx_page:
             fx_page(f, T)
+        elif getattr(T, "song_page", False):
+            song_page(f, T)
         elif T.focus.track is not None:
             focus_page(f, T)
         else:
@@ -393,7 +395,7 @@ def seq_page(f, T):
     if ms.held is None:
         header(f, name[:13], pat)
     else:
-        header(f, "STEP %d" % (ms.held + 1), ms.page_name()[:12])
+        header(f, ms.which(), name[:12])
     # the 16 steps the buttons show
     at = ms.playing_step()
     for k in range(16):
@@ -409,6 +411,20 @@ def seq_page(f, T):
         if at is not None and i == at:
             f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
     f.small(1, 20, "STEPS %d-%d OF %d" % (first + 1, min(first + 16, ln.length), ln.length))
+    if ms.held is not None:
+        # holding a step: its settings are on the pads; the picked one on knob 1 (OP-XY style)
+        knobs = ms.knob_list()
+        f.frame(8, 27, 112, 26)
+        f.rect(9, 28, 110, 24, 0)
+        if not knobs:
+            f.centre(64, 31, "PRESS A PAD")
+            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
+        else:
+            label, value, on = knobs[0]
+            f.centre(64, 30, str(label)[:16])
+            f.centre(64, 40, ("KNOB 1: %s" % value)[:22], small=True)
+            f.centre(64, 46, "SAME PAD AGAIN: OFF", small=True)
+        return
     # the knobs
     knobs = ms.knob_list()
     for i, (label, value, locked) in enumerate(knobs[:8]):
@@ -423,11 +439,39 @@ def seq_page(f, T):
     if ms.held is None and len(knobs) <= 4:
         f.small(66, 28, "+- PATTERN")
         f.small(66, 35, "<> STEPS")
-        f.small(66, 42, "HOLD A STEP:")
-        f.small(66, 49, " ITS SETTINGS")
-    elif ms.held is not None and ms.knob_page == 0:
-        f.small(66, 28, "+- PAGE %d/%d" % (ms.knob_page + 1, len(ms.sound_pages()) + 1))
-        f.small(66, 35, "(SOUND LOCKS)")
+        f.small(66, 42, "SHIFT+STEPS:")
+        f.small(66, 49, " SETTINGS")
+
+
+# ------------------------------------------------------------------ song mode
+
+def song_page(f, T):
+    """Song mode: the picked row's pattern for each instrument (knobs 1-7) and how many times it plays (8)."""
+    sg = T.song
+    sg.check_song()
+    header(f, "SONG " + ("ON" if sg.on else "OFF"),
+           "ROW %d/%d" % (sg.pick + 1, len(sg.rows)) if sg.rows else "NO ROWS")
+    if not sg.rows:
+        f.small(1, 14, "STEP BUTTON 1: ADD A ROW")
+        f.small(1, 21, "EACH ROW: A PATTERN FOR")
+        f.small(1, 28, "EVERY INSTRUMENT, PLAYED")
+        f.small(1, 35, "SO MANY TIMES (KNOB 8)")
+        f.small(1, 46, "+ / -: SONG MODE ON / OFF")
+        return
+    row = sg.rows[sg.pick]
+    slots = sg.slots()
+    for i, slot in enumerate(slots):
+        col, r = divmod(i, 4)
+        x, y = col * 65, 13 + r * 8
+        v = row["pats"].get(slot)
+        f.small(x + 1, y, "%d %s" % (i + 1, sg.short(slot)))
+        f.right(x + 62, y, "-" if v is None else "P%d" % (v + 1), small=True)
+    col, r = divmod(7, 4)
+    f.small(66, 13 + r * 8, "8 PLAYS")
+    f.right(W - 2, 13 + r * 8, "x%d" % row["repeat"], small=True)
+    if sg.playing_row is not None:
+        f.small(1, 48, "PLAYING ROW %d" % (sg.playing_row + 1))
+    f.small(1, 56, "STEPS: ROWS  DEL+STEP: OUT")
 
 
 # ------------------------------------------------------------------ effects

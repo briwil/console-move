@@ -23,11 +23,19 @@ if [ -f "$C/ENABLED" ]; then
   UHOME=$(awk -F: '$1 == "ableton" {print $6}' /etc/passwd)
   [ -n "$UHOME" ] && [ -d "$UHOME/.local" ] && export PYTHONUSERBASE="$UHOME/.local"
   PY=$(command -v python3 || echo /usr/bin/python3)
-  "$PY" "$C/move/app.py" > "$C/app.log" 2>&1 &
-  APPPID=$!
-  echo "$(date) app started, pid $APPPID" >> "$C/launcher.log"
-  while [ ! -f "$C/STOP" ] && alive "$JACKPID" && alive "$APPPID"; do
-    sleep 1
+  while :; do
+    "$PY" "$C/move/app.py" > "$C/app.log" 2>&1 &
+    APPPID=$!
+    echo "$(date) app started, pid $APPPID" >> "$C/launcher.log"
+    while [ ! -f "$C/STOP" ] && alive "$JACKPID" && alive "$APPPID"; do
+      sleep 1
+    done
+    # the app quit with 75 after a software update: start it again (the new version)
+    [ -f "$C/STOP" ] && break
+    alive "$APPPID" && break
+    wait "$APPPID"; CODE=$?
+    [ "$CODE" = 75 ] && alive "$JACKPID" || break
+    echo "$(date) restarting after an update" >> "$C/launcher.log"
   done
   echo "$(date) stopping" >> "$C/launcher.log"
   if alive "$APPPID"; then                        # STOP from outside: the app saves, then quits

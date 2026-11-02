@@ -88,6 +88,8 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
 - Sound pages: Up / Down (CC 55 / 54) = the pads' octave (T.octave, -4..+4), Left / Right = settings pages.
 - Knobs on settings that pick a mode (DIST, CHOKE, a wave, on / off): 5 clicks the same way per choice (move/knobgate.py;
   Shift + turn: one a click).
+- Knob speed (global): every number knob 1-8 needs knobgate.SPEED raw clicks per step (default 3, 1-12), saved in
+  /data/UserData/console/knob-sensitivity; Shift + volume knob changes it (or edit the file). Wheel, +/- and menus aren't slowed.
 - Song mode: rows of a pattern per instrument and a repeat count; step buttons = rows, knobs 1-7 patterns,
   8 repeats, + on / - off (Shift + left button 2: on / off from any page; the instruments play on the song page). Saved in data/songmode/<song>.json.
 - Menu: the project menu (SETTINGS > SOFTWARE UPDATE: move/moveupdater.py runs move-update.py, then the app

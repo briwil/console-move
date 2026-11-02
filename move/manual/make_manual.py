@@ -178,7 +178,9 @@ story += [
         ("Settings that pick a mode", "DIST, CHOKE, a wave, on / off: it takes 5 clicks the same way to move to "
          "the next choice, so you don't skip past. Shift + turn: one choice a click. Lists get 3 clicks a choice: "
          "the lane's RATE, MULTIPLY / PULSE / HOLD / JUMP and the pitch ones, song-mode patterns, the grid "
-         "and the pattern (Shift + wheel). Numbers (volume, velocity, tune...) are still one click each."),
+         "and the pattern (Shift + wheel). Numbers (volume, velocity, tune...) take 3 clicks a step."),
+        ("Knob speed", "Shift + turn the volume knob: how many clicks of a knob make one step of a number "
+         "(1-12, starts at 3). More clicks = easier to be precise. It is kept when you switch off."),
         ("Reverb and delay", "Each drum's REVERB and DELAY knobs on its sound page set how much of that drum goes "
          "to the effect. The effects' own settings (size, time, tone, feedback, level) are on left button 3."),
         ("Pads", "Play the drums (or the synth)."),

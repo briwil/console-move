@@ -100,7 +100,7 @@ class MoveBoard:
             if not step:
                 return
             if num == VOLUME:
-                k.put(("VOLUME", step))
+                k.put(("SENS", step) if self.shift else ("VOLUME", step))
             elif num == WHEEL:
                 k.put(("KNOB", 10, step, False) if self.shift else ("KNOB", 11, step, False))
             else:
@@ -325,6 +325,7 @@ def main():
     if getattr(e, "core", None) is None:
         sys.exit("The sound core didn't start: is console mode running? (%s)" % e.status)
     core = e.core
+    knobgate.load(os.path.join(os.path.dirname(os.environ["CONSOLE_DATA"]), "knob-sensitivity"))
     e.select_arms = False                            # selecting a track doesn't arm it: Shift + step button does
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
     T = console.Transport(screen, e)
@@ -445,6 +446,33 @@ def main():
             sys.exit(moveupdater.RESTART_CODE)
 
 
+def choice_knob(T, m, e, name):
+    """True for a knob that picks from a list or a mode (they count their own clicks, see knobgate), and in the
+    menus; the rest are numbers and get the global knob speed."""
+    n = name[1]
+    if m.open or m.kits.open:
+        return True
+    if getattr(T, "song_page", False) and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+        return True
+    if T.focus.track is not None and n <= 3 and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+        return True
+    if not (e and e.drums):
+        return False
+    ms = T.mseq
+    if T.seq_page and ms.active():
+        if ms.selected:
+            if n == 1 and ms.sel is not None:
+                key = ms.pad_items()[ms.sel][0]
+                return (key not in ("vel", "chance")) if isinstance(key, str) else knobgate.is_choice(e.drums, key)
+            return False
+        return n == 2                                          # the lane's RATE
+    if T.drum_page and not (T.fx_page or T.inst_page):
+        pages = T.drum_pages()
+        params = pages[min(T.drum_tab, len(pages) - 1)][1]
+        return n <= len(params) and knobgate.is_choice(e.drums, params[n - 1])
+    return False
+
+
 def menu_tick(m):
     """The Pi redraws the settings each frame (menu.draw), which keeps SOFTWARE UPDATE's row current and
     restarts after an install; the Move never calls draw, so this does that part."""
@@ -464,7 +492,16 @@ def handle(name, T, m, e):
     if isinstance(name, tuple) and name[0] == "VOLUME":
         T.phones_volume(name[1] * 0.02)
         return
+    if isinstance(name, tuple) and name[0] == "SENS":        # Shift + the volume knob: how many clicks a step takes
+        v = knobgate.set_speed(knobgate.SPEED + (1 if name[1] > 0 else -1) * (1 if abs(name[1]) < 3 else 2))
+        T.say("KNOB SPEED: %d CLICK%s A STEP" % (v, "" if v == 1 else "S"), 3)
+        return
     ms = T.mseq
+    if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8 and not choice_knob(T, m, e, name):
+        way = knobgate.numeric(("num", name[1], name[3]), name[2])    # every number knob: SPEED clicks a step
+        if not way:
+            return
+        name = ("KNOB", name[1], way, name[3])
     on_sound = T.drum_page and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)
     if on_sound and e and e.drums:
         # a sound page: Up / Down (+ / -) are the pads' octave (as on the Move); Left / Right the settings pages

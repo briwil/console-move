@@ -41,7 +41,7 @@ RNBO's manager (`rnbomovecontrol`) unplugs anyone else from the screen and pads,
 `RNBOLauncher` here is a modified copy of `/data/UserData/rnbo/bin/RNBOLauncher` (original kept on the Move as
 `RNBOLauncher.orig`). If `/data/UserData/console/ENABLED` exists, choosing RNBO in the Move's settings
 (Shift + Step 2, bottom of the list) starts only JACK and waits; `touch /data/UserData/console/STOP` ends it and
-the Move goes back to normal. `rm /data/UserData/console/ENABLED` brings RNBO back.
+the Move goes back to normal (the app's Shift + Back does this too, after saving). `rm /data/UserData/console/ENABLED` brings RNBO back.
 
 Our programs can't get real-time priority or lock memory (warnings at start); so far that has been fine
 (345 audio cycles a second, no dropouts heard).

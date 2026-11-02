@@ -11,7 +11,8 @@ Controls (see MOVE-NOTES.md):
   Sample = SPLICE, Mute = mute (Shift: solo); Menu = the project menu, Back = back; + / - = the Pi's knob 9;
   left buttons (top to bottom): tape, instruments, FX, the selected track's page (its input); knobs 1-8; jog wheel = the big knob (push to
   choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the sequencer the 16 steps;
-  pads play the instrument you're on. Shift + touch a knob = push it. Shift + Back: save and quit.
+  pads play the instrument you're on. Shift + touch a knob = push it. Shift + Back: save, quit and go back to the normal Move
+  (Ctrl+C over SSH only quits the app).
 """
 import os
 import queue
@@ -233,6 +234,7 @@ def main():
     last = time.monotonic()
     next_screen = 0.0
     next_lights = 0.0
+    hand_back = False
     try:
         while True:
             while True:
@@ -248,6 +250,7 @@ def main():
                     break
                 handle(name, T, m, e)
             if quit_now:
+                hand_back = True
                 frame.clear()
                 frame.centre(64, 28, "SAVING...")
                 core.display(frame.bytes())
@@ -276,6 +279,12 @@ def main():
         e.stop()
         time.sleep(0.2)
         print("Saved. Bye.")
+        if hand_back:                                # Shift + Back: back to the normal Move (see RNBOLauncher)
+            try:
+                open("/data/UserData/console/STOP", "w").close()
+                print("Handing the Move back.")
+            except OSError as ex:
+                print("Couldn't hand the Move back (%s)" % ex)
 
 
 def handle(name, T, m, e):

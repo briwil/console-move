@@ -133,17 +133,17 @@ story += [
     ]),
 
     p("The tape", H2),
-    screens(("tape", "The tape page: four tracks at a time (the selected track's group), boxes with their "
-             "sound, bar lines, the playhead in the middle. Bottom: the selected track's volume and pan."),
-            ("zoom", "Left button 4: the selected track zoomed. Bottom: its input, and the gain of the box "
-             "under the playhead.")),
+    screens(("tape", "The tape page: four tracks at a time (the selected track's group) as solid boxes; a "
+             "splice is a thin divider. The dotted line is the playhead. Bottom: volume and pan."),
+            ("zoom", "Left button 4: the selected track zoomed, its sound as a waveform; a splice is an "
+             "I-beam. The notch in the ruler is the playhead.")),
     table([
         ("Step buttons 1-8", "Select a track. The screen shows tracks 1-4 or 5-8, whichever group it's in."),
         ("Shift + step 1-8", "Arm or disarm a track: armed tracks record too, and Copy / Delete / Sample take "
          "them along. A dot beside the number marks it."),
         ("Knobs 1-8", "Track volumes.  Shift + knob: pan."),
         ("Record", "Start / stop recording on the selected track and any armed tracks."),
-        ("Splices", "A splice shows as a gap between two boxes on the track."),
+        ("Splices", "A splice shows as a thin divider between two boxes (zoomed in: an I-beam through the sound)."),
     ]),
     p("The zoomed track (left button 4)", H2),
     table([

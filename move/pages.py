@@ -60,7 +60,8 @@ def Frame_width(s):
 
 # ------------------------------------------------------------------ the tape
 
-def tape_page(f, T):
+def tape_header(f, T):
+    """The tape's top line: STOP / PLAY / REC / ODUB, the tempo, the position."""
     e, t = T.engine, T.tape
     state = "REC" if T.recording else "PLAY" if T.playing else "STOP"
     if e and e.rec_mode == "overdub" and T.recording:
@@ -70,43 +71,88 @@ def tape_page(f, T):
     bpm = "%.0f" % (e.bpm if e else 120)
     f.small(30, 2, bpm + " BPM", 0)
     f.right(W - 2, 2, T.position_text(t.pos)[:12], small=True, c=0)
+
+
+LANE_TOPS = (14, 24, 35, 46)            # the four tracks' rows on the tape page (boxes 7 high, a line under)
+
+
+def ruler_ticks(f, T, y, x0, x1, mid, ppb):
+    """Ticks hanging from row y: 3 high on the bar, 2 on the half bar, 1 on the other beats."""
+    t = T.tape
+    bar = tape.BEATS_PER_BAR
+    k = int(t.pos - (mid - x0) / ppb) - 1
+    while True:
+        x = int(round(mid + (k - t.pos) * ppb))
+        if x >= x1:
+            break
+        if x >= x0:
+            in_bar = k % bar
+            if abs(in_bar) < 1e-6:
+                f.rect(x, y, 1, 3)
+            elif ppb >= 3 and abs(in_bar - bar / 2) < 1e-6:
+                f.rect(x, y, 1, 2)
+            elif ppb >= 3:
+                f.dot(x, y)
+        k += 1
+
+
+def tape_page(f, T):
+    """The tape, as drawn in the screen designer: the header, a ruler of ticks, four tracks (the selected
+    track's group) as solid boxes on a line, splices as a thin divider down to the line, the selected
+    track's number inverted. The playhead is a dotted line in the middle (drawn so it shows on boxes too);
+    the loop's span is a line under the ruler."""
+    e, t = T.engine, T.tape
+    tape_header(f, T)
     if not e:
         return
     fpb = e.frames_per_beat()
     beats_across = tape.ZOOMS[t.zoom] * tape.BEATS_PER_BAR
-    x0, x1 = 10, W
+    x0, x1 = 11, 124
     mid = x0 + (x1 - x0) // 2
     ppb = (x1 - x0) / beats_across                  # pixels per beat
     first = ((T.armed - 1) // TRACKS_SHOWN) * TRACKS_SHOWN
-    top = 10
-    bar_dots(f, T, top, top + TRACKS_SHOWN * LANE_H, x0, x1, mid, ppb)
-    region = e.loop_region()
+    ruler_ticks(f, T, 10, x0, x1, mid, ppb)
     for i in range(TRACKS_SHOWN):
         n = first + i                                # 0-7
-        y = top + i * LANE_H
-        selected = n == T.armed - 1
-        label = str(n + 1)
-        if selected:
-            f.rect(0, y, 8, LANE_H - 1, 1)
-            f.text(2, y + 2, label, 0)
+        top = LANE_TOPS[i]
+        if n == T.armed - 1:
+            f.rect(0, top, 9, 7)
+            f.text(2, top, str(n + 1), 0)
         else:
-            f.text(2, y + 2, label)
+            f.text(2, top, str(n + 1))
         if n in e.arm_extra:
-            f.dot(8, y + LANE_H // 2)
+            f.dot(9, top + 3, 1)
         if not e.audible(n):
-            f.rect(1, y + LANE_H - 2, 6, 1)           # muted: a line under the number
-        track_boxes(f, T, n, y, LANE_H, x0, x1, mid, ppb)
-    # the loop's in and out points
+            f.rect(1, top + 8, 7, 1)                 # muted: a line under the number
+        f.rect(x0, top + 8, x1 - x0, 1)              # the track's line
+        c = e.chans(n)[0]
+        boxes = e.regions[c]
+        for k, r in enumerate(boxes):
+            xa = int(round(mid + (r[0] / fpb - t.pos) * ppb))
+            xb = int(round(mid + (r[1] / fpb - t.pos) * ppb))
+            spliced_before = k > 0 and int(boxes[k - 1][1]) == int(r[0])
+            spliced_after = k + 1 < len(boxes) and int(boxes[k + 1][0]) == int(r[1])
+            a = xa + (2 if spliced_before else 0)
+            b = xb - (1 if spliced_after else 0)     # a splice: a pixel's gap, the divider, a pixel's gap
+            a, b = max(x0, a), min(x1, b)
+            if b > a:
+                f.rect(a, top, b - a, 7)
+            if spliced_after and x0 <= xb < x1:
+                f.rect(xb, top, 1, 8)
+    # the loop's in and out points: a line under the ruler between them
+    region = e.loop_region()
     if region:
-        for edge in region:
-            bx = int(round(mid + (edge / fpb - t.pos) * ppb))
-            if x0 <= bx < x1:
-                f.rect(bx, top, 1, 3)
-                f.rect(bx, top + TRACKS_SHOWN * LANE_H - 3, 1, 3)
-    # the playhead
-    for y in range(top, top + TRACKS_SHOWN * LANE_H):
+        a = int(round(mid + (region[0] / fpb - t.pos) * ppb))
+        b = int(round(mid + (region[1] / fpb - t.pos) * ppb))
+        a, b = max(x0, a), min(x1 - 1, b)
+        if b >= a:
+            f.rect(a, 13, b - a + 1, 1, 1 if e.loop_on else 1)
+            for x in (a, b):
+                f.rect(x, 10, 1, 4)
+    # the playhead: every other pixel, the opposite of what's under it
+    for y in range(10, LANE_TOPS[-1] + 9):
         if y % 2 == 0:
-            f.dot(mid, y, 1)
+            f.dot(mid, y, 0 if f.px[y, mid] else 1)
     # the bottom line: the selected track
     n = T.armed - 1
     pan = e.pans[n]
@@ -175,30 +221,77 @@ def bar_dots(f, T, top, bottom, x0, x1, mid, ppb):
 
 
 def focus_page(f, T):
-    """The zoomed track (left button 4): the selected track big, with its boxes and sound; along the bottom
-    its input. Knobs: 1 mono / stereo, 2 input (3 a stereo track's right), 4-6 the box under the playhead:
-    gain, fade in, fade out. Their values show as they turn."""
+    """The zoomed track (left button 4), as drawn in the screen designer: the tape's header, a ruler (long
+    tick on the bar, middle one on the half bar, short ones on the beats), the track's sound as one solid
+    waveform in 2-pixel columns, splices as an I-beam cutting a gap through it, a line along the bottom.
+    The playhead is the notch in the ruler, in the middle. Knobs: 1 mono / stereo, 2 input (3 a stereo
+    track's right), 4-6 the box under the playhead (gain, fade in, fade out); values show as they turn."""
     e, t = T.engine, T.tape
     n = T.focus.shown
-    st = (n - 1) in e.stereo
-    header(f, "TRACK %d" % n, ("STEREO" if st else "MONO") + " ZOOM")
+    tape_header(f, T)
+    x0, x1 = 11, 124                                  # the track's area, left of it the number
+    mid = x0 + (x1 - x0) // 2
+    ruler_y, bottom_y = 11, 58
+    centre, half = 35, 16                             # the waveform's middle row and its tallest reach
     beats_across = tape.ZOOMS[t.zoom] * tape.BEATS_PER_BAR
-    x0, x1 = 0, W
-    mid = W // 2
     ppb = (x1 - x0) / beats_across
-    top, h = 11, 42
-    bar_dots(f, T, top, top + h, x0, x1, mid, ppb)
-    track_boxes(f, T, n - 1, top, h, x0, x1, mid, ppb)
-    for y in range(top, top + h):
-        if y % 2 == 0:
-            f.dot(mid, y)
+    f.text(2, 15, str(n))
     if not e.audible(n - 1):
-        f.small(1, top + 1, "MUTED")
-    src = e.input_text(n - 1) if e.device else "NO INPUT"
-    info = e.box_info()
-    f.small(1, H - 6, ("IN " + src)[:20])
-    if info:
-        f.right(W - 1, H - 6, "BOX %+.1fDB" % info["gain"], small=True)
+        f.rect(1, 23, 7, 1)                           # muted: a line under the number
+    if (n - 1) in e.stereo:
+        f.small(1, 26, "ST")
+    # the ruler
+    f.rect(x0, ruler_y, x1 - x0, 1)
+    bar = tape.BEATS_PER_BAR
+    first = int((t.pos - (mid - x0) / ppb)) - 1
+    k = first
+    while True:
+        x = int(round(mid + (k - t.pos) * ppb))
+        if x >= x1:
+            break
+        if x >= x0:
+            in_bar = k % bar
+            if abs(in_bar) < 1e-6:
+                f.rect(x, ruler_y + 1, 1, 3)          # the bar
+            elif ppb >= 3 and abs(in_bar - bar / 2) < 1e-6:
+                f.rect(x, ruler_y + 1, 1, 2)          # the half bar
+            elif ppb >= 3:
+                f.dot(x, ruler_y + 1)                 # a beat
+        k += 1
+    # the bottom line
+    f.rect(x0, bottom_y, x1 - x0, 1)
+    # the sound: each box's levels, solid, in 2-pixel columns
+    fpb = e.frames_per_beat()
+    c = e.chans(n - 1)[0]
+    lv = e.levels[c] if c < len(e.levels) else None
+    splices = []
+    boxes = e.regions[c]
+    for i, r in enumerate(boxes):
+        a, b = r[0] / fpb, r[1] / fpb
+        xa = int(round(mid + (a - t.pos) * ppb))
+        xb = int(round(mid + (b - t.pos) * ppb))
+        if i and int(boxes[i - 1][1]) == int(r[0]):
+            splices.append(xa)                        # touching the box before: a splice
+        if xb < x0 or xa >= x1 or lv is None:
+            continue
+        for x in range(max(x0, xa), min(x1, xb)):
+            col = x0 + (x - x0) // 2 * 2                         # 2-pixel columns: both read the same level
+            beat = t.pos + (col + 1 - mid) / ppb
+            idx = int(beat * tape.RES)
+            if 0 <= idx < len(lv):
+                h = max(1, int(round(min(1.0, float(lv[idx])) * half)))
+                f.rect(x, centre - h, 1, 2 * h + 1)
+    for x in splices:
+        if x0 <= x < x1:
+            for y in range(ruler_y + 2, bottom_y - 1):          # the I-beam; where it crosses the sound, a gap
+                beside = f.px[y, x - 1] if x > 0 else 0
+                f.dot(x, y, 0 if beside or (x + 1 < W and f.px[y, x + 1]) else 1)
+            f.rect(x - 2, ruler_y + 2, 5, 1)
+            f.rect(x - 2, bottom_y - 2, 5, 1)
+    # the playhead: a notch in the ruler
+    f.rect(mid - 1, ruler_y, 3, 1, 0)
+    f.dot(mid, ruler_y + 1)
+    f.dot(mid, ruler_y + 2)
 
 
 # ------------------------------------------------------------------ instruments

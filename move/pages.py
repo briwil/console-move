@@ -79,27 +79,7 @@ def tape_page(f, T):
     ppb = (x1 - x0) / beats_across                  # pixels per beat
     first = ((T.armed - 1) // TRACKS_SHOWN) * TRACKS_SHOWN
     top = 10
-    # bars and beats
-    bar = tape.BEATS_PER_BAR
-    b0 = t.pos - (mid - x0) / ppb
-    k = int(b0 // bar)
-    while True:
-        bx = int(round(mid + (k * bar - t.pos) * ppb))
-        if bx > x1:
-            break
-        if bx >= x0:
-            for y in range(top, top + TRACKS_SHOWN * LANE_H, 2):
-                f.dot(bx, y)
-        k += 1
-    if ppb * 1 >= 4:                                 # beats, if there's room
-        k = int(b0)
-        while True:
-            bx = int(round(mid + (k - t.pos) * ppb))
-            if bx > x1:
-                break
-            if bx >= x0:
-                f.dot(bx, top)
-            k += 1
+    bar_dots(f, T, top, top + TRACKS_SHOWN * LANE_H, x0, x1, mid, ppb)
     region = e.loop_region()
     for i in range(TRACKS_SHOWN):
         n = first + i                                # 0-7
@@ -115,34 +95,7 @@ def tape_page(f, T):
             f.dot(8, y + LANE_H // 2)
         if not e.audible(n):
             f.rect(1, y + LANE_H - 2, 6, 1)           # muted: a line under the number
-        chans = e.chans(n)
-        for c in chans[:1]:                          # the left side (a stereo track's right is under it)
-            lv = e.levels[c] if c < len(e.levels) else None
-            for r in e.regions[c]:
-                a, b = r[0] / fpb, r[1] / fpb
-                ra = int(round(mid + (a - t.pos) * ppb))
-                rb = int(round(mid + (b - t.pos) * ppb))
-                if rb < x0 or ra > x1:
-                    continue
-                # each box drawn on its own, with its ends and a pixel's gap where two boxes touch (a splice)
-                left_end, right_end = ra >= x0, rb - 1 <= x1 - 1
-                ra, rb = max(x0, ra), min(x1 - 1, rb - 1)
-                if rb < ra:
-                    continue
-                f.rect(ra, y, rb - ra + 1, 1)
-                f.rect(ra, y + LANE_H - 2, rb - ra + 1, 1)
-                if left_end:
-                    f.rect(ra, y, 1, LANE_H - 1)
-                if right_end:
-                    f.rect(rb, y, 1, LANE_H - 1)
-                if lv is not None:
-                    for x in range(ra, rb + 1):
-                        beat = t.pos + (x - mid) / ppb
-                        idx = int(beat * tape.RES)
-                        if 0 <= idx < len(lv):
-                            h = int(min(1.0, float(lv[idx])) * (LANE_H - 4))
-                            if h:
-                                f.rect(x, y + 1 + (LANE_H - 3 - h) // 2, 1, max(1, h))
+        track_boxes(f, T, n, y, LANE_H, x0, x1, mid, ppb)
     # the loop's in and out points
     if region:
         for edge in region:
@@ -164,20 +117,88 @@ def tape_page(f, T):
     f.small(1, H - 6, info)
 
 
+def track_boxes(f, T, n, y, h, x0, x1, mid, ppb):
+    """Track n's boxes between y and y + h, each with its ends (a splice shows as a gap), and its sound."""
+    e, t = T.engine, T.tape
+    fpb = e.frames_per_beat()
+    for c in e.chans(n)[:1]:                         # the left side (a stereo track's right is under it)
+        lv = e.levels[c] if c < len(e.levels) else None
+        for r in e.regions[c]:
+            a, b = r[0] / fpb, r[1] / fpb
+            ra = int(round(mid + (a - t.pos) * ppb))
+            rb = int(round(mid + (b - t.pos) * ppb))
+            if rb < x0 or ra > x1:
+                continue
+            left_end, right_end = ra >= x0, rb - 1 <= x1 - 1
+            ra, rb = max(x0, ra), min(x1 - 1, rb - 1)
+            if rb < ra:
+                continue
+            f.rect(ra, y, rb - ra + 1, 1)
+            f.rect(ra, y + h - 2, rb - ra + 1, 1)
+            if left_end:
+                f.rect(ra, y, 1, h - 1)
+            if right_end:
+                f.rect(rb, y, 1, h - 1)
+            if lv is not None:
+                for x in range(ra, rb + 1):
+                    beat = t.pos + (x - mid) / ppb
+                    idx = int(beat * tape.RES)
+                    if 0 <= idx < len(lv):
+                        v = int(min(1.0, float(lv[idx])) * (h - 4))
+                        if v:
+                            f.rect(x, y + 1 + (h - 3 - v) // 2, 1, max(1, v))
+
+
+def bar_dots(f, T, top, bottom, x0, x1, mid, ppb):
+    """Bar lines (dotted) and beat ticks along the top."""
+    t = T.tape
+    bar = tape.BEATS_PER_BAR
+    b0 = t.pos - (mid - x0) / ppb
+    k = int(b0 // bar)
+    while True:
+        bx = int(round(mid + (k * bar - t.pos) * ppb))
+        if bx > x1:
+            break
+        if bx >= x0:
+            for y in range(top, bottom, 2):
+                f.dot(bx, y)
+        k += 1
+    if ppb >= 4:
+        k = int(b0)
+        while True:
+            bx = int(round(mid + (k - t.pos) * ppb))
+            if bx > x1:
+                break
+            if bx >= x0:
+                f.dot(bx, top)
+            k += 1
+
+
 def focus_page(f, T):
-    """The zoomed track: what each of the eight knobs does and its value, one knob a line (knob 1 MONO /
-    STEREO, 2 the input, 3 a stereo track's right input, 4-6 the box under the playhead)."""
+    """The zoomed track (left button 4): the selected track big, with its boxes and sound; along the bottom
+    its input. Knobs: 1 mono / stereo, 2 input (3 a stereo track's right), 4-6 the box under the playhead:
+    gain, fade in, fade out. Their values show as they turn."""
+    e, t = T.engine, T.tape
     n = T.focus.shown
-    header(f, "TRACK %d" % n, "ZOOM")
-    knobs = T.knob_labels() or []
-    for i, item in enumerate(knobs[:8]):
-        name, value = (item[0], item[1]) if isinstance(item, (tuple, list)) else (str(item), "")
-        live = item[2] if isinstance(item, (tuple, list)) and len(item) > 2 else True
-        y = 11 + i * 6
-        name = {"MONO / STEREO": "MONO/ST"}.get(name, name)
-        f.small(1, y, "%d %s" % (i + 1, name[:8]))
-        if live:
-            f.right(W - 1, y, str(value)[:20], small=True)
+    st = (n - 1) in e.stereo
+    header(f, "TRACK %d" % n, ("STEREO" if st else "MONO") + " ZOOM")
+    beats_across = tape.ZOOMS[t.zoom] * tape.BEATS_PER_BAR
+    x0, x1 = 0, W
+    mid = W // 2
+    ppb = (x1 - x0) / beats_across
+    top, h = 11, 42
+    bar_dots(f, T, top, top + h, x0, x1, mid, ppb)
+    track_boxes(f, T, n - 1, top, h, x0, x1, mid, ppb)
+    for y in range(top, top + h):
+        if y % 2 == 0:
+            f.dot(mid, y)
+    if not e.audible(n - 1):
+        f.small(1, top + 1, "MUTED")
+    src = e.input_text(n - 1) if e.device else "NO INPUT"
+    info = e.box_info()
+    f.small(1, H - 6, ("IN " + src)[:20])
+    if info:
+        f.right(W - 1, H - 6, "BOX %+.1fDB" % info["gain"], small=True)
 
 
 # ------------------------------------------------------------------ instruments
@@ -259,43 +280,61 @@ def sound_page(f, T):
 
 
 def seq_page(f, T):
-    """The sequencer: the picked lane's steps (a first version)."""
+    """The drum sequencer: the picked lane's 16 steps on the buttons (drawn small at the top), and what the
+    knobs do: the lane's settings, or while a step button is held, that step's (see moveseq.py)."""
     e = T.engine
-    seq = e.seq
-    sp = T.sp()
     synth = T.synth_shown()
-    header(f, ("SYNTH SEQ" if synth else "SEQUENCER"), "PAT %d" % (getattr(seq, "current", 0) + 1))
     if synth:
+        header(f, "SYNTH SEQ", "PAT %d" % (getattr(e.seq, "current", 0) + 1))
         f.small(1, 12, "SYNTH SEQUENCER:")
         f.small(1, 19, "STEP BUTTONS COMING NEXT")
         return
-    lane = getattr(sp, "lane", 0)
-    d = e.drums
-    names = getattr(d, "lane_names", None) or []
-    f.text(1, 12, (names[lane] if lane < len(names) else "LANE %d" % (lane + 1))[:20])
+    ms = T.mseq
+    sp, seq = T.seqp, e.seq
+    lane = sp.lane
     ln = seq.lane(lane)
-    length = getattr(ln, "length", 16)
-    pos = None
-    if e.playing:
-        try:
-            pos = seq.position(e.seq_clock, e.frames_per_beat())
-        except Exception:
-            pos = None
-    playing_step = None
-    if isinstance(pos, (tuple, list)):
-        playing_step = pos[1] if len(pos) > 1 else pos[0]
-    elif isinstance(pos, (int, float)):
-        playing_step = int(pos)
-    for i in range(min(16, length)):
-        col, row = i % 8, i // 8
-        x, y = 4 + col * 15, 24 + row * 15
-        on = seq.step(lane, i).on
-        if on:
-            f.rect(x, y, 12, 12)
+    first = ms.first()
+    names = getattr(e.drums, "lane_names", None) or []
+    name = names[lane] if lane < len(names) else "LANE %d" % (lane + 1)
+    pat = "PAT %d" % (seq.current + 1) + (">%d" % (seq.queued + 1) if seq.queued is not None else "")
+    if ms.held is None:
+        header(f, name[:13], pat)
+    else:
+        header(f, "STEP %d" % (ms.held + 1), ms.page_name()[:12])
+    # the 16 steps the buttons show
+    at = ms.playing_step()
+    for k in range(16):
+        i = first + k
+        x, y = 1 + k * 8, 11
+        if i >= ln.length:
+            f.dot(x + 3, y + 3)
+            continue
+        on = ln.steps[i].on
+        (f.rect if on else f.frame)(x, y, 7, 7)
+        if i == ms.held:
+            f.frame(x - 1, y - 1, 9, 9)
+        if at is not None and i == at:
+            f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
+    f.small(1, 20, "STEPS %d-%d OF %d" % (first + 1, min(first + 16, ln.length), ln.length))
+    # the knobs
+    knobs = ms.knob_list()
+    for i, (label, value, locked) in enumerate(knobs[:8]):
+        col, row = divmod(i, 4)
+        x, y = col * 65, 28 + row * 7
+        f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
+        if locked:
+            f.rect(x + 62 - Frame_width(str(value)[:5]) - 2, y - 1, Frame_width(str(value)[:5]) + 3, 7, 1)
+            f.right(x + 62, y, str(value)[:5], small=True, c=0)
         else:
-            f.frame(x, y, 12, 12)
-        if playing_step is not None and i == int(playing_step) % max(1, length):
-            f.rect(x + 4, y + 4, 4, 4, 0 if on else 1)
+            f.right(x + 62, y, str(value)[:5], small=True)
+    if ms.held is None and len(knobs) <= 4:
+        f.small(66, 28, "+- PATTERN")
+        f.small(66, 35, "<> STEPS")
+        f.small(66, 42, "HOLD A STEP:")
+        f.small(66, 49, " ITS SETTINGS")
+    elif ms.held is not None and ms.knob_page == 0:
+        f.small(66, 28, "+- PAGE %d/%d" % (ms.knob_page + 1, len(ms.sound_pages()) + 1))
+        f.small(66, 35, "(SOUND LOCKS)")
 
 
 # ------------------------------------------------------------------ effects

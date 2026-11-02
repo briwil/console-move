@@ -68,3 +68,12 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   /data/UserData/zig). Needs a GitHub fine-grained access key, read-only "Contents" on console-move only,
   saved in /data/UserData/console/github-token. The drum machines and synths stay as built on the Pi
   (`build-for-move.sh`, full) until they need rebuilding.
+
+## The app's controls (move/app.py)
+- Left buttons, top to bottom: tape; instruments (press again: the drum's sound, again: its sequencer); FX;
+  the selected track zoomed (knob 1 mono / stereo, 2 its input, 4-6 the box under the playhead).
+- Drum sequencer (move/moveseq.py): pads pick the drum; step buttons are its 16 steps (<- / -> for 17-64);
+  knobs 1 length, 2 rate, 3 euclid, 4 shift; + / - the pattern. Hold a step: knobs 1 velocity, 2 chance,
+  3 ratchets; + / - go through the drum's sound pages, whose knobs then lock to that step.
+- Menu: the project menu. Shift + Menu: export (data/exports/<song>/: a stereo mix and each track).
+- Shift + Back: save, quit and hand the Move back.

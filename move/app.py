@@ -8,9 +8,9 @@ with the simulator's stand-in pygame, and pages.py draws the Move's screen from 
 
 Controls (see MOVE-NOTES.md):
   Play / Record / Loop / Undo, Shift for their second jobs; Copy = LIFT, Delete = CUT, Capture = DROP,
-  Sample = SPLICE, Mute = mute (Shift: solo); Menu = the project menu, Back = back; + / - = the Pi's knob 9;
+  Sample = SPLICE, Mute = mute (Shift: solo); Menu = the project menu (Shift: export), Back = back; + / - = the Pi's knob 9;
   left buttons (top to bottom): tape, instruments, FX, the selected track's page (its input); knobs 1-8; jog wheel = the big knob (push to
-  choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the sequencer the 16 steps;
+  choose; Shift + turn = knob 10); step buttons 1-8 select tracks (Shift: arm), on the drum sequencer the 16 steps (see moveseq.py);
   pads play the instrument you're on. Shift + touch a knob = push it. Shift + Back: save, quit and go back to the normal Move
   (Ctrl+C over SSH only quits the app).
 """
@@ -35,6 +35,7 @@ import console                    # noqa: E402
 import menu as menu_mod           # noqa: E402
 import kitmenu                    # noqa: E402
 import pages                      # noqa: E402
+import moveseq                    # noqa: E402
 from screen import Frame          # noqa: E402
 
 FPS_SCREEN = 20
@@ -44,7 +45,7 @@ FPS_SCREEN = 20
 PRESS = {85: ("PLAY", "HOME"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_REGION"),
          62: ("LEFT", "LOOP_IN"), 63: ("RIGHT", "LOOP_OUT"), 56: ("UNDO", "UNDO"),
          52: ("DROP", "DROP_INSERT"), 118: ("SPLICE", "SPLICE_ALL"), 88: ("MUTE", "SOLO"),
-         50: ("FILE", "FILE"), 3: ("HOME", "HOME_PUSH_SHIFT"),
+         50: ("FILE", "EXPORT"), 3: ("HOME", "HOME_PUSH_SHIFT"),
          42: ("DRUMS", "DRUMS_BACK"), 41: ("FX", "FX"), 40: ("INPUT", "ARM_ALL")}
 HOLD = {60: "COPY", 119: "CUT"}            # hold and move to take several boxes (Shift + Copy: select)
 SHIFT, BACK, TAPE, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 43, 55, 54, 14, 79
@@ -111,11 +112,12 @@ class MoveBoard:
         T, e, k = self.T, self.T.engine, self.keys
         if num in STEPS:
             n = num - 15                                   # 1-16
+            if T.seq_page and not T.synth_shown():
+                k.put(("STEP", n, bool(val)))              # pressed and let go (hold one: its settings)
+                return
             if not val:
                 return
-            if T.seq_page and not T.synth_shown():
-                k.put(("STEP", n))
-            elif n <= 8:
+            if n <= 8:
                 k.put(("ARM%d" if self.shift else "TRACK%d") % n)
             return
         if 0 <= num < 8 and val and self.shift:         # Shift + touch a knob: push it
@@ -154,8 +156,8 @@ class MoveBoard:
             voice = d.lane_voice[p] if p < len(d.lane_voice) else 0
             T.drum_voice = voice
             T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()
-        if T.seq_page and p < 8:
-            self.keys.put(("LANE", p + 1, bool(vel), e.seq_clock, False))
+        if T.seq_page and vel:
+            self.keys.put(("PICK_LANE", p))
 
 
 # ---------------------------------------------------------------- lights
@@ -189,14 +191,11 @@ class Lights:
         for b in (43, 42, 41, 40):
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
+        seq_lights = T.mseq.step_lights() if T.mseq.active() else None
         for i in range(16):
             v = 0
-            if T.seq_page and e and not T.synth_shown():
-                lane = getattr(T.sp(), "lane", 0)
-                try:
-                    v = 127 if e.seq.step(lane, i).on else 0
-                except Exception:
-                    v = 0
+            if T.mseq.active():
+                v = seq_lights[i]
             elif i < 8:
                 v = 127 if i == T.armed - 1 else (40 if e and i in e.arm_extra else 0)
             self.note(16 + i, v)
@@ -204,8 +203,9 @@ class Lights:
         lanes = 0
         if e and e.slot is not None and e.drums:
             lanes = 32 if e.is_synth(e.slots[e.slot]) else e.drums.lanes
+        picked = T.seqp.lane if T.mseq.active() else -1
         for p in range(32):
-            self.note(68 + p, 20 if p < lanes else 0)
+            self.note(68 + p, 127 if p == picked else 20 if p < lanes else 0)
 
 
 # ---------------------------------------------------------------- the app
@@ -257,6 +257,7 @@ def main():
     keys = queue.Queue()
     board = MoveBoard(keys, T)
     T.shift_held = lambda: board.shift
+    T.mseq = moveseq.MoveSeq(T)
     frame = Frame()
     lights = Lights(core)
     print("Console on the Move: running. Ctrl+C quits (the song is saved).")
@@ -292,7 +293,7 @@ def main():
                 pages.draw(frame, T, m)
                 core.display(frame.bytes())
             if now >= next_lights:
-                next_lights = now + 0.1
+                next_lights = now + 0.03
                 lights.update(T, board)
             time.sleep(0.005)
     except KeyboardInterrupt:
@@ -321,11 +322,25 @@ def handle(name, T, m, e):
     if isinstance(name, tuple) and name[0] == "VOLUME":
         T.phones_volume(name[1] * 0.02)
         return
+    ms = T.mseq
     if isinstance(name, tuple) and name[0] == "STEP":
-        lane = getattr(T.sp(), "lane", 0)
-        e.seq.toggle(lane, name[1] - 1)
-        e.seq_changed()
+        if ms.active():
+            ms.step(name[1], name[2])
         return
+    if isinstance(name, tuple) and name[0] == "PICK_LANE":
+        if ms.active():
+            ms.pick_lane(name[1])
+        return
+    if ms.active() and not (m.open or m.kits.open) and T.fx_page is None:
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            ms.knob(name[1], name[2], name[3])
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
+            ms.plus_minus(1 if name[2] > 0 else -1)
+            return
+        if name in ("LEFT", "RIGHT"):
+            ms.arrows(-1 if name == "LEFT" else 1)
+            return
     if name == "INPUT" and not (m.open or m.kits.open):
         # left button 4: the selected track's own page (knob 1 mono / stereo, knob 2 its input); again to leave
         for _ in range(4):

@@ -25,7 +25,7 @@ ZIG_VERSION = "0.13.0"
 ZIG_DIR = os.path.join(BASE, "zig")
 ZIG = os.path.join(ZIG_DIR, "zig")
 REPO = "briwil/console-move"
-SKIP = ("pi-app/splash/", "pi-app/fonts/", "pi-app/schwung/src/", "pi-app/schwung/modules/")
+SKIP = ("pi-app/splash/", "pi-app/schwung/src/", "pi-app/schwung/modules/")
 TARGET = "aarch64-linux-gnu.2.35"
 
 

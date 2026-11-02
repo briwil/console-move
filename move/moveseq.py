@@ -159,11 +159,12 @@ class MoveSeq:
         lane, i = sp.lane, self.held
         sp._edit(("pad", p, i, time.monotonic()))
         off = self.sel == p
+        was_set = self.engaged(key)
         for j in self.selected:
             self._pad_one(lane, j, p, key, off)
         if off:
             self.sel = None
-            self.T.say("%s  %s OFF" % (self.which(), label), 2)
+            self.T.say("%s  %s OFF" % (self.which(), label) if was_set else label, 2)
         else:
             self.sel = p
             self.T.say("%s  %s  %s  (KNOB 1)" % (self.which(), label, self.item_value(key)), 2)
@@ -173,32 +174,22 @@ class MoveSeq:
         return "STEP %d" % (self.held + 1) if len(self.selected) == 1 else "%d STEPS" % len(self.selected)
 
     def _pad_one(self, lane, i, p, key, off):
-        seq, e = self.seq, self.T.engine
-        if i >= seq.lane(lane).length:
+        """Tapping a pad only picks it (to see what it is); it's set when knob 1 turns. Picked again: off."""
+        seq = self.seq
+        if i >= seq.lane(lane).length or not off:
             return
         with seq.lock:
             st = seq.step(lane, i)
-            if off:
-                if key == "vel":
-                    st.vel = sequencer.DEFAULT_VELOCITY
-                elif key == "chance":
-                    st.chance = 0
-                elif key == "ratchet":
-                    st.ratchet = 1
-                elif isinstance(key, str):
-                    st.comp.pop(key, None)
-                else:
-                    st.locks.pop(key, None)
+            if key == "vel":
+                st.vel = sequencer.DEFAULT_VELOCITY
+            elif key == "chance":
+                st.chance = 0
+            elif key == "ratchet":
+                st.ratchet = 1
+            elif isinstance(key, str):
+                st.comp.pop(key, None)
             else:
-                st.on = True
-                if isinstance(key, str) and key in sequencer.COMPONENTS:
-                    st.comp.setdefault(key, 0)
-                    if key in ("rand", "rup", "rdown"):              # one pitch movement at a time
-                        for other in ("rand", "rup", "rdown"):
-                            if other != key:
-                                st.comp.pop(other, None)
-                elif not isinstance(key, str):
-                    st.locks.setdefault(key, e.drums.get_param(key))
+                st.locks.pop(key, None)
 
     def set_selected(self, delta, shift):
         """Knob 1 while a step is held and a pad picked: that setting."""
@@ -229,7 +220,14 @@ class MoveSeq:
                 at = RATCHETS.index(st.ratchet) if st.ratchet in RATCHETS else 0
                 st.ratchet = RATCHETS[max(0, min(len(RATCHETS) - 1, at + one))]
             elif isinstance(key, str):
-                st.comp[key] = max(0, min(len(sequencer.COMPONENTS[key]) - 1, st.comp.get(key, 0) + one))
+                if key in st.comp:
+                    st.comp[key] = max(0, min(len(sequencer.COMPONENTS[key]) - 1, st.comp[key] + one))
+                else:
+                    st.comp[key] = 0                                # the first turn: its first value
+                if key in ("rand", "rup", "rdown"):                 # one pitch movement at a time
+                    for other in ("rand", "rup", "rdown"):
+                        if other != key:
+                            st.comp.pop(other, None)
             else:
                 st.locks[key] = e.drums.stepped(key, st.locks.get(key, e.drums.get_param(key)), clicks)
 
@@ -240,10 +238,12 @@ class MoveSeq:
         for p in range(32):
             if p >= len(items):
                 out.append(0)
+            elif not self.engaged(items[p][0]):
+                out.append(20)                             # tapped to look at, not set: stays dim
             elif p == self.sel:
                 out.append(127 if int(time.monotonic() * 4) % 2 else 0)
             else:
-                out.append(127 if self.engaged(items[p][0]) else 20)
+                out.append(127)
         return out
 
     def playing_step(self):

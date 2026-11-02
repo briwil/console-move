@@ -423,7 +423,7 @@ def seq_page(f, T):
             label, value, on = knobs[0]
             f.centre(64, 30, str(label)[:16])
             f.centre(64, 40, ("KNOB 1: %s" % value)[:22], small=True)
-            f.centre(64, 46, "SAME PAD AGAIN: OFF", small=True)
+            f.centre(64, 46, "SAME PAD AGAIN: OFF" if on else "TURN KNOB 1 TO SET IT", small=True)
         return
     # the knobs
     knobs = ms.knob_list()

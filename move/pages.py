@@ -348,7 +348,9 @@ def sound_page(f, T):
     voice = T.drum_voice
     names = getattr(d, "names", None) or []
     vname = names[voice] if voice < len(names) else ""
-    header(f, ("%s %s" % (vname, page_name)).strip()[:18], "%d/%d" % (T.drum_tab + 1, len(pages)))
+    octave = getattr(T, "octave", 0)
+    header(f, ("%s %s" % (vname, page_name)).strip()[:15 if octave else 18],
+           ("OCT %+d  " % octave if octave else "") + "%d/%d" % (T.drum_tab + 1, len(pages)))
     now = time.monotonic()
     turning = None
     for i, _p in enumerate(params):

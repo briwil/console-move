@@ -171,7 +171,9 @@ story += [
     p("An instrument's sound", H2),
     table([
         ("Knobs 1-8", "The settings on this page. While one turns, it shows big."),
-        ("+ / -", "The next / previous page of settings."),
+        ("Up / Down (+ / -)", "The pads' octave (a synth's pads, and the chromatic drum pads on the right). The "
+         "screen shows OCT +1 etc."),
+        ("Left / Right", "The previous / next page of settings."),
         ("Shift + touch a knob", "That setting back to its starting value."),
         ("Settings that pick a mode", "DIST, CHOKE, a wave, on / off: it takes 5 clicks the same way to move to "
          "the next choice, so you don't skip past. Shift + turn: one choice a click. Lists get 3 clicks a choice: "

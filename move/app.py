@@ -155,6 +155,7 @@ class MoveBoard:
                     note = seq.row_note(base + p)
                 except Exception:
                     note = 48 + p
+                note = max(0, min(127, note + 12 * getattr(T, "octave", 0)))
                 self.notes_down[p] = note
                 (T.midi_note if T.drum_page else e.note_on)(note, vel)
             else:
@@ -182,7 +183,7 @@ class MoveBoard:
             return
         if vel:                                            # right 4 x 4: the picked drum, a semitone a pad
             lane = min(T.seqp.lane, d.lanes - 1)
-            semis = r * 4 + (c - 4)
+            semis = r * 4 + (c - 4) + 12 * getattr(T, "octave", 0)
             e._auditions.append((0, lane, vel, ms.pitch_locks(lane, {}, semis)))
 
 
@@ -323,6 +324,7 @@ def main():
     T.shift_held = lambda: board.shift
     T.mseq = moveseq.MoveSeq(T)
     T.song_page = False
+    T.octave = 0                                     # Up / Down on a sound page: the pads' octave
     T.song = movesong.Song(T)
     T.key("DRUMS")                                   # start on left button 1: the instruments
     frame = Frame()
@@ -441,6 +443,15 @@ def handle(name, T, m, e):
         T.phones_volume(name[1] * 0.02)
         return
     ms = T.mseq
+    on_sound = T.drum_page and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)
+    if on_sound and e and e.drums:
+        # a sound page: Up / Down (+ / -) are the pads' octave (as on the Move); Left / Right the settings pages
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9 and not name[3]:
+            T.octave = max(-4, min(4, T.octave + (1 if name[2] > 0 else -1)))
+            T.say("OCTAVE %s" % ("%+d" % T.octave if T.octave else "0"), 2)
+            return
+        if name in ("LEFT", "RIGHT"):
+            name = ("KNOB", 9, 1 if name == "RIGHT" else -1, False)
     if name == "RECORD" and e and not T.recording and not e.record_tracks():
         T.say("ARM A TRACK FIRST: SHIFT + STEP BUTTON", 3)
         return

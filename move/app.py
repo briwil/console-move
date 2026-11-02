@@ -350,6 +350,7 @@ def main():
             last = now
             if now >= next_screen:
                 next_screen = now + 1 / FPS_SCREEN
+                menu_tick(m)
                 pages.draw(frame, T, m)
                 core.display(frame.bytes())
             if now >= next_lights:
@@ -378,6 +379,20 @@ def main():
         elif m.restart:
             print("Restarting with the new version...")
             sys.exit(moveupdater.RESTART_CODE)
+
+
+def menu_tick(m):
+    """The Pi redraws the settings each frame (menu.draw), which keeps SOFTWARE UPDATE's row current and
+    restarts after an install; the Move never calls draw, so this does that part."""
+    if not m.open or getattr(m, "mode", None) not in ("settings", "wifi"):
+        return
+    m.refresh()
+    u = getattr(m, "updater", None)
+    if m.mode == "settings" and u and u.state == "done" and not u.needs_setup:
+        if getattr(m, "_done_at", None) is None:
+            m._done_at = time.monotonic()
+        elif time.monotonic() - m._done_at > 2.0:
+            m.restart = True
 
 
 def handle(name, T, m, e):

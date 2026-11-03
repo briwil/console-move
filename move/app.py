@@ -210,7 +210,17 @@ class MoveBoard:
             lane = min(T.seqp.lane, d.lanes - 1)
             semis = r * 4 + (c - 4) + 12 * getattr(T, "octave", 0)
             locks = ms.pitch_locks(lane, {}, semis)
-            if T.live_rec and e.playing and T.seq_page:      # recorded with its pitch: the step locks it
+            if T.seq_page and ms.active() and ms.down and not ms.selected:
+                length = e.seq.lane(lane).length               # hold a step + a chromatic pad: that note on that step
+                with e.seq.lock:
+                    for i in ms.down:
+                        if i < length:
+                            st = e.seq.step(lane, i)
+                            st.on = True
+                            st.locks.update(locks)
+                e.seq_changed()
+                T.say("STEP %s  PITCH %+d" % (",".join(str(i + 1) for i in sorted(ms.down)), semis), 2)
+            elif T.live_rec and e.playing and T.seq_page:      # recorded with its pitch: the step locks it
                 i = e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
                 with e.seq.lock:
                     e.seq.step(lane, i).locks.update(locks)

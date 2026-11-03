@@ -119,7 +119,8 @@ story += [
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
-         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, then delay, then off).  4 The recorder "
+         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, the insert effect if you installed one, "
+         "then off).  4 The recorder "
          "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
         ("Shift + touch a knob", "Pushes that knob (the Pi's knob push): on the tape it mutes that track."),
@@ -164,10 +165,20 @@ story += [
       "instrument onto the tape uses the zoomed track's input (knob 2).", BODY),
     table([
         ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it)."),
+        ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
+         "(the ones without a picture yet show their name). Push to choose. The last choice, <b>+ GET MORE FROM "
+         "SCHWUNG</b>, is a store of ready-made Schwung instruments and effects: push to install one (the Move "
+         "needs Wi-Fi; it downloads straight from GitHub)."),
+        ("SAMPLER", "A drum machine of 16 samples, one per drum: each takes a .wav from the Move's sample folders "
+         "(SAMPLE, LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
         ("Left button 1 again", "The picked instrument's sound page; again: its sequencer."),
     ]),
+    p("Recording the Move's input jack", H2),
+    p("The zoomed track's input (knob 2) also offers <b>INPUT L</b> and <b>INPUT R</b>: whatever is plugged "
+      "into the Move's audio input (a guitar, a mic). Pick one for a mono track, both for stereo. You hear it "
+      "while you arm the track.", BODY),
     p("An instrument's sound", H2),
     table([
         ("Knobs 1-8", "The settings on this page. While one turns, it shows big."),
@@ -180,11 +191,24 @@ story += [
          "the lane's RATE, MULTIPLY / PULSE / HOLD / JUMP and the pitch ones, song-mode patterns, the grid "
          "and the pattern (Shift + wheel). Numbers (volume, velocity, tune...) take 3 clicks a step."),
         ("Knob speed", "Shift + turn the volume knob: how many clicks of a knob make one step of a number "
-         "(1-12, starts at 3). More clicks = easier to be precise. It is kept when you switch off."),
+         "(1-12, starts at 4). More clicks = easier to be precise. It is kept when you switch off."),
         ("Reverb and delay", "Each drum's REVERB and DELAY knobs on its sound page set how much of that drum goes "
          "to the effect. The effects' own settings (size, time, tone, feedback, level) are on left button 3."),
         ("Pads", "Play the drums (or the synth)."),
         ("Menu", "The kit menu (load / save kits)."),
+    ]),
+    p("LFOs", H2),
+    p("Every instrument has two LFOs per pattern (a new pattern starts as a copy of the one you came from, then "
+      "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2.", BODY),
+    table([
+        ("Knob 1  DEST", "Which setting it moves (numbers only)."),
+        ("Knob 2  WAVE", "Sine, triangle, saw up / down, square, random."),
+        ("Knob 3  SPEED", "8 bars down to 1/32 of a beat, in time with the tempo."),
+        ("Knob 4  DEPTH", "How far it swings, -100 to +100 %."),
+        ("Knob 5  PHASE", "Where in the cycle it starts."),
+        ("Knob 6  MODE", "FREE (runs with the song) or TRIG (restarts at the pattern's first step)."),
+        ("Step buttons", "The LFO's 16 steps (1/16 notes, one bar). Tap: that step rests. Hold a step and turn "
+         "knob 2 (its own WAVE) or knob 4 (its own DEPTH)."),
     ]),
 ]
 
@@ -243,17 +267,37 @@ story += [
         ("+ / -", "+ switches song mode on, - off. <b>Shift + left button 2</b> does the same from any page "
          "(the tape shows SONG in its top line while it's on). Off: the picked pattern plays, as usual."),
     ]),
-    p("Synths: the synth sequencer screen isn't done yet on the Move (its pads play the synth).", SMALL),
+    p("The synth sequencer", H2),
+    p("A synth's sequencer works on chords. The 16 step buttons are the steps (Left / Right for more).", BODY),
+    table([
+        ("Step buttons", "Tap: the notes on / off. Hold a step: the pads light its notes; tap pads to add or "
+         "remove notes. Hold a step and tap a later step: that is where the notes end (also across pages)."),
+        ("Knobs (no step held)", "1 length, 2 rate, 3 type (UNIFIED: one sequence; PER NOTE: tap a pad to see only "
+         "its steps), 4 the lit note's own length, 5 key, 6 scale."),
+        ("Shift + steps", "Select steps: the pads are their settings. LENGTH, VELOCITY, CHANCE, MULTIPLY, "
+         "<b>NUDGE</b> (a step early or late, -50 to +50 %), then the synth's own settings as parameter locks. "
+         "Knob 1 sets the picked one."),
+        ("Record", "On a drum or synth sequencer page: the pads you play go into the pattern while it plays "
+         "(a synth note lasts as long as you hold the pad; chromatic drum pads keep their pitch). Press again to stop. "
+         "It doesn't touch the tape."),
+        ("Drums, by hand", "Hold a step button and press a right-half pad: the step turns on with that pitch."),
+    ]),
 
     p("FX", H2),
+    p("The reverb and delay are on each instrument <i>before</i> the tape, so they are recorded with the sound.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: back."),
-        ("Knobs 1-8", "How much of each track goes to the effect (its send)."),
-        ("+ / -", "Reverb size / delay time."),
-        ("Shift + turn the jog wheel", "Reverb tone / delay feedback."),
-        ("Jog wheel", "The effect's level."),
+        ("Left button 3", "Reverb page, again: delay page, again: the INSERT page (only once you have installed "
+         "an effect), again: back."),
+        ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
+        ("Knob 4", "How much of the picked instrument goes to this effect."),
+        ("INSERT page", "Knob 1 picks an installed Schwung effect (Tapescam, Ducker...), knobs 2-4 its first three "
+         "settings. It sits on the whole output, so it is not recorded on the tape. The Ducker ducks when drum 1 "
+         "is hit."),
     ]),
-    p("The screen labels these settings 1, 2, 3; they're on + / -, Shift + wheel and the wheel.", SMALL),
+
+    p("Ableton Link", H2),
+    p("Menu, SETTINGS, MIDI SYNC, LINK. Console then shares its tempo (while stopped; a playing tape keeps its "
+      "tempo) and its Play / Stop with Live and phone apps on the same Wi-Fi. Starting waits for the next bar.", BODY),
 
     p("Menus and export", H2),
     table([
@@ -266,8 +310,9 @@ story += [
     p("scp -r \"ableton@move.local:/data/UserData/console/data/exports\" ~/Desktop/move-exports", CODE),
 
     p("Not on the Move yet", H2),
-    p("The synth sequencer screen and its step buttons; bounce (recording several tracks onto one); the tape's "
-      "bar/beat grid when zoomed in a long way. Songs are saved in /data/UserData/console/data.", BODY),
+    p("Step components (pulse, hold, jump) on synth notes; the LFOs' parameter locks beyond depth and wave; "
+      "pictures for the instruments that still show their name; the tape's bar/beat grid when zoomed in a "
+      "long way. Songs are saved in /data/UserData/console/data.", BODY),
 ]
 
 # keep every heading on the same page as the picture or table after it

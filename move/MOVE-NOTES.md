@@ -79,7 +79,7 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
 - Drum pads: left 4 x 4 the drums (bottom left first), right 4 x 4 the picked drum chromatically (its TUNE /
   PITCH setting locked, SEMI clicks a semitone). Shift + pad 1-16: the instrument's pattern.
 - Drum sequencer (move/moveseq.py): step buttons = 16 steps (<- / -> for 17-64), tap on / off; knobs 1 length,
-  2 rate, 3 euclid, 4 shift; + / - the pattern. Shift + tap steps: select them; the pads are then their step
+  2 rate, 3 euclid, 4 shift; + / - the pads' octave (patterns: Shift + a pad). Shift + tap steps: select them; the pads are then their step
   settings (OP-XY style: velocity, chance, multiply, pulse, hold, jump, random, ramp up / down, then the drum's
   sound locks); tap a pad = on (knob 1 sets it), again = off; tap a step = done. Pulse / hold / jump / pitch
   play in pi-app/sequencer.py (Step.comp, _path / _slot).

@@ -192,10 +192,9 @@ class MoveSynth:
     def plus_minus(self, way):
         if self.down or self.selected:
             return
-        seq, e = self.seq, self.T.engine
-        seq.choose_pattern(seq.current + way, e.playing)
-        e.seq_changed()
-        self.T.say("PATTERN %d" % (seq.current + 1), 2)
+        T = self.T                                              # + / - are the pads' octave (patterns: Shift + a pad)
+        T.octave = max(-4, min(4, getattr(T, "octave", 0) + way))
+        T.say("OCTAVE %s" % ("%+d" % T.octave if T.octave else "0"), 2)
 
     # ------------------------------------------------------------ the pads
 

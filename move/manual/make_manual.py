@@ -228,7 +228,7 @@ story += [
         ("Knob 2", "RATE: the lane's speed (1/16, 1/16 triplets, 1/8, 1/8 triplets, 1/32)."),
         ("Knob 3", "EUCLID: spread a number of hits evenly over the lane (OFF to switch it off)."),
         ("Knob 4", "SHIFT: turn the lane's pattern around by steps."),
-        ("+ / -", "The pattern (1-16). While playing, the next one waits its turn (shown as PAT 1>2)."),
+        ("+ / -", "The pads' octave (the chromatic drum pads, a synth's notes). Patterns: Shift + a pad; while playing, the next one waits its turn (shown as PAT 1>2)."),
         ("Undo", "Undo the last pattern edit."),
     ]),
     p("Step settings (OP-XY style)", H2),

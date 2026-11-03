@@ -346,8 +346,9 @@ class MoveSeq:
         """+ / -: the knob page while a step is held, else the pattern."""
         if self.held is not None:
             return
-        else:
-            self.sp.knob(10, way, False)
+        T = self.T                                              # + / - are the pads' octave (patterns: Shift + a pad)
+        T.octave = max(-4, min(4, getattr(T, "octave", 0) + way))
+        T.say("OCTAVE %s" % ("%+d" % T.octave if T.octave else "0"), 2)
 
     def arrows(self, way):
         """<- / ->: the lane's next or previous 16 steps."""

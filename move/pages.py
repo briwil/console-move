@@ -683,4 +683,4 @@ def text_page(f, s, msg=""):
     f.rect(0, 0, W, 9, 1)
     f.text(1, 1, lines[0][:21], 0)
     rest = lines[1:]
-    listing(f, rest, max(0, pick - 1), top=11, line=7)
+    listing(f, rest, max(0, pick - 1), top=11, line=10)

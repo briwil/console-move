@@ -53,7 +53,7 @@ class Core:
                 ("core_tape_punch", [C.c_int64, C.c_int64], None), ("core_tape_overdub", [i32], None),
                 ("core_tape_pos", [], C.c_int64), ("core_tape_state", [], i32),
                 ("core_tape_recorded", [i32, C.POINTER(C.c_int64), C.POINTER(C.c_int64)], i32),
-                ("core_capture", [i32], None), ("core_capture_get", [i32, C.POINTER(f32), i32], i32)]:
+                ("core_ext_monitor", [C.c_float, i32], None), ("core_capture", [i32], None), ("core_capture_get", [i32, C.POINTER(f32), i32], i32)]:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
         r = lib.core_open(LIBJACK.encode(), name)
@@ -226,6 +226,9 @@ class Core:
 
     def tape_track(self, t, vol, pan, rev, dly, audible, stereo):
         self.lib.core_tape_track(t, vol, pan, rev, dly, 1 if audible else 0, 1 if stereo else 0)
+
+    def ext_monitor(self, gain, stereo):
+        self.lib.core_ext_monitor(float(gain), 1 if stereo else 0)
 
     def tape_arm(self, t, armed, src=(-1, -1)):
         """src: the input channel(s) it records (-1: the mix of every slot's kit)."""

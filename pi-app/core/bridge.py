@@ -82,9 +82,9 @@ class CoreBridge:
 
     def _device(self):
         import audio
-        d = audio.drum_device(audio.INST_CHANNELS)
+        d = audio.drum_device(audio.IN_CHANNELS)
         return d or {"id": "MOVE", "name": "Move", "virtual": True,
-                     "capture": {"channels": audio.INST_CHANNELS, "format": "FLOAT", "rates": [44100]}}
+                     "capture": {"channels": audio.IN_CHANNELS, "format": "FLOAT", "rates": [44100]}}
 
     def _run(self):
         while not self._stop:
@@ -174,6 +174,7 @@ class CoreBridge:
             self.core.tape_boxes(ch, shaped)
 
     def _sync_arms(self):
+        import audio
         e = self.e
         armed = set(e.record_tracks())
         now = []
@@ -186,6 +187,11 @@ class CoreBridge:
             else:
                 pair = (-1, -1)
             now.append((t in armed, pair))
+        ext = [pair for on, pair in now if on and max(pair) >= audio.EXT_IN]
+        want = (1.0, any(p[0] != p[1] for p in ext)) if ext else (0.0, False)
+        if want != getattr(self, "_ext", None):
+            self._ext = want                              # hear the Move's input while a track records from it
+            self.core.ext_monitor(*want)
         if now != self._arms:
             self._arms = now
             for t, (on, pair) in enumerate(now):

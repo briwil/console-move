@@ -112,3 +112,6 @@ lights them one at a time (the screen says which step button it is under); `echo
 - SAMPLER (pi-app/sampler.py + drums/sampler/sampler.c, built by build-for-move.sh): 16 drums, each a .wav from the Move's sample
   folders (/data/UserData/UserLibrary/Samples, /data/UserData/console/samples, or CONSOLE_SAMPLES=dir:dir). Per drum: SAMPLE, LEVEL,
   PITCH, START, DECAY, PAN, REVERB, DELAY. Songs keep a sample as its place in the sorted file list.
+- The Move's audio input (guitar, mic: system:capture_1/2) is a tape input: INPUT L / INPUT R (core channels EXT_IN = 88, 89),
+  chosen in the zoomed track view (knobs 1-3) after the instrument channels. A track armed on it hears it while you play
+  (core_ext_monitor). Mono: INPUT L or R; stereo: pick both sides. Needs the new libconsolecore.so (GitHub build).

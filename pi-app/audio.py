@@ -67,6 +67,8 @@ DRUM_KIT = 8             # in each instrument's input channels: 0-7 its drums, 8
 SLOTS = 8                # instrument slots (the INSTRUMENTS page)
 SLOT_CH = 11             # input channels per slot: slot n's are n * SLOT_CH ...
 INST_CHANNELS = SLOTS * SLOT_CH
+EXT_IN = INST_CHANNELS        # then the Move's own audio input (a guitar, a mic...): left, right
+IN_CHANNELS = INST_CHANNELS + 2
 MACHINE_SHORT = {"lxr": "LXR", "606": "606", "808": "808", "md": "MD"}   # in input names: 606 KIT L+R
 RES = 16                 # waveform level values per beat, same as tape.RES
 PERIOD = 512             # frames per audio block (headphones, and playing with no input device)
@@ -581,7 +583,7 @@ class Engine:
         self.armed = 4                          # the selected track, 1-8
         self.arm_extra = set()                  # other armed tracks (0-7), recording along with it
         self.select_arms = True                 # True: the selected track records too. The Move: only armed tracks
-        self.in_peaks = np.zeros(max(CHANNELS, INST_CHANNELS), np.float32)
+        self.in_peaks = np.zeros(max(CHANNELS, IN_CHANNELS), np.float32)
         self.device = None                      # dict from find_device, while connected
         self.status = "NO AUDIO DEVICE"
         self.read_ahead = PERIOD * PERIODS      # output delay: play the tape this far ahead
@@ -701,9 +703,9 @@ class Engine:
     def find_input(self):
         """The input to use now: the chosen one if it's there, else the first USB device, else None."""
         if MOVE:
-            return drum_device(INST_CHANNELS) if self.drums else None
+            return drum_device(IN_CHANNELS) if self.drums else None
         if self.input_choice == DRUMS_ID and self.drums:
-            return drum_device(INST_CHANNELS)
+            return drum_device(IN_CHANNELS)
         return find_device(None if self.input_choice == DRUMS_ID else self.input_choice)
 
     @property
@@ -826,7 +828,7 @@ class Engine:
         """The drum synth's input channels (DRUM 1-8 and the KIT) stay the same whatever the machine."""
         dev = getattr(self, "device", None)
         if dev and dev.get("virtual"):
-            dev["capture"]["channels"] = INST_CHANNELS
+            dev["capture"]["channels"] = IN_CHANNELS
 
     def hit(self, lane, velocity=100):
         """Play a drum: lane 0 up to the machine's lanes (on the LXR, 6 is the hi-hat open). Heard only
@@ -1611,6 +1613,8 @@ class Engine:
         606 DRUM 3, MD KIT L, LXR KIT (mono)."""
         if c is None:
             return "ALL KITS" if self.drums_input else "MIX"
+        if self.drums_input and c >= EXT_IN:
+            return "INPUT L" if c == EXT_IN else "INPUT R"
         if self.drums_input:
             slot, k = divmod(c, SLOT_CH)
             m = self.slots[slot] if slot < SLOTS else None
@@ -1639,6 +1643,7 @@ class Engine:
         for i in self.loaded_slots():
             ks = list(range(DRUM_KIT + 2)) if stereo else list(range(DRUM_KIT)) + [DRUM_KIT + 2]
             out += [i * SLOT_CH + k for k in ks]
+        out += [EXT_IN, EXT_IN + 1]                         # the Move's audio input
         return out + ([] if stereo else [None])
 
     def step_input(self, t, side, delta):

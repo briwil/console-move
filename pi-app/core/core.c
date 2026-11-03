@@ -137,6 +137,8 @@ static float send_d[2][MAX_BLOCK];
 static float cap[CAP_PARTS][CAP_FRAMES], cap_now[CAP_PARTS][MAX_BLOCK];
 static int64_t cap_pos;
 static int capture_on;
+static float ext_monitor = 0.0f;                      /* how loud the Move's audio input is heard (0: not) */
+static int ext_stereo = 1;                            /* 1: left and right as they are; 0: the left on both sides */
 
 static void flush_denormals(void) {
 #if defined(__aarch64__)
@@ -511,6 +513,11 @@ static int process(jack_nframes_t n, void *arg) {
         const float *il = J.port_get_buffer(in_l, n), *ir = J.port_get_buffer(in_r, n);
         memcpy(inputs[EXT_IN], il, sizeof(float) * n);
         memcpy(inputs[EXT_IN + 1], ir, sizeof(float) * n);
+        if (ext_monitor > 0.0f)                       /* hear the Move's input (a guitar...) while you play */
+            for (jack_nframes_t i = 0; i < n; i++) {
+                mix[0][i] += il[i] * ext_monitor;
+                mix[1][i] += (ext_stereo ? ir[i] : il[i]) * ext_monitor;
+            }
     }
     input_peaks((int)n);
     for (int s = 0; s < MAX_SOURCES; s++) {
@@ -797,6 +804,7 @@ int core_tape_recorded(int c, int64_t *a, int64_t *b) {
 }
 
 /* ------------------------------------------------------------------ Python's side: listening in */
+void core_ext_monitor(float g, int stereo) { ext_monitor = g; ext_stereo = stereo; }
 void core_capture(int on) { if (on) { cap_pos = 0; memset(cap, 0, sizeof cap); } capture_on = on; }
 /* the last n frames of part p (oldest first) into out; returns how many there were */
 int core_capture_get(int p, float *out, int n) {

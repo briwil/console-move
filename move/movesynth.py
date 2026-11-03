@@ -416,7 +416,7 @@ class MoveSynth:
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)      # the step lights show the length
             self.T.say("LENGTH %d" % v, 2)
         elif what == "rate":
-            way = knobgate.gate(("synrate",), delta, shift, 3)
+            way = knobgate.gate(("synrate",), delta, shift, 6)
             if way:
                 seq.change_track("rate", way)
                 self.T.say("RATE %s" % notes_mod.RATES[seq.pattern.rate][0], 2)

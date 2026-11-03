@@ -338,8 +338,8 @@ class MoveSeq:
         if self.held is None:
             if number > len(LANE_KNOBS):
                 return
-            if LANE_KNOBS[number - 1] == "rate":                  # a list of speeds: 3 clicks each
-                delta = knobgate.gate(("rate",), delta, shift, 3)
+            if LANE_KNOBS[number - 1] == "rate":                  # a list of speeds: 6 clicks each
+                delta = knobgate.gate(("rate",), delta, shift, 6)
                 if not delta:
                     return
                 shift = True

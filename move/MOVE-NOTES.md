@@ -104,3 +104,4 @@ lights them one at a time (the screen says which step button it is under); `echo
 - Choosing an instrument (instruments page, push on a slot): one picture at a time, the wheel slides left / right
   (move/pages.py carousel). Pictures are move/instimg/<module id>.txt (64 rows x 32 hex digits, from the screen
   designer's PIXELS); an instrument without one shows its name in a frame. Have: hush1, 808, 606, braids, dexed, obxd.
+- NUDGE step component (pad after RAMP DOWN): a step plays up to 50% of a step early or late (-50..+50% in 10s; sequencer.py "nudge").

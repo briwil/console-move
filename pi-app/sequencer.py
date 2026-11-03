@@ -54,7 +54,8 @@ DEFAULT_VELOCITY = 100  # (velocity 0: random)
 _N9 = [str(n) for n in range(1, 10)] + ["RND"]
 _PITCH = ["%d/%dOCT" % (n, o) for o in (1, 3) for n in range(2, 7)]
 COMPONENTS = {"pulse": _N9, "hold": _N9, "jump": ["1", "5", "9", "13", "+1", "-1", "+/-", "RND"],
-              "rand": _PITCH, "rup": _PITCH, "rdown": _PITCH}
+              "rand": _PITCH, "rup": _PITCH, "rdown": _PITCH,
+              "nudge": ["%+d%%" % n for n in (-50, -40, -30, -20, -10, 10, 20, 30, 40, 50)]}   # a step early / late
 PITCH = None            # set by the Move app: PITCH(lane, locks, semitones) -> locks with the pitch moved
 
 
@@ -385,7 +386,7 @@ class Sequencer:
             step_frames = fpb / ln.steps_per_beat()
             first = math.floor((a - self.anchor) / step_frames)
             last = math.floor((b - self.anchor) / step_frames)
-            for k in range(first, last + 1):
+            for k in range(first - 1, last + 2):        # (a nudged step can land in a neighbour's time)
                 if k < 0:
                     continue
                 i, plays, cycle = self._slot(li, ln, k)
@@ -397,6 +398,8 @@ class Sequencer:
                         self._skip.discard((li, k))
                     continue
                 t0 = self.anchor + k * step_frames
+                if "nudge" in s.comp:
+                    t0 += float(COMPONENTS["nudge"][s.comp["nudge"]].rstrip("%")) / 100 * step_frames
                 rng = random.Random(hash((self.seed, li, k)))
                 hits = s.ratchet if s.ratchet else rng.randint(1, MAX_RATCHET)
                 vel = s.vel if s.vel else rng.randint(1, 127)

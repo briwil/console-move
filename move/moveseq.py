@@ -23,7 +23,8 @@ LANE_KNOBS = ["length", "rate", "hits", "rotate"]  # knobs 1-4, no step held
 LABELS = dict(seqpage.STEP_LABELS, rate="RATE", hits="EUCLID", rotate="SHIFT")
 # the pads while a step is held, bottom left first: (key, label). Then the drum's sound settings
 STEP_PADS = [("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("pulse", "PULSE"),
-             ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"), ("rdown", "RAMP DOWN")]
+             ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"), ("rdown", "RAMP DOWN"),
+             ("nudge", "NUDGE")]
 RATCHETS = [1, 2, 3, 4, 5, 6, 7, 8, 0]            # MULTIPLY's values in knob order (0: random)
 SEMI = 2                                          # knob clicks of a drum's pitch setting per semitone (a guess)
 PITCH_WORDS = ("TUNE", "PITCH", "COARSE", "FREQ", "NOTE")

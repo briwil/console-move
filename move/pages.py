@@ -324,7 +324,7 @@ def inst_page(f, T):
         return
     if ip.mode == "menu":
         items = [c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices]
-        listing(f, items, ip.pick, top=11)
+        biglist(f, items, ip.pick)
         return
     names = {}
     try:
@@ -391,6 +391,25 @@ def carousel(f, ip):
         f.small(0, 29, "<", 1)
     if pos < n - 1.05:
         f.small(W - 3, 29, ">", 1)
+
+
+def biglist(f, rows, pick, fit=5, top=11):
+    """A list in the larger letters (as the sample browser), the picked row inverted, scrolled to keep it on
+    screen. A row too long for the big letters is drawn small instead."""
+    first = max(0, min(pick - fit // 2, len(rows) - fit))
+    for i in range(fit):
+        k = first + i
+        if k >= len(rows):
+            break
+        y = top + i * 9
+        t = str(rows[k])
+        on = k == pick
+        if on:
+            f.rect(0, y - 1, W, 9, 1)
+        if len(t) <= 21:
+            f.text(2, y, t, 0 if on else 1)
+        else:
+            f.small(2, y + 1, t[:31], 0 if on else 1)
 
 
 def listing(f, rows, pick, top=11, line=7, fit=None):
@@ -678,7 +697,7 @@ def kit_list(f, k):
     f.rect(0, 0, W, 9, 1)
     f.text(1, 1, "DRUMS MENU", 0)
     f.right(W - 2, 2, "%d/%d" % (k.choice + 1, len(rows)), small=True, c=0)
-    listing(f, rows, k.choice, top=11, line=7, fit=6)       # (the bottom line is for messages)
+    biglist(f, rows, k.choice, fit=5)                        # (the bottom line is for messages)
     msg = getattr(k, "msg", "")
     if msg:
         f.rect(0, H - 8, W, 8, 1)
@@ -707,4 +726,4 @@ def text_page(f, s, msg=""):
     f.rect(0, 0, W, 9, 1)
     f.text(1, 1, lines[0][:21], 0)
     rest = lines[1:]
-    listing(f, rest, max(0, pick - 1), top=11, line=10)
+    biglist(f, rest, max(0, pick - 1), fit=5)

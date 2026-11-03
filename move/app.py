@@ -363,11 +363,11 @@ def main():
     if getattr(e, "core", None) is None:
         sys.exit("The sound core didn't start: is console mode running? (%s)" % e.status)
     core = e.core
-    T.inst_sends = True
     knobgate.load(os.path.join(os.path.dirname(os.environ["CONSOLE_DATA"]), "knob-sensitivity"))
     e.select_arms = False                            # selecting a track doesn't arm it: Shift + step button does
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
     T = console.Transport(screen, e)
+    T.inst_sends = True                              # the FX page: knob 4 is the picked instrument's send
     if e:
         import linksync
         T.link = linksync.LinkSync(e)                    # Ableton Link (MENU > SETTINGS > MIDI SYNC > LINK)

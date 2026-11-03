@@ -58,7 +58,9 @@ def host():
                                     ("sh_fx_midi", [vp, i, i, i], None),
                                     ("sh_fx_process", [vp, ctypes.POINTER(ctypes.c_float),
                                                        ctypes.POINTER(ctypes.c_float), i], None)]:
-                fn = getattr(h, name)
+                fn = getattr(h, name, None)
+                if fn is None:                     # an older host library without the effect functions: the synths still work
+                    continue
                 fn.argtypes, fn.restype = args, res
             _host = h
         return _host

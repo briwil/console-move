@@ -61,9 +61,9 @@ class InstPage:
             return
         step = 1 if delta > 0 else -1
         if self.mode == "store":
-            self.pick = max(0, min(max(0, len(self.store.items) - 1), self.pick + step))
+            self.pick = (self.pick + step) % max(1, len(self.store.items))
         elif self.mode:
-            self.pick = max(0, min(len(self.choices) - 1, self.pick + step))
+            self.pick = (self.pick + step) % max(1, len(self.choices))
         else:
             self.row = max(0, min(audio.SLOTS - 1, self.row + step))
 

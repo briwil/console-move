@@ -5,6 +5,8 @@ state (console.Transport, the engine, the menus) and draws it; nothing here chan
 """
 import time
 
+import numpy as np
+
 import tape
 import drumparams    # noqa: F401  (the drum page's names)
 
@@ -306,7 +308,10 @@ def focus_page(f, T):
 def inst_page(f, T):
     e, ip = T.engine, T.instp
     header(f, "INSTRUMENTS")
-    if ip.mode in ("pick", "menu"):
+    if ip.mode == "pick":
+        carousel(f, ip)
+        return
+    if ip.mode == "menu":
         items = [c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices]
         listing(f, items, ip.pick, top=11)
         return
@@ -322,6 +327,56 @@ def inst_page(f, T):
         mute = e and k in e.slot_mutes
         rows.append("%d %s%s" % (k + 1, (names.get(mid, mid) or "-").upper(), "  MUTE" if mute else ""))
     listing(f, rows, ip.row, top=11)
+
+
+_IMG = {}
+_CAR = {"pos": None, "t": 0.0}
+
+
+def instrument_image(mid):
+    """The picture for an instrument (move/instimg/<id>.txt: 64 rows of 32 hex digits), or None."""
+    if mid not in _IMG:
+        arr = None
+        try:
+            import os
+            rows = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "instimg", "%s.txt" % mid)).read().split()
+            arr = np.array([[(int(row, 16) >> (127 - x)) & 1 for x in range(128)] for row in rows[:64]], np.uint8)
+        except (OSError, ValueError):
+            pass
+        _IMG[mid] = arr
+    return _IMG[mid]
+
+
+def carousel(f, ip):
+    """Choosing an instrument: one picture at a time, sliding left and right as the wheel turns. An
+    instrument without a picture yet shows its name."""
+    n = len(ip.choices)
+    now = time.monotonic()
+    pos = _CAR["pos"]
+    if pos is None or now - _CAR["t"] > 1.0:
+        pos = float(ip.pick)                           # just opened: start on the picked one
+    else:
+        pos += (ip.pick - pos) * 0.45                  # ease towards it
+        if abs(ip.pick - pos) < 0.02:
+            pos = float(ip.pick)
+    _CAR["pos"], _CAR["t"] = pos, now
+    for i in (int(pos // 1), int(pos // 1) + 1):
+        if not 0 <= i < n:
+            continue
+        dx = int(round((i - pos) * W))
+        mid, title = ip.choices[i][0], ip.choices[i][1]
+        img = instrument_image(mid)
+        if img is not None:
+            x0, x1 = max(0, dx), min(W, dx + W)
+            if x1 > x0:
+                f.px[0:64, x0:x1] = img[:, x0 - dx:x1 - dx]
+        else:
+            f.frame(dx + 4, 4, W - 8, H - 8)
+            f.centre(dx + W // 2, 26, str(title)[:19])
+    if pos > 0.05:
+        f.small(0, 29, "<", 1)
+    if pos < n - 1.05:
+        f.small(W - 3, 29, ">", 1)
 
 
 def listing(f, rows, pick, top=11, line=7, fit=None):

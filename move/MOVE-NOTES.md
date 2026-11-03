@@ -101,3 +101,6 @@ The icons printed under the 16 step buttons are lights of their own (controller 
 is the colour: 120 white, 118 light grey). To see which icon is which: `touch /data/UserData/console/icontest`
 lights them one at a time (the screen says which step button it is under); `echo all > ...icontest` lights all 16;
 `rm /data/UserData/console/icontest` ends it. (Octave on the original Move OS: the Up / Down buttons, CC 55 / 54.)
+- Choosing an instrument (instruments page, push on a slot): one picture at a time, the wheel slides left / right
+  (move/pages.py carousel). Pictures are move/instimg/<module id>.txt (64 rows x 32 hex digits, from the screen
+  designer's PIXELS); an instrument without one shows its name in a frame. Have: hush1, 808, 606, braids, dexed, obxd.

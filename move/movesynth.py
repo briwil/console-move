@@ -17,11 +17,16 @@ import time
 
 import knobgate
 import notes as notes_mod
+import sequencer
 from sequencer import CHANCES, MAX_RATCHET
 
 PAGE = 16
 TYPES = ["UNIFIED", "PER NOTE"]
-STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("nudge", "NUDGE")]
+STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("nudge", "NUDGE"),
+             ("pulse", "PULSE"), ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"),
+             ("rdown", "RAMP DOWN")]
+PATH_ONLY = ("pulse", "hold", "jump")             # these change the order the steps play in: PER NOTE only
+COMPS = ("pulse", "hold", "jump", "rand", "rup", "rdown")
 LANE_KNOBS = ["length", "rate", "type", "lane", "key", "scale"]
 LABELS = {"length": "LENGTH", "rate": "RATE", "type": "TYPE", "lane": "NOTE LEN", "key": "KEY", "scale": "SCALE"}
 
@@ -265,6 +270,9 @@ class MoveSynth:
             elif key == "nudge":
                 if nt.nudge:
                     return True
+            elif key in COMPS:
+                if key in nt.comp:
+                    return True
             elif key in nt.locks:
                 return True
         return False
@@ -285,6 +293,8 @@ class MoveSynth:
             return "x%d" % nt.ratchet
         if key == "nudge":
             return "%+d%%" % nt.nudge if nt.nudge else "ON THE BEAT"
+        if key in COMPS:
+            return sequencer.COMPONENTS[key][nt.comp[key]] if key in nt.comp else "OFF"
         d = self.d
         return d.value_text(key, nt.locks[key]) if key in nt.locks else d.value_text(key)
 
@@ -313,12 +323,17 @@ class MoveSynth:
                             nt.ratchet = 1
                         elif key == "nudge":
                             nt.nudge = 0
+                        elif key in COMPS:
+                            nt.comp.pop(key, None)
                         else:
                             nt.locks.pop(key, None)
             self.sel = None
             self.T.say("%s  %s OFF" % (self.which(), label) if was else label, 2)
             self.T.engine.seq_changed()
         else:
+            if key in PATH_ONLY and not self.kind:
+                self.T.say("%s: PER NOTE ONLY (KNOB 3 ON THE LANE PAGE)" % label, 3)
+                return
             self.sel = p
             self.T.say("%s  %s  %s  (KNOB 1)" % (self.which(), label, self.item_value(key)), 2)
 
@@ -327,7 +342,7 @@ class MoveSynth:
             if n != 1 or self.sel is None:
                 return False
             key = self.pad_items()[self.sel][0]
-            return key in ("chance", "ratchet", "nudge") or (not isinstance(key, str) and knobgate.is_choice(self.d, key))
+            return key in ("chance", "ratchet", "nudge") + COMPS or (not isinstance(key, str) and knobgate.is_choice(self.d, key))
         if self.down:
             return False
         return n in (2, 3, 5, 6)
@@ -336,7 +351,7 @@ class MoveSynth:
         key, label = self.pad_items()[self.sel]
         seq, e = self.seq, self.T.engine
         clicks = delta
-        if key in ("chance", "ratchet", "nudge") or (not isinstance(key, str) and knobgate.is_choice(self.d, key)):
+        if key in ("chance", "ratchet", "nudge") + COMPS or (not isinstance(key, str) and knobgate.is_choice(self.d, key)):
             clicks = knobgate.gate(("synstep", key), delta, shift, 3)
             if not clicks:
                 return
@@ -354,6 +369,15 @@ class MoveSynth:
                         nt.ratchet = max(1, min(MAX_RATCHET, nt.ratchet + one))
                     elif key == "nudge":
                         nt.nudge = max(-50, min(50, nt.nudge + 10 * one))
+                    elif key in COMPS:
+                        if key in nt.comp:
+                            nt.comp[key] = max(0, min(len(sequencer.COMPONENTS[key]) - 1, nt.comp[key] + one))
+                        else:
+                            nt.comp[key] = 0                                    # the first turn: its first value
+                        if key in ("rand", "rup", "rdown"):                    # one pitch movement at a time
+                            for other in ("rand", "rup", "rdown"):
+                                if other != key:
+                                    nt.comp.pop(other, None)
                     else:
                         nt.locks[key] = self.d.stepped(key, nt.locks.get(key, self.d.get_param(key)), clicks)
         e.seq_changed()

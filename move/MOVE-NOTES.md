@@ -132,3 +132,4 @@ Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).
 - **LFO steps:** on an LFO page the 16 step buttons are the LFO's steps (1/16 notes, one bar). Tap = that step rests; hold a step + knob 2 = its own WAVE, knob 4 = its own DEPTH.
 - **Chromatic drum pads by hand:** on a drum sequencer, hold a step button and press a right-half pad: the step turns on with that pitch.
 - **Ableton Link:** MENU > SETTINGS > MIDI SYNC > LINK. Tempo is shared while stopped (a running tape keeps its tempo), PLAY/STOP are shared and start on the next bar. Needs the new libs (Link is built in the cloud like the rest).
+- **Synth step settings = the drums' set:** PULSE, HOLD, JUMP (PER NOTE type only: each pitch is its own row), RANDOM / RAMP UP / RAMP DOWN pitch and NUDGE (both types; in UNIFIED a chord moves together). The type (lane page, knob 3) can be switched any time; nothing is lost.

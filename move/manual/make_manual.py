@@ -275,7 +275,8 @@ story += [
         ("Knobs (no step held)", "1 length, 2 rate, 3 type (UNIFIED: one sequence; PER NOTE: tap a pad to see only "
          "its steps), 4 the lit note's own length, 5 key, 6 scale."),
         ("Shift + steps", "Select steps: the pads are their settings. LENGTH, VELOCITY, CHANCE, MULTIPLY, "
-         "<b>NUDGE</b> (a step early or late, -50 to +50 %), then the synth's own settings as parameter locks. "
+         "<b>NUDGE</b> (a step early or late, -50 to +50 %), PULSE, HOLD, JUMP (PER NOTE type only), RANDOM, "
+         "RAMP UP, RAMP DOWN (pitch), then the synth's own settings as parameter locks. "
          "Knob 1 sets the picked one."),
         ("Record", "On a drum or synth sequencer page: the pads you play go into the pattern while it plays "
          "(a synth note lasts as long as you hold the pad; chromatic drum pads keep their pitch). Press again to stop. "
@@ -310,7 +311,7 @@ story += [
     p("scp -r \"ableton@move.local:/data/UserData/console/data/exports\" ~/Desktop/move-exports", CODE),
 
     p("Not on the Move yet", H2),
-    p("Step components (pulse, hold, jump) on synth notes; the LFOs' parameter locks beyond depth and wave; "
+    p("The LFOs' parameter locks beyond depth and wave; "
       "pictures for the instruments that still show their name; the tape's bar/beat grid when zoomed in a "
       "long way. Songs are saved in /data/UserData/console/data.", BODY),
 ]

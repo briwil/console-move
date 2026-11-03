@@ -19,6 +19,9 @@ import copy
 import math
 import threading
 
+import random
+
+import sequencer
 from sequencer import (CHANCES, DEFAULT_VELOCITY, MAX_RATCHET, MAX_STEPS, PATTERNS, RATES, UNDO_STEPS, bar_steps,
                        chance_index, chance_passes)
 
@@ -39,7 +42,7 @@ def note_name(n):
 
 
 class Note:
-    __slots__ = ("length", "vel", "chance", "ratchet", "locks", "nudge")
+    __slots__ = ("length", "vel", "chance", "ratchet", "locks", "nudge", "comp")
 
     def __init__(self, length=1, vel=DEFAULT_VELOCITY):
         self.length = length
@@ -47,6 +50,7 @@ class Note:
         self.chance = 0
         self.ratchet = 1
         self.locks = {}
+        self.comp = {}                   # step components (pulse, hold, jump, rand, rup, rdown): name -> option, see sequencer.COMPONENTS
         self.nudge = 0                   # a step early (-) or late (+), in percent of a step (0: on the beat)
 
 
@@ -70,8 +74,34 @@ class NotePattern:
         return self.notes.get(step) or {}
 
 
+class _Steps:
+    """One pitch's row as the drum sequencer's path code sees a lane: .steps[i].comp"""
+    def __init__(self, pat, pitch):
+        self.pat, self.pitch = pat, pitch
+
+    def __getitem__(self, i):
+        n = self.pat.notes.get(i, {}).get(self.pitch)
+        return n if n is not None else _EMPTY
+
+
+class _Empty:
+    comp = {}
+
+
+_EMPTY = _Empty()
+
+
+class _Row:
+    def __init__(self, pat, pitch):
+        self.length = pat.lane_length(pitch)
+        self.steps = _Steps(pat, pitch)
+
+
 class NoteSequencer:
     kind = "notes"
+    seed = 0
+    _path = sequencer.Sequencer._path           # pulse / hold / jump: the order a row plays its steps in
+    _slot = sequencer.Sequencer._slot
 
     def __init__(self):
         self.lock = threading.RLock()
@@ -85,6 +115,8 @@ class NoteSequencer:
         self.low = 5 * 7                 # the lowest row on screen: middle C (C4), in C major
         self._decided = {}
         self._skip = set()
+        self._cyc = {}
+        self.seed = random.randrange(1 << 30)
         self.undo_stack = []
 
     @property
@@ -273,6 +305,7 @@ class NoteSequencer:
             self.anchor = 0.0
             self._decided.clear()
             self._skip.clear()
+            self._cyc.clear()
 
     # ------------------------------------------------------------ playing (the audio thread)
     def pattern_frames(self, frames_per_beat):
@@ -292,6 +325,7 @@ class NoteSequencer:
                     self.current, self.queued = self.queued, None
                     self.anchor = boundary
                     self._decided.clear()
+                    self._cyc.clear()
                     out += self._events(boundary, end, start, frames_per_beat)
                     return out
             out += self._events(start, end, start, frames_per_beat)
@@ -305,18 +339,41 @@ class NoteSequencer:
         step_frames = fpb / p.steps_per_beat()
         first = math.floor((a - self.anchor) / step_frames) - 1        # (a nudged note can start a step away)
         last = math.floor((b - self.anchor) / step_frames) + 1
+        per_note = getattr(self, "move_type", 0) == 1
+        rows = {}
+        if per_note:                                          # every pitch is a row of its own: pulse / hold / jump work
+            pitches = {pitch for ns in p.notes.values() for pitch in ns}
+            rows = {pitch: _Row(p, pitch) for pitch in pitches}
         for k in range(first, last + 1):
-            hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items() if pitch not in p.lane_len]
-            for pitch, ln in p.lane_len.items():                  # a row with its own length loops on its own
-                n = p.at(k % ln).get(pitch)
-                if n is not None:
-                    hits.append((pitch, n, k // ln))
+            if per_note:
+                hits = []
+                for pitch, row in rows.items():
+                    if k < 0:
+                        continue
+                    i, plays, cycle = self._slot(pitch, row, k)
+                    n = p.at(i).get(pitch)
+                    if n is not None and plays:
+                        hits.append((pitch, n, cycle))
+            else:
+                hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items() if pitch not in p.lane_len]
+                for pitch, ln in p.lane_len.items():              # a row with its own length loops on its own
+                    n = p.at(k % ln).get(pitch)
+                    if n is not None:
+                        hits.append((pitch, n, k // ln))
             for pitch, n, loop in hits:
                 if (pitch, k) in self._skip:
                     if self.anchor + (k + 1) * step_frames <= b:
                         self._skip.discard((pitch, k))
                     continue
                 t0 = self.anchor + k * step_frames + n.nudge / 100 * step_frames
+                out_pitch = pitch
+                c = n.comp
+                if c.keys() & {"rand", "rup", "rdown"}:          # a pitch movement (a chord moves together in UNIFIED)
+                    name = "rand" if "rand" in c else "rup" if "rup" in c else "rdown"
+                    cnt, octs = (int(v) for v in sequencer.COMPONENTS[name][c[name]].replace("OCT", "").split("/"))
+                    rng = random.Random(hash((self.seed, pitch if per_note else -1, k)))
+                    d = rng.randrange(cnt) if name == "rand" else loop % cnt
+                    out_pitch = max(0, min(127, pitch + round(d * 12 * octs / cnt) * (-1 if name == "rdown" else 1)))
                 each = step_frames / n.ratchet
                 for r in range(n.ratchet):
                     t = t0 + r * each
@@ -329,7 +386,7 @@ class NoteSequencer:
                             gate = each * 0.9 if r < n.ratchet - 1 else n.length * step_frames - r * each - 1
                             locks = dict(n.locks)
                             locks["gate"] = max(1, int(gate))
-                            out.append((int(t - block_start), pitch, n.vel, locks))
+                            out.append((int(t - block_start), out_pitch, n.vel, locks))
         out.sort(key=lambda e: e[0])
         return out
 
@@ -353,7 +410,7 @@ class NoteSequencer:
                 for step, ns in p.notes.items():
                     for pitch, n in ns.items():
                         notes.setdefault(str(step), {})[str(pitch)] = [
-                            n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge]
+                            n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge, dict(n.comp)]
                 import lfo
                 pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
                              "lanes": {str(k): v for k, v in p.lane_len.items()}})
@@ -391,6 +448,8 @@ class NoteSequencer:
                             n.ratchet = max(1, min(MAX_RATCHET, int(v[3])))
                             n.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
                             n.nudge = max(-50, min(50, int(v[5]))) if len(v) > 5 else 0
+                            n.comp = {k: int(x) for k, x in (v[6] if len(v) > 6 else {}).items()
+                                      if k in sequencer.COMPONENTS and k != "nudge" and 0 <= int(x) < len(sequencer.COMPONENTS[k])}
                             p.notes.setdefault(step, {})[pitch] = n
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))
             except (TypeError, ValueError, KeyError, IndexError, AttributeError) as e:

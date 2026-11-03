@@ -61,7 +61,7 @@ SHIFT, BACK, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 55, 54, 14, 79
 KNOBS = range(71, 79)                      # knobs 1-8
 STEPS = range(16, 32)                      # step buttons 1-16 (notes)
 PADS = range(68, 100)                      # pads, bottom row first
-WHITE, RED = 120, 127                      # the Move's light colours (velocity of the light message)
+WHITE, RED, PURPLE = 120, 127, 22                      # the Move's light colours (velocity of the light message)
 
 
 def _shuffled(colours, seed):
@@ -279,9 +279,14 @@ class Lights:
         seq_lights = T.msyn.step_lights() if syn else T.mseq.step_lights() if T.mseq.active() else \
             T.mlfo.step_lights() if T.mlfo.active() else None
         song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
+        flash = getattr(T, "len_flash", None)
+        if flash and (time.monotonic() > flash[0] or not (T.seq_page and seq_lights is not None)):
+            flash = T.len_flash = None
         for i in range(16):
             v = 0
-            if song:
+            if flash:                                      # a length just changed: its steps light purple
+                v = PURPLE if flash[1] + i < flash[2] else 0
+            elif song:
                 v = song[i]
             elif seq_lights is not None:
                 v = seq_lights[i]

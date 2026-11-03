@@ -335,6 +335,8 @@ class MoveSeq:
                 shift = True
             sp.mode, sp.held = 0, {}
             sp.knob(2 + seqpage.STEP_PARAMS.index(LANE_KNOBS[number - 1]), delta, shift)
+            if LANE_KNOBS[number - 1] == "length":
+                self.T.len_flash = (time.monotonic() + 1.2, self.first(), self.seq.lane(sp.lane).length)
             return
         self._aim()
         if number == 1 and self.sel is not None:

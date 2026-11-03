@@ -404,6 +404,7 @@ class MoveSynth:
         what = LANE_KNOBS[number - 1]
         if what == "length":
             v = seq.change_track("length", delta)
+            self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)      # the step lights show the length
             self.T.say("LENGTH %d" % v, 2)
         elif what == "rate":
             way = knobgate.gate(("synrate",), delta, shift, 3)
@@ -420,7 +421,9 @@ class MoveSynth:
             if self.lane is None:
                 self.T.say("TAP A PAD (TYPE PER NOTE) FIRST", 2)
                 return
-            self.T.say("NOTE %s LENGTH %d" % (notes_mod.note_name(self.lane), seq.change_lane_length(self.lane, delta)), 2)
+            v = seq.change_lane_length(self.lane, delta)
+            self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)
+            self.T.say("NOTE %s LENGTH %d" % (notes_mod.note_name(self.lane), v), 2)
         elif what == "key":
             way = knobgate.gate(("synkey",), delta, shift, 3)
             if way:

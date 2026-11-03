@@ -673,6 +673,12 @@ def handle(name, T, m, e):
         return
     if name in ("DRUMS", "FX", "DRUMS_BACK"):
         T.song_page = False
+    if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and (T.msyn.active() or ms.active())
+            and not (m.open or m.kits.open) and T.fx_page is None):
+        way = knobgate.gate(("wheel-pages",), name[2], False, 3)       # the big wheel: the 16-step pages
+        if not way:
+            return
+        name = "RIGHT" if way > 0 else "LEFT"
     if T.msyn.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             T.msyn.knob(name[1], name[2], name[3])
@@ -714,12 +720,14 @@ def handle(name, T, m, e):
             m.kits.key("FILE")
         elif T.inst_page and T.instp.mode:
             T.instp.cancel()
+        elif T.inst_page and not (T.seq_page or T.drum_page):
+            pass                                     # the instruments page is a top page: Back does nothing
         elif T.seq_page or T.drum_page or T.inst_page:
             T.key("DRUMS_BACK")
         elif T.fx_page:
             T.fx_page = None
         elif T.song_page:
-            T.song_page = False
+            pass                                     # (song mode is a top page too)
         elif T.focus.track is not None:
             T.key("FOCUS")
         return

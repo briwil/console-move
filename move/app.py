@@ -600,7 +600,7 @@ def handle(name, T, m, e):
     if on_sound and e and e.drums:
         last = len(T.drum_pages()) - 1
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:       # the big wheel turns the pages
-            way = knobgate.gate(("wheel-pages",), name[2], False, 3)
+            way = knobgate.gate(("wheel-pages",), name[2], False, 1)
             if not way:
                 return
             name = "RIGHT" if way > 0 else "LEFT"
@@ -697,7 +697,7 @@ def handle(name, T, m, e):
         T.song_page = False
     if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and (T.msyn.active() or ms.active())
             and not (m.open or m.kits.open) and T.fx_page is None):
-        way = knobgate.gate(("wheel-pages",), name[2], False, 3)       # the big wheel: the 16-step pages
+        way = knobgate.gate(("wheel-pages",), name[2], False, 1)       # the big wheel: the 16-step pages
         if not way:
             return
         name = "RIGHT" if way > 0 else "LEFT"

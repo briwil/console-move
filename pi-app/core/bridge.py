@@ -78,6 +78,12 @@ class CoreBridge:
             self.rev, self.dly = effects.Reverb(c.rate), effects.Delay(c.rate)
             c.effects(effects._lib.rev_process, self.rev.h, effects._lib.dly_process, self.dly.h)
         self.sched = Scheduler(c)
+        boot = getattr(e, "insert_boot", None)
+        if boot:
+            try:
+                boot()                                # the saved INSERT effect (schwung/insertfx.py)
+            except Exception as ex:                   # noqa: BLE001
+                print("insert effect: %s" % ex)
         import lfo
         self._lfos = lfo.Runner(self.e)
         print("Sound core running: %d Hz, %d frames a cycle" % (c.rate, c.block))
@@ -269,7 +275,11 @@ class CoreBridge:
         if e.slot is None or self.slots.get(e.slot, (None, None))[1] is not slot:
             return
         now_c, now_t = self.core.now(), time.monotonic()
+        ins = getattr(e, "insert_fx", None)
         for offset, lane, _vel, _locks in events:
+            if ins is not None and ins.h and lane == 0:          # lane 1 (the kick) triggers a Ducker-style effect
+                wait = max(0.0, (base + offset - now_c) / self.core.rate)
+                threading.Timer(wait, ins.midi, (0x90, 36, max(1, min(127, int(_vel))))).start()
             if lane < len(e.seq_hits):
                 e.seq_hits[lane] = now_t + (base + offset - now_c) / self.core.rate
 

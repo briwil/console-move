@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "plugin_api_v1.h"
+#include "audio_fx_api_v2.h"
 
 #define BLOCK MOVE_FRAMES_PER_BLOCK
 
@@ -155,5 +156,78 @@ void sh_render(handle_t *h, float *out, int frames)
             out[done * 2 + i] = src[i] * (1.0f / 32768.0f);
         done += n;
         h->left -= n;
+    }
+}
+
+
+/* ---------------------------------------------------------------- audio effects (Schwung audio_fx modules)
+ *   sh_fx_open(so_path, module_dir, defaults) -> handle or NULL     sh_fx_close(h)
+ *   sh_fx_set / sh_fx_get / sh_fx_midi                                as for sound generators
+ *   sh_fx_process(h, left, right, frames)  processes float buffers in place (the mix bus)
+ */
+typedef struct { audio_fx_api_v2_t *api; void *inst; } fx_t;
+
+void *sh_fx_open(const char *so_path, const char *module_dir, const char *defaults)
+{
+    init_host();
+    last_error[0] = 0;
+    void *dl = dlopen(so_path, RTLD_NOW | RTLD_LOCAL);
+    if (!dl) { snprintf(last_error, sizeof last_error, "%s", dlerror()); return NULL; }
+    audio_fx_init_v2_fn init = (audio_fx_init_v2_fn)dlsym(dl, AUDIO_FX_INIT_V2_SYMBOL);
+    if (!init) { snprintf(last_error, sizeof last_error, "no %s in %s", AUDIO_FX_INIT_V2_SYMBOL, so_path); return NULL; }
+    audio_fx_api_v2_t *api = init(&host);
+    if (!api || !api->create_instance || !api->process_block) {
+        snprintf(last_error, sizeof last_error, "the effect didn't start"); return NULL;
+    }
+    void *inst = api->create_instance(module_dir, defaults && defaults[0] ? defaults : NULL);
+    if (!inst) { snprintf(last_error, sizeof last_error, "the effect couldn't make an instance"); return NULL; }
+    fx_t *f = calloc(1, sizeof *f);
+    f->api = api;
+    f->inst = inst;
+    return f;
+}
+
+void sh_fx_close(fx_t *f)
+{
+    if (!f) return;
+    if (f->api->destroy_instance) f->api->destroy_instance(f->inst);
+    free(f);
+}
+
+void sh_fx_set(fx_t *f, const char *key, const char *val)
+{
+    if (f && f->api->set_param) f->api->set_param(f->inst, key, val);
+}
+
+int sh_fx_get(fx_t *f, const char *key, char *buf, int len)
+{
+    if (!f || !f->api->get_param || len <= 0) return -1;
+    buf[0] = 0;
+    return f->api->get_param(f->inst, key, buf, len);
+}
+
+void sh_fx_midi(fx_t *f, int b0, int b1, int b2)
+{
+    if (!f || !f->api->on_midi) return;
+    uint8_t msg[3] = {(uint8_t)b0, (uint8_t)b1, (uint8_t)b2};
+    f->api->on_midi(f->inst, msg, 3, MOVE_MIDI_SOURCE_INTERNAL);
+}
+
+void sh_fx_process(fx_t *f, float *l, float *r, int frames)
+{
+    if (!f) return;
+    int16_t blk[BLOCK * 2];
+    for (int done = 0; done < frames; done += BLOCK) {
+        int n = frames - done < BLOCK ? frames - done : BLOCK;
+        for (int i = 0; i < n; i++) {
+            float a = l[done + i] * 32768.0f, b = r[done + i] * 32768.0f;
+            blk[i * 2] = (int16_t)(a > 32767 ? 32767 : a < -32768 ? -32768 : a);
+            blk[i * 2 + 1] = (int16_t)(b > 32767 ? 32767 : b < -32768 ? -32768 : b);
+        }
+        f->api->process_block(f->inst, blk, n);
+        for (int i = 0; i < n; i++) {
+            l[done + i] = blk[i * 2] * (1.0f / 32768.0f);
+            r[done + i] = blk[i * 2 + 1] * (1.0f / 32768.0f);
+        }
     }
 }

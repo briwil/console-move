@@ -52,7 +52,12 @@ def host():
                                     ("sh_midi", [vp, i, i, i], None), ("sh_set", [vp, cp, cp], None),
                                     ("sh_get", [vp, cp, cp, i], i), ("sh_bpm", [ctypes.c_float], None),
                                     ("sh_render", [vp, ctypes.POINTER(ctypes.c_float), i], None),
-                                    ("sh_module_error", [vp, cp, i], i)]:
+                                    ("sh_module_error", [vp, cp, i], i),
+                                    ("sh_fx_open", [cp, cp, cp], vp), ("sh_fx_close", [vp], None),
+                                    ("sh_fx_set", [vp, cp, cp], None), ("sh_fx_get", [vp, cp, cp, i], i),
+                                    ("sh_fx_midi", [vp, i, i, i], None),
+                                    ("sh_fx_process", [vp, ctypes.POINTER(ctypes.c_float),
+                                                       ctypes.POINTER(ctypes.c_float), i], None)]:
                 fn = getattr(h, name)
                 fn.argtypes, fn.restype = args, res
             _host = h

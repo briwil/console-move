@@ -17,6 +17,7 @@ Options:
     --demo       no audio engine: made-up waveforms
 """
 import argparse
+import json
 import math
 import os
 import queue
@@ -240,6 +241,7 @@ class Transport:
         import instpage
         self.inst_page = False                    # the MIDI key from the tape: the INSTRUMENTS page
         self.instp = instpage.InstPage(self)
+        self.engine.insert_boot = self.insfx
         screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
@@ -438,7 +440,8 @@ class Transport:
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name == "FX":
-            self.fx_page = {None: "reverb", "reverb": "delay", "delay": None}[self.fx_page]
+            order = [None, "reverb", "delay"] + (["insert"] if self.insert_fx_available() else [])
+            self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)
         elif name == "IMPORT":
@@ -755,9 +758,47 @@ class Transport:
     FX_KNOBS = {"reverb": (("rev_size", "SIZE"), ("rev_tone", "TONE"), ("rev_level", "LEVEL")),
                 "delay": (("dly_time", "TIME"), ("dly_feedback", "FEEDBACK"), ("dly_level", "LEVEL"))}
 
+    def insert_fx_available(self):
+        import catalog
+        return bool(getattr(self, "inst_sends", False) and catalog.FX)
+
+    def insfx(self):
+        """The INSERT effect (schwung/insertfx.py), made when first used; its saved choice comes back with it."""
+        if getattr(self, "_insfx", None) is None:
+            import insertfx
+            self._insfx = insertfx.Insert(getattr(self.engine, "core", None))
+            self.engine.insert_fx = self._insfx
+            try:
+                self._insfx.from_json(json.load(open(self._insfx_path())))
+            except (OSError, ValueError):
+                pass
+        if self._insfx.core is None:
+            self._insfx.core = getattr(self.engine, "core", None)
+        return self._insfx
+
+    def _insfx_path(self):
+        import store
+        return os.path.join(store.data_dir(), "insert-fx.json")
+
+    def _insfx_save(self):
+        try:
+            json.dump(self._insfx.to_json(), open(self._insfx_path(), "w"))
+        except OSError:
+            pass
+
     def fx_knob(self, number, delta):
         """On an FX page: knobs 1-8 are the tracks' sends, 9 and 10 the effect's settings, the big knob its level."""
         e = self.engine
+        if self.fx_page == "insert":
+            ins = self.insfx()
+            if number == 1:
+                ins.choose(ins.index + (1 if delta > 0 else -1))
+                self._insfx_save()
+                self.say("INSERT EFFECT: %s%s" % (ins.name(), (" (" + ins.error + ")") if ins.error else ""), 2)
+            elif number <= 4:
+                ins.knob(number - 2, delta)
+                self._insfx_save()
+            return
         if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect, 4 the picked instrument's send
             if number <= 3:
                 key = self.FX_KNOBS[self.fx_page][number - 1][0]

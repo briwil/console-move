@@ -195,6 +195,9 @@ class MoveBoard:
                     e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
                     e.seq_changed()
                 e.hit(lane, vel)
+                ins = getattr(e, "insert_fx", None)
+                if lane == 0 and ins is not None and ins.h:
+                    ins.midi(0x90, 36, vel)
                 voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
                 T.drum_voice = voice
                 T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()
@@ -487,7 +490,7 @@ def choice_knob(T, m, e, name):
     if T.mlfo.active():
         return T.mlfo.is_choice(n)
     if T.fx_page:
-        return n == 1 and T.fx_page == "delay"                 # the delay's TIME steps through note lengths
+        return n == 1 and T.fx_page in ("delay", "insert")                 # the delay's TIME steps through note lengths
     ms = T.mseq
     if T.seq_page and ms.active():
         if ms.selected:

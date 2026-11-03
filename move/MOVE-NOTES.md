@@ -122,3 +122,7 @@ lights them one at a time (the screen says which step button it is under); `echo
 - GET MORE FROM SCHWUNG (pi-app/schwung/store.py): the instrument picker's last entry. Reads Schwung's module-catalog.json
   from GitHub, downloads a module's release .tar.gz (ready-made for the Move) into schwung/modules/<id>/, records it in
   /data/UserData/console/schwung-installed.json (catalog.add_record: sound generators join the instruments, audio_fx go in catalog.FX).
+
+## INSERT effect (Tapescam, Ducker...)
+Install an effect from FX → (page 3 appears once one is installed) via "GET MORE FROM SCHWUNG". FX key cycles REVERB → DELAY → INSERT. On INSERT: knob 1 picks the effect, knobs 2-4 its first three settings. It runs on the whole output (not on the tape tracks), and your choice is remembered. The Ducker gets a note whenever drum 1 (lane 1) is hit by a pad or the sequencer (the sequencer one only for the instrument you're looking at).
+Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).

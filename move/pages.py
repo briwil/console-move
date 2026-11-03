@@ -620,6 +620,18 @@ def song_page(f, T):
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
+    if which == "insert":
+        ins = T.insfx()
+        header(f, "INSERT: ON THE WHOLE MIX")
+        f.small(1, 13, "1 EFFECT")
+        f.right(W - 2, 13, ins.name()[:14], small=True)
+        for i in range(3):
+            label, shown = ins.text(i)
+            if label:
+                f.small(1, 23 + i * 10, "%d %s" % (i + 2, label))
+                f.right(W - 2, 23 + i * 10, shown[:10], small=True)
+        f.small(1, 59, (ins.error or "NOT ON THE TAPE").upper()[:31])
+        return
     header(f, which.upper())
     for i, (k, name) in enumerate(T.FX_KNOBS[which]):
         y = 13 + i * 10

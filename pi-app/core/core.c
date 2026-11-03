@@ -127,6 +127,8 @@ static void (*dly_process)(void *, const float *, const float *, float *, float 
 static void *reverb, *delay;
 static float rev_level = 0.0f, dly_level = 0.0f;
 static float master = 1.0f, mix_gain = 0.6f;
+static void (*ins_fn)(void *, float *, float *, int);   /* the master insert effect (Schwung audio_fx): sh_fx_process */
+static void *ins_h;
 static float send_l[2][MAX_BLOCK], fx_out[4][MAX_BLOCK], mix[2][MAX_BLOCK];
 static float send_d[2][MAX_BLOCK];
 
@@ -556,6 +558,7 @@ static int process(jack_nframes_t n, void *arg) {
         }
         cap_pos += n;
     }
+    { void (*fx)(void *, float *, float *, int) = ins_fn; void *h = ins_h; if (fx && h) fx(h, mix[0], mix[1], (int)n); }
     float *ol = J.port_get_buffer(out_l, n), *orr = J.port_get_buffer(out_r, n);
     for (jack_nframes_t i = 0; i < n; i++) {
         ol[i] = tanhf(mix[0][i] * mix_gain) * master;              /* tanh: gentle limiting, as the Pi does */
@@ -681,6 +684,7 @@ void core_set_sends(int s, int v, float rev, float dly) {
 }
 void core_set_gain(int s, float g) { if (s >= 0 && s < MAX_SOURCES) sources[s].gain = g; }
 void core_set_master(float g) { master = g; }
+void core_set_insert(void *fn, void *h) { ins_fn = NULL; ins_h = h; ins_fn = h ? (void (*)(void *, float *, float *, int))fn : NULL; }
 
 void core_set_effects(void *rp, void *r, void *dp, void *d) { rev_process = rp; reverb = r; dly_process = dp; delay = d; }
 void core_set_effect_levels(float r, float d) { rev_level = r; dly_level = d; }

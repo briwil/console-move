@@ -21,7 +21,7 @@ from sequencer import CHANCES, MAX_RATCHET
 
 PAGE = 16
 TYPES = ["UNIFIED", "PER NOTE"]
-STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY")]
+STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("nudge", "NUDGE")]
 LANE_KNOBS = ["length", "rate", "type", "lane", "key", "scale"]
 LABELS = {"length": "LENGTH", "rate": "RATE", "type": "TYPE", "lane": "NOTE LEN", "key": "KEY", "scale": "SCALE"}
 
@@ -36,6 +36,7 @@ class MoveSynth:
         self.sel = None            # the pad picked while steps are selected
         self.lane = None           # PER NOTE: the note whose steps the buttons show
         self.pads_down = {}        # pad -> note
+        self.rec = {}              # pad -> (step, Note, frame) of a note being recorded live (its length follows the hold)
         self.last = None
 
     # ------------------------------------------------------------ what's shown
@@ -192,6 +193,14 @@ class MoveSynth:
         note = self.pad_note(p)
         if not vel:
             self.pads_down.pop(p, None)
+            rec = self.rec.pop(p, None)
+            if rec and self.T.engine.playing:                    # a recorded note lasts as long as you held the pad
+                e, seq = self.T.engine, self.seq
+                i, nt, frame = rec
+                with seq.lock:
+                    step_frames = e.frames_per_beat() / seq.pattern.steps_per_beat()
+                    nt.length = max(1, min(notes_mod.MAX_LENGTH, round((e._heard_frame() - frame) / step_frames)))
+                e.seq_changed()
             return False
         e, seq = self.T.engine, self.seq
         self.pads_down[p] = note
@@ -207,7 +216,9 @@ class MoveSynth:
             e.seq_changed()
             return False
         if self.T.live_rec and e.playing:
-            seq.live_place(note, e._heard_frame(), e.frames_per_beat())
+            frame = e._heard_frame()
+            i = seq.live_place(note, frame, e.frames_per_beat())
+            self.rec[p] = (i, seq.pattern.notes[i][note], frame)
             e.seq_changed()
             return False
         if self.kind:                                           # PER NOTE: this note's steps on the buttons
@@ -251,6 +262,9 @@ class MoveSynth:
             elif key == "ratchet":
                 if nt.ratchet != 1:
                     return True
+            elif key == "nudge":
+                if nt.nudge:
+                    return True
             elif key in nt.locks:
                 return True
         return False
@@ -269,6 +283,8 @@ class MoveSynth:
             return CHANCES[nt.chance]
         if key == "ratchet":
             return "x%d" % nt.ratchet
+        if key == "nudge":
+            return "%+d%%" % nt.nudge if nt.nudge else "ON THE BEAT"
         d = self.d
         return d.value_text(key, nt.locks[key]) if key in nt.locks else d.value_text(key)
 
@@ -295,6 +311,8 @@ class MoveSynth:
                             nt.chance = 0
                         elif key == "ratchet":
                             nt.ratchet = 1
+                        elif key == "nudge":
+                            nt.nudge = 0
                         else:
                             nt.locks.pop(key, None)
             self.sel = None
@@ -309,7 +327,7 @@ class MoveSynth:
             if n != 1 or self.sel is None:
                 return False
             key = self.pad_items()[self.sel][0]
-            return key in ("chance", "ratchet") or (not isinstance(key, str) and knobgate.is_choice(self.d, key))
+            return key in ("chance", "ratchet", "nudge") or (not isinstance(key, str) and knobgate.is_choice(self.d, key))
         if self.down:
             return False
         return n in (2, 3, 5, 6)
@@ -318,7 +336,7 @@ class MoveSynth:
         key, label = self.pad_items()[self.sel]
         seq, e = self.seq, self.T.engine
         clicks = delta
-        if key in ("chance", "ratchet") or (not isinstance(key, str) and knobgate.is_choice(self.d, key)):
+        if key in ("chance", "ratchet", "nudge") or (not isinstance(key, str) and knobgate.is_choice(self.d, key)):
             clicks = knobgate.gate(("synstep", key), delta, shift, 3)
             if not clicks:
                 return
@@ -334,6 +352,8 @@ class MoveSynth:
                         nt.chance = max(0, min(len(CHANCES) - 1, nt.chance + one))
                     elif key == "ratchet":
                         nt.ratchet = max(1, min(MAX_RATCHET, nt.ratchet + one))
+                    elif key == "nudge":
+                        nt.nudge = max(-50, min(50, nt.nudge + 10 * one))
                     else:
                         nt.locks[key] = self.d.stepped(key, nt.locks.get(key, self.d.get_param(key)), clicks)
         e.seq_changed()

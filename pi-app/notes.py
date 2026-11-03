@@ -39,7 +39,7 @@ def note_name(n):
 
 
 class Note:
-    __slots__ = ("length", "vel", "chance", "ratchet", "locks")
+    __slots__ = ("length", "vel", "chance", "ratchet", "locks", "nudge")
 
     def __init__(self, length=1, vel=DEFAULT_VELOCITY):
         self.length = length
@@ -47,6 +47,7 @@ class Note:
         self.chance = 0
         self.ratchet = 1
         self.locks = {}
+        self.nudge = 0                   # a step early (-) or late (+), in percent of a step (0: on the beat)
 
 
 class NotePattern:
@@ -302,8 +303,8 @@ class NoteSequencer:
         out = []
         p = self.pattern
         step_frames = fpb / p.steps_per_beat()
-        first = math.floor((a - self.anchor) / step_frames)
-        last = math.floor((b - self.anchor) / step_frames)
+        first = math.floor((a - self.anchor) / step_frames) - 1        # (a nudged note can start a step away)
+        last = math.floor((b - self.anchor) / step_frames) + 1
         for k in range(first, last + 1):
             hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items() if pitch not in p.lane_len]
             for pitch, ln in p.lane_len.items():                  # a row with its own length loops on its own
@@ -315,7 +316,7 @@ class NoteSequencer:
                     if self.anchor + (k + 1) * step_frames <= b:
                         self._skip.discard((pitch, k))
                     continue
-                t0 = self.anchor + k * step_frames
+                t0 = self.anchor + k * step_frames + n.nudge / 100 * step_frames
                 each = step_frames / n.ratchet
                 for r in range(n.ratchet):
                     t = t0 + r * each
@@ -352,7 +353,7 @@ class NoteSequencer:
                 for step, ns in p.notes.items():
                     for pitch, n in ns.items():
                         notes.setdefault(str(step), {})[str(pitch)] = [
-                            n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}]
+                            n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge]
                 import lfo
                 pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
                              "lanes": {str(k): v for k, v in p.lane_len.items()}})
@@ -389,6 +390,7 @@ class NoteSequencer:
                             n.chance = chance_index(v[2])
                             n.ratchet = max(1, min(MAX_RATCHET, int(v[3])))
                             n.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
+                            n.nudge = max(-50, min(50, int(v[5]))) if len(v) > 5 else 0
                             p.notes.setdefault(step, {})[pitch] = n
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))
             except (TypeError, ValueError, KeyError, IndexError, AttributeError) as e:

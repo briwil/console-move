@@ -258,6 +258,8 @@ class NoteSequencer:
     def choose_pattern(self, n, playing):
         with self.lock:
             n = max(0, min(PATTERNS - 1, n))
+            import lfo
+            lfo.inherit(self, n)
             if not playing or n == self.current:
                 self.current, self.queued = n, None
             else:
@@ -351,7 +353,8 @@ class NoteSequencer:
                     for pitch, n in ns.items():
                         notes.setdefault(str(step), {})[str(pitch)] = [
                             n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}]
-                pats.append({"length": p.length, "rate": p.rate, "notes": notes,
+                import lfo
+                pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
                              "lanes": {str(k): v for k, v in p.lane_len.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
                     "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats}
@@ -370,6 +373,8 @@ class NoteSequencer:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     p.length = max(1, min(MAX_STEPS, int(pd.get("length", 16))))
                     p.rate = max(0, min(len(RATES) - 1, int(pd.get("rate", 0))))
+                    import lfo
+                    lfo.from_json(p, pd.get("lfos"))
                     p.lane_len = {int(k): max(1, min(MAX_STEPS, int(v))) for k, v in (pd.get("lanes") or {}).items()
                                   if 0 <= int(k) <= 127 and int(v) != p.length}
                     for step, ns in (pd.get("notes") or {}).items():

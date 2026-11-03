@@ -283,6 +283,8 @@ class Sequencer:
         """Pick pattern n: straight away when stopped, else at the end of the current one."""
         with self.lock:
             n = max(0, min(PATTERNS - 1, n))
+            import lfo
+            lfo.inherit(self, n)
             if not playing or n == self.current:
                 self.current, self.queued = n, None
             else:
@@ -448,7 +450,8 @@ class Sequencer:
                             steps[str(i)] = [int(s.on), s.vel, CHANCES[s.chance], s.ratchet,
                                              {str(k): v for k, v in s.locks.items()}, dict(s.comp)]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
-                pats.append({"lanes": lanes})
+                import lfo
+                pats.append({"lanes": lanes, "lfos": lfo.to_json(p)})
             return {"current": self.current, "patterns": pats}
 
     def from_json(self, data):
@@ -459,6 +462,8 @@ class Sequencer:
                 return
             try:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
+                    import lfo
+                    lfo.from_json(p, pd.get("lfos"))
                     for ln, ld in zip(p.lanes, pd.get("lanes", [])):
                         ln.length = max(1, min(MAX_STEPS, int(ld.get("length", 16))))
                         ln.rate = max(0, min(len(RATES) - 1, int(ld.get("rate", 0))))

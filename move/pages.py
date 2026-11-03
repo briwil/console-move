@@ -397,7 +397,23 @@ def listing(f, rows, pick, top=11, line=7, fit=None):
 
 # ------------------------------------------------------------------ an instrument's sound
 
+def lfo_page(f, T):
+    ml = T.mlfo
+    e = T.engine
+    header(f, "LFO %d" % (ml.tab + 1), "PAT %d" % (e.seq.current + 1))
+    for i, (label, value) in enumerate(ml.values()):
+        col, row = divmod(i, 3)
+        x, y = col * 65, 13 + row * 11
+        f.small(x + 1, y, "%d %s" % (i + 1, label))
+        f.right(x + 62, y + 5, str(value)[:9], small=True)
+    f.small(1, 50, "EACH PATTERN HAS ITS OWN")
+    f.small(1, 57, "< > : SETTINGS / LFO 1 / LFO 2")
+
+
 def sound_page(f, T):
+    if T.mlfo.active():
+        lfo_page(f, T)
+        return
     e = T.engine
     d = e.drums
     pages = T.drum_pages()

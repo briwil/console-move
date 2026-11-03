@@ -78,6 +78,8 @@ class CoreBridge:
             self.rev, self.dly = effects.Reverb(c.rate), effects.Delay(c.rate)
             c.effects(effects._lib.rev_process, self.rev.h, effects._lib.dly_process, self.dly.h)
         self.sched = Scheduler(c)
+        import lfo
+        self._lfos = lfo.Runner(self.e)
         print("Sound core running: %d Hz, %d frames a cycle" % (c.rate, c.block))
 
     def _device(self):
@@ -121,6 +123,10 @@ class CoreBridge:
             slot.flush()
             slot.tick()
         self._auditions()
+        try:
+            self._lfos.tick()                              # the LFOs move their settings
+        except Exception as ex:                            # noqa: BLE001
+            print("LFO:", ex)
         if self.sched.playing:
             self.sched.tick(self._plays(), e.frames_per_beat(), on_events=self._hits)
             e.seq_clock = int(self.sched.seq_frame())

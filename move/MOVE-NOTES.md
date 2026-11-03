@@ -115,3 +115,7 @@ lights them one at a time (the screen says which step button it is under); `echo
 - The Move's audio input (guitar, mic: system:capture_1/2) is a tape input: INPUT L / INPUT R (core channels EXT_IN = 88, 89),
   chosen in the zoomed track view (knobs 1-3) after the instrument channels. A track armed on it hears it while you play
   (core_ext_monitor). Mono: INPUT L or R; stereo: pick both sides. Needs the new libconsolecore.so (GitHub build).
+- LFOs (pi-app/lfo.py, move/movelfo.py): every instrument has 2, aimed at one of its number settings (DEST, WAVE, SPEED in note
+  values, DEPTH, PHASE, MODE FREE/TRIG). Pages after the last sound page (Right past it). Kept per pattern; a never-used pattern
+  starts as a copy of the one you came from. The Runner (core bridge tick) sends the moved value without changing the value on
+  the page. Not done yet: LFO step sequencer / parameter locks.

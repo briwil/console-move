@@ -38,6 +38,7 @@ import pages                      # noqa: E402
 import moveseq                    # noqa: E402
 import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
+import movelfo                    # noqa: E402
 import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
@@ -363,6 +364,7 @@ def main():
     T.shift_held = lambda: board.shift
     T.mseq = moveseq.MoveSeq(T)
     T.msyn = movesynth.MoveSynth(T)
+    T.mlfo = movelfo.MoveLFO(T)
     T.live_rec = False
     T.song_page = False
     T.octave = 0                                     # Up / Down on a sound page: the pads' octave
@@ -482,6 +484,8 @@ def choice_knob(T, m, e, name):
         return False
     if T.msyn.active():
         return T.msyn.is_choice_knob(n)
+    if T.mlfo.active():
+        return T.mlfo.is_choice(n)
     if T.fx_page:
         return n == 1 and T.fx_page == "delay"                 # the delay's TIME steps through note lengths
     ms = T.mseq
@@ -530,6 +534,13 @@ def handle(name, T, m, e):
         name = ("KNOB", name[1], way, name[3])
     on_sound = T.drum_page and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)
     if on_sound and e and e.drums:
+        last = len(T.drum_pages()) - 1
+        if name in ("LEFT", "RIGHT") or (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9 and name[3]):
+            if T.mlfo.arrows(1 if name == "RIGHT" else -1, last):
+                return
+        if T.mlfo.active() and isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            T.mlfo.knob(name[1], name[2], name[3])
+            return
         # a sound page: Up / Down (+ / -) are the pads' octave (as on the Move); Left / Right the settings pages
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9 and not name[3]:
             T.octave = max(-4, min(4, T.octave + (1 if name[2] > 0 else -1)))

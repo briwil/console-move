@@ -19,7 +19,9 @@ LANE_H = 11                           # pixels per track
 def draw(f, T, menu=None):
     f.clear()
     try:
-        if menu is not None and menu.open:
+        if menu is not None and menu.open and getattr(menu, "mode", "") == "name":
+            name_page(f, menu)
+        elif menu is not None and menu.open:
             text_page(f, menu.s, getattr(menu, "msg", ""))
         elif menu is not None and menu.kits.open:
             if menu.kits.mode == "list":
@@ -701,6 +703,37 @@ def kit_list(f, k):
     if msg:
         f.rect(0, H - 8, W, 8, 1)
         f.small(1, H - 6, str(msg).upper()[:31], 0)
+
+
+def name_page(f, menu):
+    """Naming (a project, a Wi-Fi password): the name in big letters, the letter under the cursor inverted in a
+    white box (at the end: an empty box, the next letter)."""
+    prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(menu, "renaming", ""),
+              "wifi": "PASSWORD FOR %s" % getattr(menu, "joining", "")}.get(menu.naming, "NAME THIS PROJECT")
+    header(f, prompt.upper()[:21])
+    name = "".join(menu.name)
+    per = 20
+    cur = menu.cursor
+    row = cur // per
+    rows = max(row + 1, (len(name) + per - 1) // per, 1)
+    first = max(0, min(row - 1, rows - 3))
+    for r in range(first, min(rows, first + 3)):
+        y = 16 + (r - first) * 11
+        for k, ch in enumerate(name[r * per:(r + 1) * per]):
+            x = 2 + k * 6
+            if r * per + k == cur:
+                f.rect(x - 1, y - 1, 7, 9, 1)
+                f.text(x, y, ch, 0)
+            else:
+                f.text(x, y, ch)
+        if r == row and cur >= len(name):                  # the cursor after the last letter
+            x = 2 + (cur - r * per) * 6
+            f.rect(x - 1, y - 1, 7, 9, 1)
+    msg = str(getattr(menu, "msg", "") or "")
+    if msg:
+        f.small(1, 44, msg.upper()[:31])
+    f.small(1, 51, "WHEEL: LETTER   < >: MOVE")
+    f.small(1, 58, "DELETE: ERASE  PLAY: OK  BACK: CANCEL")
 
 
 def text_page(f, s, msg=""):

@@ -1,3 +1,5 @@
+> **Note:** this file describes the original Raspberry Pi version (kept for history). The Move version is in [move/MOVE-NOTES.md](move/MOVE-NOTES.md).
+
 # Project notes (start here)
 
 This file is for picking the project up again, whether that's me (Brian) later, or a new

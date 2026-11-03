@@ -28,7 +28,7 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "WIFI", "UPDATE"]
+SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "UPDATE"]    # (no WI-FI, INPUT or OUTPUT: the Move handles those itself)
 ROWS = 7                                     # setting rows on screen at once (the layout's set_label1-7)
 PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
 MAX_PASSWORD = 63

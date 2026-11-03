@@ -8,6 +8,7 @@ came from, after that they're separate).
   DEPTH  how far it swings each way, -100..+100 % of the setting's range
   PHASE  where in the cycle it starts
   MODE   FREE (runs on with the song) or TRIG (starts again at the pattern's first step)
+  STEPS  16 steps (1/16 notes, one bar), each can be muted (the LFO rests) or lock its own DEPTH or WAVE
 The setting goes up and down around the value it has on the instrument's page.
 """
 import copy
@@ -19,10 +20,11 @@ SPEEDS = [("8BAR", 32.0), ("4BAR", 16.0), ("2BAR", 8.0), ("1BAR", 4.0), ("1/2", 
           ("1/8", 0.5), ("1/16", 0.25), ("1/32", 0.125)]
 MODES = ["FREE", "TRIG"]
 COUNT = 2
+STEPS = 16
 
 
 def default():
-    return {"dest": -1, "wave": 0, "speed": 3, "depth": 50, "phase": 0, "mode": 0}
+    return {"dest": -1, "wave": 0, "speed": 3, "depth": 50, "phase": 0, "mode": 0, "steps": {}}
 
 
 def defaults():
@@ -46,7 +48,12 @@ def inherit(seq, n):
 
 def to_json(pattern):
     l = getattr(pattern, "lfos", None)
-    return None if l is None else copy.deepcopy(l)
+    if l is None:
+        return None
+    out = copy.deepcopy(l)
+    for o in out:
+        o["steps"] = {str(k): v for k, v in o.get("steps", {}).items()}
+    return out
 
 
 def from_json(pattern, data):
@@ -59,6 +66,8 @@ def from_json(pattern, data):
             o["depth"] = max(-100, min(100, int(d.get("depth", 50))))
             o["phase"] = max(0, min(100, int(d.get("phase", 0))))
             o["mode"] = max(0, min(len(MODES) - 1, int(d.get("mode", 0))))
+            o["steps"] = {int(k): {a: int(b) for a, b in v.items() if a in ("depth", "wave", "mute")}
+                          for k, v in (d.get("steps") or {}).items() if 0 <= int(k) < STEPS}
         pattern.lfos = out if data else None
     except (TypeError, ValueError, AttributeError):
         pattern.lfos = None
@@ -142,10 +151,14 @@ class Runner:
                     frame -= getattr(seq, "anchor", 0)
                 beats = frame / fpb
                 ph = beats / SPEEDS[l["speed"]][1] + l["phase"] / 100.0
-                v = wave(l["wave"], ph, 0, (k, j))
+                lock = (l.get("steps") or {}).get(int(math.floor(beats * 4)) % STEPS)
+                shape, depth = l["wave"], l["depth"]
+                if lock:
+                    shape, depth = lock.get("wave", shape), lock.get("depth", depth)
+                v = 0.0 if lock and lock.get("mute") else wave(shape, ph, 0, (k, j))
                 base = m.get_param(dest)
                 span = top(m, dest)
-                val = int(round(max(0, min(span, base + v * l["depth"] / 100.0 * span / 2))))
+                val = int(round(max(0, min(span, base + v * depth / 100.0 * span / 2))))
                 if prev is None or prev[1] != val:
                     self.last[key] = (dest, val)
                     self._send(m, dest, val)

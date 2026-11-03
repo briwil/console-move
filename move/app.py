@@ -139,6 +139,9 @@ class MoveBoard:
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
+            if T.mlfo.active():
+                k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
+                return
             if not val:
                 return
             if n <= 8:
@@ -263,7 +266,8 @@ class Lights:
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
         syn = T.msyn.active()
-        seq_lights = T.msyn.step_lights() if syn else T.mseq.step_lights() if T.mseq.active() else None
+        seq_lights = T.msyn.step_lights() if syn else T.mseq.step_lights() if T.mseq.active() else \
+            T.mlfo.step_lights() if T.mlfo.active() else None
         song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
         for i in range(16):
             v = 0
@@ -583,6 +587,10 @@ def handle(name, T, m, e):
             ms.step(name[1], name[2], name[3])
         elif T.msyn.active():
             T.msyn.step(name[1], name[2], name[3])
+        return
+    if isinstance(name, tuple) and name[0] == "LFOSTEP":
+        if T.mlfo.active():
+            T.mlfo.step(name[1], name[2])
         return
     if isinstance(name, tuple) and name[0] == "STEP_PAD":
         if ms.active():

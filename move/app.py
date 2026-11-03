@@ -538,6 +538,14 @@ def choice_knob(T, m, e, name):
     return False
 
 
+def SETTINGS_ROW(m):
+    import menu as menu_mod
+    try:
+        return menu_mod.SETTINGS[m.row]
+    except IndexError:
+        return ""
+
+
 def menu_tick(m):
     """The Pi redraws the settings each frame (menu.draw), which keeps SOFTWARE UPDATE's row current and
     restarts after an install; the Move never calls draw, so this does that part."""
@@ -757,6 +765,12 @@ def handle(name, T, m, e):
         if name[0] == "HOLD":
             (m if m.open else m.kits).key(name[1])
     elif m.open:
+        if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and getattr(m, "mode", "") == "settings"
+                and getattr(m, "editing", False) and SETTINGS_ROW(m) != "TEMPO"):
+            way = knobgate.gate(("menu-edit",), name[2], False, 3)      # a list of choices: several clicks each
+            if not way:
+                return
+            name = ("KNOB", 11, way, name[3])
         m.key("PLAY" if name == "HOME" else name)    # pushing the wheel chooses, as PLAY does
     elif m.kits.open:
         if m.kits.mode == "list" and name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):

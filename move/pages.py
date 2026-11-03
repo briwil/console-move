@@ -21,6 +21,8 @@ def draw(f, T, menu=None):
     try:
         if menu is not None and menu.open and getattr(menu, "mode", "") == "name":
             name_page(f, menu)
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "settings":
+            settings_page(f, menu)
         elif menu is not None and menu.open:
             text_page(f, menu.s, getattr(menu, "msg", ""))
         elif menu is not None and menu.kits.open:
@@ -703,6 +705,36 @@ def kit_list(f, k):
     if msg:
         f.rect(0, H - 8, W, 8, 1)
         f.small(1, H - 6, str(msg).upper()[:31], 0)
+
+
+def settings_page(f, menu):
+    """The settings, one row each: the row you're on is a white bar. Push the wheel: the value goes black inside a
+    white box and the wheel changes it; push again: back to the rows."""
+    import menu as menu_mod
+    names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO"}
+    header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
+    rows = menu_mod.SETTINGS
+    for i, what in enumerate(rows):
+        y = 12 + i * 9
+        full = str(menu.setting_text(what) or "")
+        short = full.split("  ")[0].split(": ")[0].upper()[:14]
+        label = names.get(what, menu_mod.LABELS.get(what, what))
+        on = i == menu.row
+        if on and not menu.editing:
+            f.rect(0, y - 1, W, 9, 1)
+            f.text(2, y, label, 0)
+            f.right(W - 3, y, short, c=0)
+        else:
+            f.text(2, y, label)
+            if on:                                            # editing: the value in a white box
+                w = len(short) * 6 + 3
+                f.rect(W - 3 - w + 1, y - 1, w + 1, 9, 1)
+                f.right(W - 3, y, short, c=0)
+            else:
+                f.right(W - 3, y, short)
+    full = str(menu.setting_text(rows[menu.row]) or "")
+    msg = str(getattr(menu, "msg", "") or "") or (menu.update_message() if rows[menu.row] == "UPDATE" else "") or full
+    f.small(1, 58, msg.upper()[:31])
 
 
 def name_page(f, menu):

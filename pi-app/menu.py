@@ -45,6 +45,7 @@ class Menu:
         self.open = True
         self.choice = 2                       # LOAD, as in the design
         self.mode = "list"                    # "list", "name" or "settings"
+        self.editing = False                  # settings: the pushed row's value is being turned (push again: done)
         self.row = 0                          # the settings row being changed
         self.name = []
         self.cursor = 0
@@ -123,6 +124,9 @@ class Menu:
             self.msg, self.confirm = "", None
             return
         if self.mode == "settings":
+            if self.editing:                              # a pushed row: the wheel changes its value
+                self.change(delta)
+                return
             self.row = max(0, min(len(SETTINGS) - 1, self.row + delta))
             self.msg = ""
             return
@@ -159,10 +163,9 @@ class Menu:
             self.msg = ""
 
     def settings_key(self, name):
-        if name == "UP":
-            self.turn(-1)
-        elif name == "DOWN":
-            self.turn(1)
+        if name in ("UP", "DOWN"):
+            self.editing = False
+            self.turn(-1 if name == "UP" else 1)
         elif name in ("LEFT", "RIGHT"):
             self.change(-1 if name == "LEFT" else 1)
         elif name in ("BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT"):     # with shift: small steps
@@ -173,10 +176,13 @@ class Menu:
             elif SETTINGS[self.row] == "WIFI":
                 self.mode, self.msg, self.confirm, self.pick = "wifi", "", None, 0
                 self.wifi.scan()
-            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "DRUMS"):
-                self.change(1)
+            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "DRUMS", "TEMPO"):
+                self.editing = not self.editing            # push: turn its value, push again: back to the rows
         elif name == "FILE":
-            self.mode, self.msg = "list", ""
+            if self.editing:
+                self.editing = False
+            else:
+                self.mode, self.msg = "list", ""
 
     def change(self, delta, fine=False):
         if SETTINGS[self.row] in ("UPDATE", "WIFI"):
@@ -558,12 +564,13 @@ class Menu:
         self.say("SAVED AS %s" % name.upper())
 
     def show(self):
-        self.open, self.mode, self.msg, self.confirm_new = True, "list", "", False
+        self.open, self.mode, self.msg, self.confirm_new, self.editing = True, "list", "", False, False
         self.refresh()
 
     def close(self):
         self.open = False
         self.mode = "list"
+        self.editing = False
         self.msg = ""
 
     # ------------------------------------------------------------ drawing

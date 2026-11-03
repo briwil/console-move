@@ -119,3 +119,6 @@ lights them one at a time (the screen says which step button it is under); `echo
   values, DEPTH, PHASE, MODE FREE/TRIG). Pages after the last sound page (Right past it). Kept per pattern; a never-used pattern
   starts as a copy of the one you came from. The Runner (core bridge tick) sends the moved value without changing the value on
   the page. Not done yet: LFO step sequencer / parameter locks.
+- GET MORE FROM SCHWUNG (pi-app/schwung/store.py): the instrument picker's last entry. Reads Schwung's module-catalog.json
+  from GitHub, downloads a module's release .tar.gz (ready-made for the Move) into schwung/modules/<id>/, records it in
+  /data/UserData/console/schwung-installed.json (catalog.add_record: sound generators join the instruments, audio_fx go in catalog.FX).

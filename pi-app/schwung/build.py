@@ -87,6 +87,8 @@ def fetch(m):
 
 
 def built(m):
+    if m.get("prebuilt"):
+        return True                      # installed ready-made from Schwung's catalog (store.py)
     stamp = os.path.join(OUT, m["id"], ".console-commit")
     return os.path.exists(os.path.join(OUT, m["id"], "dsp.so")) and os.path.exists(stamp) \
         and open(stamp).read().strip() == m["commit"] + catalog.recipe_version(m)

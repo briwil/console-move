@@ -162,7 +162,38 @@ MODULES = [
                 "-lm", "-ldl"]]},
 ]
 
+FX = []                             # audio effects installed from Schwung's catalog (store.py)
+
+
+def add_record(mid, r):
+    """One installed module joins the instruments (MODULES) or the effects (FX). Works while the app runs."""
+    if mid in {m["id"] for m in MODULES} or mid in {m["id"] for m in FX}:
+        return
+    if r.get("kind") == "fx":
+        FX.append({"id": mid, "title": r["title"], "dsp": r.get("dsp", mid + ".so"), "json": "module.json",
+                   "description": r.get("description", "")})
+    else:
+        MODULES.append({"id": mid, "title": r["title"], "kind": r.get("kind", "synth"), "license": "see its repo",
+                        "repo": r.get("repo", ""), "commit": "installed", "json": "module.json", "build": [],
+                        "prebuilt": True})
+        BY_ID[mid] = MODULES[-1]
+
+
+def _add_installed():
+    """What store.py has installed."""
+    try:
+        import store
+        reg = store.installed()
+    except Exception:                                   # noqa: BLE001
+        return
+    for mid, r in reg.items():
+        if os.path.exists(os.path.join(store.MODULES_DIR, mid)):
+            add_record(mid, r)
+
+
+import os  # noqa: E402
 BY_ID = {m["id"]: m for m in MODULES}
+_add_installed()
 
 
 def recipe_version(m):

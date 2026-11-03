@@ -60,7 +60,9 @@ class InstPage:
         if number != 11:
             return
         step = 1 if delta > 0 else -1
-        if self.mode:
+        if self.mode == "store":
+            self.pick = max(0, min(max(0, len(self.store.items) - 1), self.pick + step))
+        elif self.mode:
             self.pick = max(0, min(len(self.choices) - 1, self.pick + step))
         else:
             self.row = max(0, min(audio.SLOTS - 1, self.row + step))
@@ -70,7 +72,9 @@ class InstPage:
         e = self.e
         if not e or not e.drums:
             return
-        if self.mode == "pick":
+        if self.mode == "store":
+            self.store.install(self.pick)
+        elif self.mode == "pick":
             self.choose_machine()
         elif self.mode == "menu":
             if self.choices[self.pick] == "REMOVE":
@@ -101,13 +105,29 @@ class InstPage:
             self.mode = None
             self.t.say("NO DRUM MACHINES ARE BUILT: RUN ~/console/pi-app/setup.sh ONCE", 4)
             return
+        self.choices.append(("__store__", "+ GET MORE FROM SCHWUNG"))
         ids = [m for m, _ in self.choices]
         self.pick = ids.index(mine) if mine in ids else 0
         self.mode = "pick"
 
+    def open_store(self):
+        """Schwung's catalog: pick one to install (instruments, then effects)."""
+        import drums
+        sm = drums.schwung_modules
+        have = [m["id"] for m in sm.catalog.MODULES] + [m["id"] for m in sm.catalog.FX] if sm else []
+        if getattr(self, "store", None) is None:
+            import store
+            self.store = store.Store(have)
+        self.store.builtin = have
+        self.store.load()
+        self.mode, self.pick = "store", 0
+
     def choose_machine(self):
         e = self.e
         mid, title = self.choices[self.pick]
+        if mid == "__store__":
+            self.open_store()
+            return
         self.mode = None
         if mid == e.slots[self.row]:
             return

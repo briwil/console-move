@@ -575,10 +575,9 @@ class Menu:
                 self.songs = e.song_names()
                 self.pick = min(self.pick, max(0, len(self.songs) - 1))
                 self.confirm = None
+                self.deleting = False                      # done: back to the main menu
+                self.mode = "list"
                 self.say("DELETED %s" % song.upper())
-                if not self.songs:
-                    self.deleting = False
-                    self.mode = "list"
 
     def create(self):
         """Save the unnamed song with the name typed in (or, for Wi-Fi, connect with the password)."""

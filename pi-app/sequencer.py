@@ -261,19 +261,8 @@ class Sequencer:
                 ln.rotate %= ln.length
                 if ln.hits:
                     self._fill(ln)
-            elif what == "rate":
-                old = ln.steps_per_beat()
+            elif what == "rate":                      # a pure speed change: the steps stay as they are
                 ln.rate = next_rate(ln.rate, delta)
-                # a lane that's a whole number of bars stays that many bars long at its new rate
-                old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(ln.steps_per_beat(), self.bar_beats)
-                if old_bar and new_bar and ln.length % old_bar == 0:
-                    length = ln.length // old_bar * new_bar
-                    if length <= MAX_STEPS:
-                        ln.length = length
-                        ln.hits = min(ln.hits, ln.length)
-                        ln.rotate %= ln.length
-                        if ln.hits:
-                            self._fill(ln)
             elif what == "hits":
                 ln.hits = max(0, min(ln.length, ln.hits + (1 if delta > 0 else -1)))
                 self._fill(ln)

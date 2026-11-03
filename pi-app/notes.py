@@ -258,15 +258,8 @@ class NoteSequencer:
             p = self.pattern
             if what == "length":
                 p.length = max(1, min(MAX_STEPS, p.length + delta))
-            elif what == "rate":
-                old = p.steps_per_beat()
+            elif what == "rate":                      # a pure speed change: the steps stay as they are
                 p.rate = next_rate(p.rate, delta)
-                old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(p.steps_per_beat(), self.bar_beats)
-                if old_bar and new_bar and p.length % old_bar == 0 and p.length // old_bar * new_bar <= MAX_STEPS:
-                    for pitch, ln in list(p.lane_len.items()):          # the rows with their own length scale too
-                        if ln % old_bar == 0 and ln // old_bar * new_bar <= MAX_STEPS:
-                            p.lane_len[pitch] = ln // old_bar * new_bar
-                    p.length = p.length // old_bar * new_bar
             return getattr(p, what)
 
     def live_place(self, note, tape_frame, frames_per_beat, length=1):

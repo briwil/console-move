@@ -13,6 +13,7 @@ pi-app/notes.py's NoteSequencer; this is the Move's buttons for it.
   Record: the pads you play go onto the nearest step of the pattern while it plays (nothing to do with the tape)
   knobs (nothing held)  1 length  2 rate  3 type  4 the lit note's own length  5 key  6 scale
 """
+import threading
 import time
 
 import knobgate
@@ -63,6 +64,9 @@ class MoveSynth:
         return getattr(self.seq, "move_type", 0)
 
     def length(self):
+        """Steps shown: the pattern's, or in PER NOTE with a note picked, that note's own length."""
+        if self.kind and self.lane is not None:
+            return self.seq.pattern.lane_length(self.lane)
         return self.seq.pattern.length
 
     def first(self):
@@ -167,8 +171,10 @@ class MoveSynth:
         seq, e = self.seq, self.T.engine
         if self.kind and self.lane is not None:
             on = seq.toggle(i, self.lane)
-            if on:
-                self.T.engine.drums.note_on(self.lane, 100)
+            if on:                                              # a short preview of the note (then let it go)
+                d, lane = self.T.engine.drums, self.lane
+                d.note_on(lane, 100)
+                threading.Timer(0.25, d.note_off, (lane,)).start()
         elif self.notes_at(i):
             for n in list(self.notes_at(i)):
                 seq.toggle(i, n)
@@ -402,7 +408,11 @@ class MoveSynth:
         if number > len(LANE_KNOBS):
             return
         what = LANE_KNOBS[number - 1]
-        if what == "length":
+        if what == "length" and self.kind and self.lane is not None:      # PER NOTE, a note picked: its own length
+            v = seq.change_lane_length(self.lane, delta)
+            self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)
+            self.T.say("NOTE %s LENGTH %d" % (notes_mod.note_name(self.lane), v), 2)
+        elif what == "length":
             v = seq.change_track("length", delta)
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)      # the step lights show the length
             self.T.say("LENGTH %d" % v, 2)
@@ -441,7 +451,7 @@ class MoveSynth:
         out = []
         for w in LANE_KNOBS:
             if w == "length":
-                v = seq.pattern.length
+                v = self.length()
             elif w == "rate":
                 v = notes_mod.RATES[seq.pattern.rate][0]
             elif w == "type":

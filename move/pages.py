@@ -23,7 +23,8 @@ def draw(f, T, menu=None):
             name_page(f, menu)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "settings":
             settings_page(f, menu)
-        elif menu is not None and menu.open and getattr(menu, "mode", "") == "load" and getattr(menu, "deleting", False):
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "load" and (
+                getattr(menu, "deleting", False) or getattr(menu, "rename_pick", False)):
             delete_page(f, menu)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "list":
             menu_list_page(f, menu, T)
@@ -719,11 +720,11 @@ def menu_list_page(f, menu, T):
     header(f, ((e.song or "UNTITLED") if e else "DEMO").upper()[:21])
     rows = []
     for label, _ in menu_mod.ITEMS:
-        rows.append({"NEW": "DELETE PROJECT" if shift else "NEW PROJECT", "SAVE": "SAVE PROJECT",
+        rows.append({"NEW": "DELETE PROJECT" if shift else "NEW PROJECT", "SAVE": "RENAME PROJECT" if shift else "SAVE PROJECT",
                      "LOAD": "LOAD PROJECT", "SETTINGS": "SETTINGS"}[label])
     biglist(f, rows, menu.choice, fit=4)
     msg = str(getattr(menu, "msg", "") or "")
-    f.small(1, 58, (msg or ("SHIFT + PUSH: DELETE ONE" if shift else "")).upper()[:31])
+    f.small(1, 58, (msg or ("SHIFT + PUSH: DELETE / RENAME" if shift else "")).upper()[:31])
 
 
 def delete_page(f, menu):
@@ -737,11 +738,12 @@ def delete_page(f, menu):
         f.small(1, 52, "PLAY: YES, DELETE IT")
         f.small(1, 58, "BACK: NO, KEEP IT")
         return
-    header(f, "DELETE WHICH PROJECT?", "%d" % len(menu.songs))
+    renaming = getattr(menu, "rename_pick", False)
+    header(f, "RENAME WHICH PROJECT?" if renaming else "DELETE WHICH PROJECT?", "%d" % len(menu.songs))
     rows = [(s + ("  OPEN" if menu.engine and s == menu.engine.song else "")) for s in menu.songs]
     biglist(f, [r.upper() for r in rows], menu.pick, fit=4)
     msg = str(getattr(menu, "msg", "") or "")
-    f.small(1, 58, (msg or "PLAY: DELETE   BACK: CANCEL").upper()[:31])
+    f.small(1, 58, (msg or ("PLAY: RENAME   BACK: CANCEL" if renaming else "PLAY: DELETE   BACK: CANCEL")).upper()[:31])
 
 
 def settings_page(f, menu):

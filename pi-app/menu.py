@@ -45,6 +45,7 @@ class Menu:
         self.open = True
         self.choice = 2                       # LOAD, as in the design
         self.mode = "list"                    # "list", "name" or "settings"
+        self.rename_pick = False              # the LOAD list used to rename a project (Shift + push on SAVE)
         self.deleting = False                 # the LOAD list used to delete a project (Shift + push on NEW)
         self.editing = False                  # settings: the pushed row's value is being turned (push again: done)
         self.row = 0                          # the settings row being changed
@@ -111,9 +112,23 @@ class Menu:
             self.choose()
         elif name == "DELETE_MODE":
             self.start_delete()
+        elif name == "RENAME_MODE":
+            self.start_rename()
         elif name == "FILE":
             self.close()
         self.refresh()
+
+    def start_rename(self):
+        """Shift + push on SAVE: choose a project to rename."""
+        e = self.engine
+        if ITEMS[self.choice][0] != "SAVE" or not e:
+            return
+        self.songs = e.song_names()
+        if not self.songs:
+            self.say("NO SAVED PROJECTS TO RENAME")
+            return
+        self.rename_pick = True
+        self.mode, self.msg, self.confirm, self.pick = "load", "", None, 0
 
     def start_delete(self):
         """Shift + push on NEW: choose a project to delete (then it asks: are you sure?)."""
@@ -493,6 +508,10 @@ class Menu:
         if self.deleting:
             self.delete_key(name)
             return
+        if self.rename_pick and name in CONFIRM and self.songs:     # (the same as the LIFT key)
+            name = "COPY"
+        elif self.rename_pick and name == "FILE":
+            self.rename_pick = False
         if name in ("LEFT", "UP", "BAR_LEFT"):
             self.turn(-1)
         elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
@@ -612,13 +631,13 @@ class Menu:
 
     def show(self):
         self.open, self.mode, self.msg, self.confirm_new, self.editing = True, "list", "", False, False
-        self.deleting = False
+        self.deleting = self.rename_pick = False
         self.refresh()
 
     def close(self):
         self.open = False
         self.mode = "list"
-        self.editing = self.deleting = False
+        self.editing = self.deleting = self.rename_pick = False
         self.msg = ""
 
     # ------------------------------------------------------------ drawing

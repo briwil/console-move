@@ -174,7 +174,7 @@ typedef struct {
     float pan[MAX_VOICES][2], rev[MAX_VOICES], dly[MAX_VOICES];
     float monitor;                            /* how loud it's heard (0: not heard) */
     void *frev, *fdly;                        /* its own effects, for the KIT inputs (NULL: none) */
-    void *ins_h;                              /* its insert effect (NULL: none): on the kit's direct sound, before the tape sees it */
+    void *ins_h[2];                           /* its two insert effects (NULL: none), in series: on the kit's direct sound, before the tape sees it */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
 } Slot;
 static Slot slots[SLOTS];
@@ -366,11 +366,14 @@ static void slots_cycle(int n) {
                 }
             }
         }
-        {   /* the insert effect works on the kit's direct sound; what it makes is what the tape records (KIT inputs)
-               and what is heard */
-            void (*ifx)(void *, float *, float *, int) = ins_fn; void *ih = sl->ins_h;
-            int has_ins = ifx && ih;
-            if (has_ins) ifx(ih, kl, kr, n);
+        {   /* the insert effects (two, one after the other) work on the kit's direct sound; what they make is what
+               the tape records (KIT inputs) and what is heard */
+            void (*ifx)(void *, float *, float *, int) = ins_fn;
+            int has_ins = 0;
+            for (int k = 0; k < 2; k++) {
+                void *ih = sl->ins_h[k];
+                if (ifx && ih) { has_ins = 1; ifx(ih, kl, kr, n); }
+            }
             float g = sl->monitor;
             if ((aon || bon || has_ins) && g > 0.0f)
                 for (int i = 0; i < n; i++) {
@@ -694,10 +697,10 @@ void core_set_sends(int s, int v, float rev, float dly) {
 }
 void core_set_gain(int s, float g) { if (s >= 0 && s < MAX_SOURCES) sources[s].gain = g; }
 void core_set_master(float g) { master = g; }
-void core_slot_insert(int k, void *fn, void *h) {      /* fn: sh_fx_process; the same for every slot */
-    if (k < 0 || k >= SLOTS) return;
+void core_slot_insert(int k, int pos, void *fn, void *h) {      /* fn: sh_fx_process; the same for every slot */
+    if (k < 0 || k >= SLOTS || pos < 0 || pos > 1) return;
     if (fn) ins_fn = (void (*)(void *, float *, float *, int))fn;
-    slots[k].ins_h = h;
+    slots[k].ins_h[pos] = h;
 }
 
 void core_set_effects(void *rp, void *r, void *dp, void *d) { rev_process = rp; reverb = r; dly_process = dp; delay = d; }

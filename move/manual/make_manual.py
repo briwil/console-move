@@ -285,12 +285,13 @@ story += [
     p("FX", H2),
     p("The reverb and delay are on each instrument <i>before</i> the tape, so they are recorded with the sound.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: the INSERT page, again: back."),
+        ("Left button 3", "Reverb page, again: delay page, again: INSERT 1, again: INSERT 2, again: back."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
-        ("INSERT page", "Each instrument has its own insert effect. Knob 1 picks it (Tapescam, Ducker...) for the "
-         "instrument you're on, knobs 2-4 its first three settings. It is on the instrument <i>before</i> the tape, "
-         "so what you record from that instrument has the effect in it; nothing is added to the tape afterwards. "
+        ("INSERT 1 / 2", "Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "
+         "granular...). Push the wheel to open the picture picker: turn to browse, push to choose, Back to cancel. "
+         "Knobs 1-8 are the effect's first eight settings. They are on the instrument <i>before</i> the tape, "
+         "so what you record from that instrument has the effects in it; nothing is added to the tape afterwards. "
          "A Ducker ducks its instrument whenever drum 1 of another instrument is hit."),
     ]),
 

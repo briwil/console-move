@@ -440,7 +440,7 @@ class Transport:
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name == "FX":
-            order = [None, "reverb", "delay"] + (["insert"] if self.insert_fx_available() else [])
+            order = [None, "reverb", "delay"] + (["insert", "insert2"] if self.insert_fx_available() else [])
             self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)
@@ -762,9 +762,9 @@ class Transport:
         import catalog
         return bool(getattr(self, "inst_sends", False) and catalog.FX)
 
-    def insfx(self, slot=None):
-        """An instrument's INSERT effect (schwung/insertfx.py), made when first used; its saved choice comes back
-        with it. No slot: the one you're on."""
+    def insfx(self, slot=None, pos=None):
+        """An instrument's INSERT effect 1 or 2 (schwung/insertfx.py), made when first used; its saved choice
+        comes back with it. No slot / pos: the ones you're on."""
         import insertfx
         if getattr(self, "_insfx", None) is None:
             self._insfx = {}
@@ -776,13 +776,18 @@ class Transport:
                 pass
         if slot is None:
             slot = self.engine.slot if self.engine.slot is not None else 0
+        if pos is None:
+            pos = 1 if self.fx_page == "insert2" else 0
         core = getattr(self.engine, "core", None)
-        ins = self._insfx.get(slot)
+        ins = self._insfx.get((slot, pos))
         if ins is None:
-            ins = self._insfx[slot] = insertfx.Insert(core, slot)
+            ins = self._insfx[(slot, pos)] = insertfx.Insert(core, slot, pos)
             if core is not None:
+                saved = self._insfx_saved.get(str(slot)) or {}
+                if "fx" in saved:                            # (the first version: one effect per instrument)
+                    saved = {"0": saved}
                 try:
-                    ins.from_json(self._insfx_saved.get(str(slot)))
+                    ins.from_json(saved.get(str(pos)))
                 except Exception:                           # noqa: BLE001
                     pass
         if ins.core is None and core is not None:
@@ -790,13 +795,14 @@ class Transport:
         return ins
 
     def insfx_boot(self):
-        """The core is up: bring back every instrument's saved insert effect."""
-        self.insfx()
-        for k in list(self._insfx_saved):
-            try:
-                self.insfx(int(k))
-            except (ValueError, Exception):                 # noqa: BLE001
-                pass
+        """The core is up: bring back every instrument's saved insert effects."""
+        self.insfx(0, 0)
+        for k, v in list(self._insfx_saved.items()):
+            for pos in (("0", "1") if "fx" not in v else ("0",)):
+                try:
+                    self.insfx(int(k), int(pos))
+                except Exception:                           # noqa: BLE001
+                    pass
 
     def _insfx_path(self):
         import store
@@ -804,7 +810,9 @@ class Transport:
 
     def _insfx_save(self):
         try:
-            out = {str(k): v.to_json() for k, v in self._insfx.items()}
+            out = {}
+            for (k, pos), v in self._insfx.items():
+                out.setdefault(str(k), {})[str(pos)] = v.to_json()
             json.dump({"slots": out}, open(self._insfx_path(), "w"))
         except OSError:
             pass
@@ -812,14 +820,10 @@ class Transport:
     def fx_knob(self, number, delta):
         """On an FX page: knobs 1-8 are the tracks' sends, 9 and 10 the effect's settings, the big knob its level."""
         e = self.engine
-        if self.fx_page == "insert":
+        if self.fx_page in ("insert", "insert2"):
             ins = self.insfx()
-            if number == 1:
-                ins.choose(ins.index + (1 if delta > 0 else -1))
-                self._insfx_save()
-                self.say("INSERT EFFECT: %s%s" % (ins.name(), (" (" + ins.error + ")") if ins.error else ""), 2)
-            elif number <= 4:
-                ins.knob(number - 2, delta)
+            if number <= 8:
+                ins.knob(number - 1, delta)
                 self._insfx_save()
             return
         if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect, 4 the picked instrument's send

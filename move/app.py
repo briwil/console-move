@@ -40,6 +40,7 @@ import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
 import samplebrowse              # noqa: E402
+import fxpicker                  # noqa: E402
 import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
@@ -201,7 +202,7 @@ class MoveBoard:
                 e.hit(lane, vel)
                 if lane == 0:                                  # the kick triggers a Ducker on the other instruments
                     for j, ins in list((getattr(e, "insert_fx", None) or {}).items()):
-                        if j != e.slot and ins.h:
+                        if j[0] != e.slot and ins.h:
                             ins.midi(0x90, 36, vel)
                 voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
                 T.drum_voice = voice
@@ -398,6 +399,7 @@ def main():
     T.msyn = movesynth.MoveSynth(T)
     T.mlfo = movelfo.MoveLFO(T)
     T.sbrowse = samplebrowse.SampleBrowser(T)
+    T.fxpick = fxpicker.FxPicker(T)
     T.live_rec = False
     T.song_page = False
     T.octave = 0                                     # Up / Down on a sound page: the pads' octave
@@ -520,7 +522,7 @@ def choice_knob(T, m, e, name):
     if T.mlfo.active():
         return T.mlfo.is_choice(n)
     if T.fx_page:
-        return n == 1 and T.fx_page in ("delay", "insert")                 # the delay's TIME steps through note lengths
+        return n == 1 and T.fx_page == "delay"                              # the delay's TIME steps through note lengths
     ms = T.mseq
     if T.seq_page and ms.active():
         if ms.selected:
@@ -561,6 +563,20 @@ def handle(name, T, m, e):
         return
     ms = T.mseq
     sb = T.sbrowse
+    fp = T.fxpick
+    if fp.active:                                      # the effect picker has the wheel and Back
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
+            fp.turn(name[2])
+            return
+        if name in ("HOME", "PLAY"):
+            fp.push()
+            return
+        if name in ("BACK", "FILE", "DRUMS_BACK"):
+            fp.back()
+            return
+    elif name == "HOME" and T.fx_page in ("insert", "insert2") and not (m.open or m.kits.open):
+        fp.open(T.insfx())                             # push the wheel on an INSERT page: choose its effect
+        return
     if sb.active:                                      # the sample browser has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
             sb.turn(name[2])

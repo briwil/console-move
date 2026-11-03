@@ -51,9 +51,10 @@ def _params(folder, jsonname):
 
 
 class Insert:
-    def __init__(self, core=None, slot=0):
+    def __init__(self, core=None, slot=0, pos=0):
         self.core = core
         self.slot = slot
+        self.pos = pos                      # 0: the first insert effect, 1: the second
         self.index = 0                      # 0 = none, else 1 + position in catalog.FX
         self.h = None
         self.params = []
@@ -93,16 +94,30 @@ class Insert:
             self.index = 0
             return
         self.h, self.error = h, ""
-        self.params = _params(folder, f.get("json", "module.json"))[:12]
+        self.params = (_params(folder, f.get("json", "module.json")) or self._runtime_params(h))[:8]
         self.values = {p[0]: p[4] for p in self.params}
         for p in self.params:
             self._send(p[0])
         if self.core is not None:
-            self.core.set_slot_insert(self.slot, ctypes.cast(lib.sh_fx_process, ctypes.c_void_p).value, h)
+            self.core.set_slot_insert(self.slot, self.pos, ctypes.cast(lib.sh_fx_process, ctypes.c_void_p).value, h)
+
+    def _runtime_params(self, h):
+        """Effects that don't list their settings in module.json: ask the effect itself (chain_params)."""
+        try:
+            buf = ctypes.create_string_buffer(8192)
+            if self._lib().sh_fx_get(h, b"chain_params", buf, 8192) < 0:
+                return []
+            info = {"capabilities": {"chain_params": json.loads(buf.value.decode(errors="replace") or "[]")}}
+        except (ValueError, OSError, AttributeError, ctypes.ArgumentError):
+            return []
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            json.dump(info, open(os.path.join(tmp, "m.json"), "w"))
+            return _params(tmp, "m.json")
 
     def unload(self):
         if self.core is not None:
-            self.core.set_slot_insert(self.slot, 0, 0)
+            self.core.set_slot_insert(self.slot, self.pos, 0, 0)
         if self.h and self.lib:
             self.lib.sh_fx_close(self.h)
         self.h, self.params, self.values = None, [], {}
@@ -116,7 +131,7 @@ class Insert:
         self._lib().sh_fx_set(self.h, key.encode(), str(text).encode())
 
     def knob(self, slot, delta):
-        """slot 0-2 -> the effect's first three settings."""
+        """slot 0-7 -> the effect's first eight settings."""
         if slot >= len(self.params) or not self.h:
             return
         key, _, lo, hi, _, step, _o = self.params[slot]

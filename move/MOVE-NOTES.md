@@ -124,17 +124,8 @@ lights them one at a time (the screen says which step button it is under); `echo
   the update and have pictures (move/instimg/<id>.txt). There is no in-app store any more. To add one: add an entry (id, title,
   repo, asset name from Schwung's module-catalog.json), draw a picture, push.
 
-## INSERT effect (Tapescam, Ducker...)
-Tapescam and Ducker come with the update (catalog.FX_ASSETS). Each instrument (slot) has its own insert effect: FX key cycles REVERB → DELAY → INSERT; on INSERT, knob 1 picks the effect for the instrument you're on, knobs 2-4 its first three settings (saved per slot in insert-fx.json). It runs in the core (core_slot_insert) on the slot's direct sound, before the slot's own reverb/delay and before the tape can record it, so the tape's KIT inputs have it and nothing is applied to the tape afterwards. (The per-drum inputs 1-8 stay dry.) The Ducker of every other slot gets a note whenever drum 1 (lane 1) is hit by a pad or any sequencer.
-Needs the new libconsolecore.so (GitHub build).
-- LFOs (pi-app/lfo.py, move/movelfo.py): every instrument has 2, aimed at one of its number settings (DEST, WAVE, SPEED in note
-  values, DEPTH, PHASE, MODE FREE/TRIG). Pages after the last sound page (Right past it). Kept per pattern; a never-used pattern
-  starts as a copy of the one you came from. The Runner (core bridge tick) sends the moved value without changing the value on
-  the page. Not done yet: LFO step sequencer / parameter locks.
-- Ready-made Schwung modules (catalog.py entries with "asset", and FX_ASSETS for effects): build.py downloads each one's release
-  .tar.gz (Schwung's own Move build) into schwung/modules/<id>/ when the libraries are built (GitHub Actions), so they arrive with
-  the update and have pictures (move/instimg/<id>.txt). There is no in-app store any more. To add one: add an entry (id, title,
-  repo, asset name from Schwung's module-catalog.json), draw a picture, push.
+## INSERT effects (two per instrument, 36 effects)
+36 prebuilt Schwung effects come with the update (catalog.FX_ASSETS), each with a picture in move/fximg/<id>.txt (plus none.txt). Each instrument (slot) has two inserts in series: FX key cycles REVERB → DELAY → INSERT 1 → INSERT 2. On an insert page push the wheel for the picture picker (turn = browse, push = choose, Back = cancel); knobs 1-8 are the effect's first eight settings (saved per slot in insert-fx.json as slots/<slot>/<pos>). They run in the core (core_slot_insert) on the slot's direct sound, before the slot's own reverb/delay and before the tape can record it, so the tape's KIT inputs have them and nothing is applied to the tape afterwards. (Per-drum inputs 1-8 stay dry.) Every Ducker of another slot gets a note whenever drum 1 (lane 1) is hit by a pad or any sequencer. CPU with many heavy effects is unmeasured.
 
 ## INSERT effect (Tapescam, Ducker...)
 Tapescam and Ducker come with the update (catalog.FX_ASSETS). FX key cycles REVERB → DELAY → INSERT. On INSERT: knob 1 picks the effect, knobs 2-4 its first three settings. It runs on the whole output (not on the tape tracks), and your choice is remembered. The Ducker gets a note whenever drum 1 (lane 1) is hit by a pad or the sequencer (the sequencer one only for the instrument you're looking at).

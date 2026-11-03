@@ -219,11 +219,79 @@ MODULES = [
 ]
 
 FX = []                             # the audio effects (from FX_ASSETS below, once downloaded)
-FX_ASSETS = [                       # ready-made effects from Schwung's releases (downloaded by build.py)
-    {"id": "tapescam", "title": "TAPESCAM", "kind": "fx", "repo": "charlesvestal/schwung-tapescam",
-     "asset": "tapescam-module.tar.gz", "json": "module.json", "build": []},
-    {"id": "ducker", "title": "DUCKER", "kind": "fx", "repo": "charlesvestal/schwung-ducker",
-     "asset": "ducker-module.tar.gz", "json": "module.json", "build": []},
+FX_ASSETS = [                       # ready-made effects from Schwung's releases (downloaded by build.py), in the picker's order
+    {"id": 'filter', "title": 'FILTER', "kind": "fx", "repo": 'charlesvestal/schwung-filter',
+     "asset": 'filter-module.tar.gz', "json": "module.json", "build": [], "cat": 'filter'},
+    {"id": '4k-eq', "title": '4K EQ', "kind": "fx", "repo": 'athousanddetails/schwung-4keq',
+     "asset": '4k-eq-module.tar.gz', "json": "module.json", "build": [], "cat": 'filter'},
+    {"id": 'spectra', "title": 'SPECTRA', "kind": "fx", "repo": 'filliformes/spectra-move',
+     "asset": 'spectra-module.tar.gz', "json": "module.json", "build": [], "cat": 'filter'},
+    {"id": 'ottx', "title": 'OTTX', "kind": "fx", "repo": 'legsmechanical/schwung-ottx',
+     "asset": 'ottx-module.tar.gz', "json": "module.json", "build": [], "cat": 'dynamics'},
+    {"id": 'busdriver', "title": 'BUS DRIVER', "kind": "fx", "repo": 'legsmechanical/schwung-busdriver',
+     "asset": 'busdriver-module.tar.gz', "json": "module.json", "build": [], "cat": 'dynamics'},
+    {"id": 'gate', "title": 'GATE', "kind": "fx", "repo": 'charlesvestal/schwung-gate',
+     "asset": 'gate-module.tar.gz', "json": "module.json", "build": [], "cat": 'dynamics'},
+    {"id": 'pushnpull', "title": 'PUSHNPULL', "kind": "fx", "repo": 'legsmechanical/schwung-pushnpull',
+     "asset": 'pushnpull-module.tar.gz', "json": "module.json", "build": [], "cat": 'dynamics'},
+    {"id": 'ducker', "title": 'DUCKER', "kind": "fx", "repo": 'charlesvestal/schwung-ducker',
+     "asset": 'ducker-module.tar.gz', "json": "module.json", "build": [], "cat": 'dynamics'},
+    {"id": 'tapescam', "title": 'TAPESCAM', "kind": "fx", "repo": 'charlesvestal/schwung-tapescam',
+     "asset": 'tapescam-module.tar.gz', "json": "module.json", "build": [], "cat": 'drive'},
+    {"id": 'chowtape', "title": 'CHOWTAPE', "kind": "fx", "repo": 'charlesvestal/schwung-chowtape',
+     "asset": 'chowtape-module.tar.gz', "json": "module.json", "build": [], "cat": 'drive'},
+    {"id": 'superboom', "title": 'SUPER BOOM', "kind": "fx", "repo": 'filliformes/super-boom-move',
+     "asset": 'super-boom-module.tar.gz', "json": "module.json", "build": [], "cat": 'drive'},
+    {"id": 'junologue-chorus', "title": 'JUNOLOGUE CHORUS', "kind": "fx", "repo": 'charlesvestal/schwung-junologue-chorus',
+     "asset": 'junologue-chorus-module.tar.gz', "json": "module.json", "build": [], "cat": 'mod'},
+    {"id": 'stereoid', "title": 'STEREOID', "kind": "fx", "repo": 'legsmechanical/schwung-stereoid',
+     "asset": 'stereoid-module.tar.gz', "json": "module.json", "build": [], "cat": 'util'},
+    {"id": 'usefulity', "title": 'USEFULITY', "kind": "fx", "repo": 'charlesvestal/schwung-usefulity',
+     "asset": 'usefulity-module.tar.gz', "json": "module.json", "build": [], "cat": 'util'},
+    {"id": 'tapedelay', "title": 'TAPEDELAY', "kind": "fx", "repo": 'charlesvestal/schwung-space-delay',
+     "asset": 'tapedelay-module.tar.gz', "json": "module.json", "build": [], "cat": 'delay'},
+    {"id": 'tape-echo2', "title": 'TAPE ECHO 2', "kind": "fx", "repo": 'athousanddetails/schwung-tape-echo2',
+     "asset": 'tape-echo2-module.tar.gz', "json": "module.json", "build": [], "cat": 'delay'},
+    {"id": 'ruminant', "title": 'RUMINANT', "kind": "fx", "repo": 'mestela/schwung-ruminant',
+     "asset": 'ruminant-module.tar.gz', "json": "module.json", "build": [], "cat": 'delay'},
+    {"id": 'munchi-delay', "title": 'MUNCHI DELAY', "kind": "fx", "repo": 'charlesvestal/schwung-munchi-delay',
+     "asset": 'munchi-delay-module.tar.gz', "json": "module.json", "build": [], "cat": 'delay'},
+    {"id": 'mverb', "title": 'MVERB', "kind": "fx", "repo": 'charlesvestal/schwung-mverb',
+     "asset": 'mverb-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'dragonfly-hall', "title": 'DRAGONFLY HALL', "kind": "fx", "repo": 'wolfrenegade1976/move-anything-dragonfly-hall',
+     "asset": 'dragonfly-hall-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'cloudseed', "title": 'CLOUDSEED', "kind": "fx", "repo": 'charlesvestal/schwung-cloudseed',
+     "asset": 'cloudseed-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'midiverb', "title": 'MIDIVERB', "kind": "fx", "repo": 'charlesvestal/schwung-midiverb',
+     "asset": 'midiverb-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'psxverb', "title": 'PSX VERB', "kind": "fx", "repo": 'charlesvestal/schwung-psxverb',
+     "asset": 'psxverb-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'rrverb10', "title": 'RRVERB-10', "kind": "fx", "repo": 'legsmechanical/schwung-rrverb10',
+     "asset": 'rrverb10-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'shimmerwash', "title": 'SHIMWASH', "kind": "fx", "repo": 'twinpowers/schwung-shimwash',
+     "asset": 'shimmerwash-module.tar.gz', "json": "module.json", "build": [], "cat": 'reverb'},
+    {"id": 'granular', "title": 'BORIS GRANULAR', "kind": "fx", "repo": 'filliformes/boris-move',
+     "asset": 'boris-granular-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'verglas', "title": 'VERGLAS', "kind": "fx", "repo": 'filliformes/verglas-move',
+     "asset": 'verglas-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'gresil', "title": 'GRESIL', "kind": "fx", "repo": 'filliformes/gresil-move',
+     "asset": 'gresil-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'structor', "title": 'STRUCTOR', "kind": "fx", "repo": 'filliformes/structor-move',
+     "asset": 'structor-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'dissolver', "title": 'DISSOLVER', "kind": "fx", "repo": 'filliformes/dissolver-move',
+     "asset": 'dissolver-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'capicola', "title": 'CAPICOLA', "kind": "fx", "repo": 'charlesvestal/schwung-capicola',
+     "asset": 'capicola-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+    {"id": 'palette', "title": 'PALETTE', "kind": "fx", "repo": 'filliformes/palette-move',
+     "asset": 'palette-module.tar.gz', "json": "module.json", "build": [], "cat": 'multi'},
+    {"id": 'work', "title": 'WORK', "kind": "fx", "repo": 'timncox/schwung-work',
+     "asset": 'work-module.tar.gz', "json": "module.json", "build": [], "cat": 'multi'},
+    {"id": 'clap', "title": 'AIRWINDOWS', "kind": "fx", "repo": 'charlesvestal/schwung-airwindows',
+     "asset": 'clap-module.tar.gz', "json": "module.json", "build": [], "cat": 'multi'},
+    {"id": 'war_bells', "title": 'WAR BELLS', "kind": "fx", "repo": 'seajaysec/war-bells',
+     "asset": 'war_bells-module.tar.gz', "json": "module.json", "build": [], "cat": 'multi'},
+    {"id": 'ambiotica', "title": 'AMBIOTICA', "kind": "fx", "repo": 'charlesvestal/schwung-ambiotica',
+     "asset": 'ambiotica-module.tar.gz', "json": "module.json", "build": [], "cat": 'multi'},
 ]
 
 
@@ -248,7 +316,10 @@ def _add_installed():
         reg = store.installed()
     except Exception:                                   # noqa: BLE001
         return
+    fx_ids = {a["id"] for a in FX_ASSETS}
     for mid, r in reg.items():
+        if mid in fx_ids:
+            continue                          # (effects come from FX_ASSETS, in the picker's order)
         if os.path.exists(os.path.join(store.MODULES_DIR, mid)):
             add_record(mid, r)
 

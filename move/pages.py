@@ -333,18 +333,19 @@ _IMG = {}
 _CAR = {"pos": None, "t": 0.0}
 
 
-def instrument_image(mid):
-    """The picture for an instrument (move/instimg/<id>.txt: 64 rows of 32 hex digits), or None."""
-    if mid not in _IMG:
+def instrument_image(mid, folder="instimg"):
+    """The picture for an instrument (move/instimg/<id>.txt: 64 rows of 32 hex digits), or None. Effects: fximg."""
+    key = mid if folder == "instimg" else folder + "/" + mid
+    if key not in _IMG:
         arr = None
         try:
             import os
-            rows = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "instimg", "%s.txt" % mid)).read().split()
+            rows = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), folder, "%s.txt" % mid)).read().split()
             arr = np.array([[(int(row, 16) >> (127 - x)) & 1 for x in range(128)] for row in rows[:64]], np.uint8)
         except (OSError, ValueError):
             pass
-        _IMG[mid] = arr
-    return _IMG[mid]
+        _IMG[key] = arr
+    return _IMG[key]
 
 
 def carousel(f, ip):
@@ -365,7 +366,7 @@ def carousel(f, ip):
             continue
         dx = int(round((i - pos) * W))
         mid, title = ip.choices[i][0], ip.choices[i][1]
-        img = instrument_image(mid)
+        img = instrument_image(mid, getattr(ip, "img_dir", "instimg"))
         if img is not None:
             x0, x1 = max(0, dx), min(W, dx + W)
             if x1 > x0:
@@ -652,17 +653,22 @@ def song_page(f, T):
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
-    if which == "insert":
+    if which in ("insert", "insert2"):
+        if T.fxpick.active:
+            carousel(f, T.fxpick)
+            return
         ins = T.insfx()
-        header(f, "INSERT: THIS INSTRUMENT")
-        f.small(1, 13, "1 EFFECT")
-        f.right(W - 2, 13, ins.name()[:14], small=True)
-        for i in range(3):
+        header(f, ("INSERT %d" % (ins.pos + 1)), "SLOT %d" % (ins.slot + 1))
+        f.text(2, 12, ins.name()[:21])
+        for i in range(8):
             label, shown = ins.text(i)
-            if label:
-                f.small(1, 23 + i * 10, "%d %s" % (i + 2, label))
-                f.right(W - 2, 23 + i * 10, shown[:10], small=True)
-        f.small(1, 59, (ins.error or "SLOT %d: RECORDED WITH IT" % (ins.slot + 1)).upper()[:31])
+            if not label:
+                continue
+            col, row = divmod(i, 4)
+            x, y = col * 65, 24 + row * 9
+            f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
+            f.right(x + 62, y, shown[:6], small=True)
+        f.small(1, 59, (ins.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
         return
     header(f, which.upper())
     for i, (k, name) in enumerate(T.FX_KNOBS[which]):

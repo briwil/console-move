@@ -281,7 +281,7 @@ class CoreBridge:
             if lane == 0 and inserts:
                 wait = max(0.0, (base + offset - now_c) / self.core.rate)
                 for j, ins in list(inserts.items()):
-                    if j != mine and ins.h:
+                    if j[0] != mine and ins.h:
                         threading.Timer(wait, ins.midi, (0x90, 36, max(1, min(127, int(_vel))))).start()
             if shown and lane < len(e.seq_hits):
                 e.seq_hits[lane] = now_t + (base + offset - now_c) / self.core.rate

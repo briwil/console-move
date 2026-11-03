@@ -35,7 +35,7 @@ class Core:
                 ("core_add_engine", [vp, vp, i32], i32), ("core_add_module", [vp, vp, vp], i32),
                 ("core_source_on", [i32, i32], None), ("core_remove", [i32], None),
                 ("core_set_pan", [i32, i32, f32, f32], None), ("core_set_sends", [i32, i32, f32, f32], None),
-                ("core_set_gain", [i32, f32], None), ("core_set_master", [f32], None), ("core_slot_insert", [i32, vp, vp], None),
+                ("core_set_gain", [i32, f32], None), ("core_set_master", [f32], None), ("core_slot_insert", [i32, i32, vp, vp], None),
                 ("core_set_effects", [vp, vp, vp, vp], None), ("core_set_effect_levels", [f32, f32], None),
                 ("core_push", [u64, i32, i32, ip, ip, ip, vp], i32), ("core_events_done", [], u64),
                 ("core_read_midi", [C.c_char_p, i32], i32), ("core_send_midi", [C.c_char_p, i32], i32),
@@ -113,10 +113,10 @@ class Core:
     def gain(self, s, g):
         self.lib.core_set_gain(s, g)
 
-    def set_slot_insert(self, slot, fn, handle):
-        """An instrument's insert effect (schwung/insertfx.py): fn(handle, left, right, frames) on its sound."""
+    def set_slot_insert(self, slot, pos, fn, handle):
+        """An instrument's insert effect, 1 or 2 (pos 0 or 1; schwung/insertfx.py): fn(handle, left, right, frames)."""
         try:
-            self.lib.core_slot_insert(slot, fn or None, handle or None)
+            self.lib.core_slot_insert(slot, pos, fn or None, handle or None)
         except AttributeError:
             pass                                    # an older sound core
 

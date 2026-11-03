@@ -57,6 +57,7 @@ sudo docker run --rm ${DOCKER_PLATFORM:+--platform $DOCKER_PLATFORM} -v "$REPO":
   echo "- LXR drum synth"; bash drums/build.sh
   cp drums/libdrums.so drums/libdrums_live.so 2>/dev/null || true
   echo "- 606 / 808";      for m in 606 808; do g++ -O2 -shared -fPIC -w -o drums/schwung/lib$m.so drums/schwung/glue$m.cpp; done
+  echo "- Sampler";       gcc -O2 -shared -fPIC -o drums/sampler/libsampler.so drums/sampler/sampler.c -lm
   echo "- Machinedrum";    g++ -O2 -std=c++11 -shared -fPIC -w -Idrums/md/vendor -Idrums/md -o drums/md/libmd.so drums/md/glue_md.cpp
   echo "- Schwung synths and drum machines (the longest part)"
   python3 schwung/build.py || echo "(some modules failed: see above)"

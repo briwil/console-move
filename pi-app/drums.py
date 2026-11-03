@@ -900,7 +900,8 @@ class Drums:
                 if schwung_modules and machine in schwung_modules.catalog.BY_ID:
                     ms[machine] = schwung_modules.make(machine)       # a Schwung module (schwung/)
                 else:
-                    ms[machine] = LXR() if machine == "lxr" else Machinedrum() if machine == "md" else Schwung(machine)
+                    ms[machine] = (LXR() if machine == "lxr" else Machinedrum() if machine == "md"
+                                   else _sampler() if machine == "sampler" else Schwung(machine))
             except Exception as e:
                 print("Drums: the %s isn't available: %s" % (machine, e))
                 return None
@@ -961,9 +962,16 @@ class Drums:
         setattr(self.m, name, value)
 
 
+def _sampler():
+    import sampler
+    return sampler.Sampler()
+
+
 def available_machines():
     """[(id, title)] of the machines that can run here."""
     out = [("lxr", "LXR-02")] if AVAILABLE else []
+    if os.path.exists(os.path.join(DIR, "sampler", "libsampler.so")):
+        out.append(("sampler", "SAMPLER"))
     for mid, spec in SPECS.items():
         lib = os.path.join(SW_DIR, "lib%s.so" % mid)
         if os.path.exists(lib) or os.path.exists(os.path.join(SW_DIR, "glue%s.cpp" % mid)):

@@ -26,6 +26,8 @@ def gate(key, delta, shift=False, clicks=CLICKS):
 
 
 def is_choice(drums, param):
+    if param in getattr(drums, "fast_params", ()):        # a long list (the sampler's files): not a mode
+        return False
     try:
         return drums.kind(param) in ("menu", "onoff")
     except Exception:

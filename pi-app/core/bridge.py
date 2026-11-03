@@ -270,17 +270,20 @@ class CoreBridge:
         return out
 
     def _hits(self, slot, events, base):
-        """The sequencer's hits on the slot you're looking at: when you'll hear each (the screen flashes it)."""
+        """The sequencer's hits: lane 1 (the kick) triggers a Ducker-style insert effect on the OTHER instruments;
+        on the slot you're looking at, when you'll hear each hit (the screen flashes it)."""
         e = self.e
-        if e.slot is None or self.slots.get(e.slot, (None, None))[1] is not slot:
-            return
         now_c, now_t = self.core.now(), time.monotonic()
-        ins = getattr(e, "insert_fx", None)
+        mine = next((k for k, v in self.slots.items() if v[1] is slot), None)
+        inserts = getattr(e, "insert_fx", None) or {}
+        shown = e.slot is not None and self.slots.get(e.slot, (None, None))[1] is slot
         for offset, lane, _vel, _locks in events:
-            if ins is not None and ins.h and lane == 0:          # lane 1 (the kick) triggers a Ducker-style effect
+            if lane == 0 and inserts:
                 wait = max(0.0, (base + offset - now_c) / self.core.rate)
-                threading.Timer(wait, ins.midi, (0x90, 36, max(1, min(127, int(_vel))))).start()
-            if lane < len(e.seq_hits):
+                for j, ins in list(inserts.items()):
+                    if j != mine and ins.h:
+                        threading.Timer(wait, ins.midi, (0x90, 36, max(1, min(127, int(_vel))))).start()
+            if shown and lane < len(e.seq_hits):
                 e.seq_hits[lane] = now_t + (base + offset - now_c) / self.core.rate
 
     def _auditions(self):

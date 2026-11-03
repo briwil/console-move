@@ -119,7 +119,7 @@ story += [
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
-         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, the insert effect if you installed one, "
+         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, the instrument's insert effect, "
          "then off).  4 The recorder "
          "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
@@ -285,13 +285,13 @@ story += [
     p("FX", H2),
     p("The reverb and delay are on each instrument <i>before</i> the tape, so they are recorded with the sound.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: the INSERT page (only once you have installed "
-         "an effect), again: back."),
+        ("Left button 3", "Reverb page, again: delay page, again: the INSERT page, again: back."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
-        ("INSERT page", "Knob 1 picks an installed Schwung effect (Tapescam, Ducker...), knobs 2-4 its first three "
-         "settings. It sits on the whole output, so it is not recorded on the tape. The Ducker ducks when drum 1 "
-         "is hit."),
+        ("INSERT page", "Each instrument has its own insert effect. Knob 1 picks it (Tapescam, Ducker...) for the "
+         "instrument you're on, knobs 2-4 its first three settings. It is on the instrument <i>before</i> the tape, "
+         "so what you record from that instrument has the effect in it; nothing is added to the tape afterwards. "
+         "A Ducker ducks its instrument whenever drum 1 of another instrument is hit."),
     ]),
 
     p("Ableton Link", H2),

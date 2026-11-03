@@ -1,9 +1,10 @@
-"""The INSERT effect: one Schwung audio effect (Tapescam, Ducker...) on the whole mix, just before the output.
+"""An instrument's INSERT effect: one Schwung audio effect (Tapescam, Ducker...) on that instrument's sound.
 
-It is picked on the FX key's third page (after REVERB and DELAY). Knob 1 picks the effect (NONE or one installed from
-Schwung's catalog), knobs 2-4 change its first three settings. Wheel-less on purpose: small and simple.
-The effect runs in the sound core (core_set_insert) through libschwunghost's sh_fx_process, so it is not recorded
-to the tape tracks (it sits on the output, like a mastering effect).
+Every instrument (slot) has its own. It is picked on the FX key's third page (after REVERB and DELAY) for the
+instrument you're on. Knob 1 picks the effect (NONE, Tapescam, Ducker...), knobs 2-4 change its first three settings.
+The effect runs in the sound core (core_slot_insert) through libschwunghost's sh_fx_process, on the instrument's
+direct sound, before the tape can record it: so what the tape records from that instrument (KIT inputs) has the
+effect in it, and nothing is added to the tape afterwards.
 """
 import ctypes
 import json
@@ -50,8 +51,9 @@ def _params(folder, jsonname):
 
 
 class Insert:
-    def __init__(self, core=None):
+    def __init__(self, core=None, slot=0):
         self.core = core
+        self.slot = slot
         self.index = 0                      # 0 = none, else 1 + position in catalog.FX
         self.h = None
         self.params = []
@@ -96,11 +98,11 @@ class Insert:
         for p in self.params:
             self._send(p[0])
         if self.core is not None:
-            self.core.set_insert(ctypes.cast(lib.sh_fx_process, ctypes.c_void_p).value, h)
+            self.core.set_slot_insert(self.slot, ctypes.cast(lib.sh_fx_process, ctypes.c_void_p).value, h)
 
     def unload(self):
         if self.core is not None:
-            self.core.set_insert(0, 0)
+            self.core.set_slot_insert(self.slot, 0, 0)
         if self.h and self.lib:
             self.lib.sh_fx_close(self.h)
         self.h, self.params, self.values = None, [], {}

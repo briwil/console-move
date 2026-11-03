@@ -241,7 +241,7 @@ class Transport:
         import instpage
         self.inst_page = False                    # the MIDI key from the tape: the INSTRUMENTS page
         self.instp = instpage.InstPage(self)
-        self.engine.insert_boot = self.insfx
+        self.engine.insert_boot = self.insfx_boot
         screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
@@ -762,19 +762,41 @@ class Transport:
         import catalog
         return bool(getattr(self, "inst_sends", False) and catalog.FX)
 
-    def insfx(self):
-        """The INSERT effect (schwung/insertfx.py), made when first used; its saved choice comes back with it."""
+    def insfx(self, slot=None):
+        """An instrument's INSERT effect (schwung/insertfx.py), made when first used; its saved choice comes back
+        with it. No slot: the one you're on."""
+        import insertfx
         if getattr(self, "_insfx", None) is None:
-            import insertfx
-            self._insfx = insertfx.Insert(getattr(self.engine, "core", None))
+            self._insfx = {}
             self.engine.insert_fx = self._insfx
+            self._insfx_saved = {}
             try:
-                self._insfx.from_json(json.load(open(self._insfx_path())))
-            except (OSError, ValueError):
+                self._insfx_saved = json.load(open(self._insfx_path())).get("slots", {})
+            except (OSError, ValueError, AttributeError):
                 pass
-        if self._insfx.core is None:
-            self._insfx.core = getattr(self.engine, "core", None)
-        return self._insfx
+        if slot is None:
+            slot = self.engine.slot if self.engine.slot is not None else 0
+        core = getattr(self.engine, "core", None)
+        ins = self._insfx.get(slot)
+        if ins is None:
+            ins = self._insfx[slot] = insertfx.Insert(core, slot)
+            if core is not None:
+                try:
+                    ins.from_json(self._insfx_saved.get(str(slot)))
+                except Exception:                           # noqa: BLE001
+                    pass
+        if ins.core is None and core is not None:
+            ins.core = core
+        return ins
+
+    def insfx_boot(self):
+        """The core is up: bring back every instrument's saved insert effect."""
+        self.insfx()
+        for k in list(self._insfx_saved):
+            try:
+                self.insfx(int(k))
+            except (ValueError, Exception):                 # noqa: BLE001
+                pass
 
     def _insfx_path(self):
         import store
@@ -782,7 +804,8 @@ class Transport:
 
     def _insfx_save(self):
         try:
-            json.dump(self._insfx.to_json(), open(self._insfx_path(), "w"))
+            out = {str(k): v.to_json() for k, v in self._insfx.items()}
+            json.dump({"slots": out}, open(self._insfx_path(), "w"))
         except OSError:
             pass
 

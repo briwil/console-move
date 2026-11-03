@@ -127,8 +127,7 @@ static void (*dly_process)(void *, const float *, const float *, float *, float 
 static void *reverb, *delay;
 static float rev_level = 0.0f, dly_level = 0.0f;
 static float master = 1.0f, mix_gain = 0.6f;
-static void (*ins_fn)(void *, float *, float *, int);   /* the master insert effect (Schwung audio_fx): sh_fx_process */
-static void *ins_h;
+static void (*ins_fn)(void *, float *, float *, int);   /* an instrument's insert effect (Schwung audio_fx): sh_fx_process */
 static float send_l[2][MAX_BLOCK], fx_out[4][MAX_BLOCK], mix[2][MAX_BLOCK];
 static float send_d[2][MAX_BLOCK];
 
@@ -175,6 +174,7 @@ typedef struct {
     float pan[MAX_VOICES][2], rev[MAX_VOICES], dly[MAX_VOICES];
     float monitor;                            /* how loud it's heard (0: not heard) */
     void *frev, *fdly;                        /* its own effects, for the KIT inputs (NULL: none) */
+    void *ins_h;                              /* its insert effect (NULL: none): on the kit's direct sound, before the tape sees it */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
 } Slot;
 static Slot slots[SLOTS];
@@ -358,15 +358,26 @@ static void slots_cycle(int n) {
                         slot_send[0][i] += l * rs; slot_send[1][i] += r * rs;
                         slot_send[2][i] += l * ds; slot_send[3][i] += r * ds;
                     }
-                    if (g > 0.0f) {                          /* heard: into the mix, sends to the main effects */
+                    if (g > 0.0f) {                          /* heard: sends to the main effects (the direct sound: below) */
                         float hl = l * g, hr = r * g;
-                        mix[0][i] += hl; mix[1][i] += hr;
-                        cap_now[0][i] += 0.5f * (hl + hr);
                         if (rs > 0.0f) { send_l[0][i] += hl * rs; send_l[1][i] += hr * rs; }
                         if (ds > 0.0f) { send_d[0][i] += hl * ds; send_d[1][i] += hr * ds; }
                     }
                 }
             }
+        }
+        {   /* the insert effect works on the kit's direct sound; what it makes is what the tape records (KIT inputs)
+               and what is heard */
+            void (*ifx)(void *, float *, float *, int) = ins_fn; void *ih = sl->ins_h;
+            int has_ins = ifx && ih;
+            if (has_ins) ifx(ih, kl, kr, n);
+            float g = sl->monitor;
+            if ((aon || bon || has_ins) && g > 0.0f)
+                for (int i = 0; i < n; i++) {
+                    float hl = kl[i] * g, hr = kr[i] * g;
+                    mix[0][i] += hl; mix[1][i] += hr;
+                    cap_now[0][i] += 0.5f * (hl + hr);
+                }
         }
         if (run_fx) {
             /* the slot's own effects, printed into its KIT inputs (so a track's sends don't get in) */
@@ -558,7 +569,6 @@ static int process(jack_nframes_t n, void *arg) {
         }
         cap_pos += n;
     }
-    { void (*fx)(void *, float *, float *, int) = ins_fn; void *h = ins_h; if (fx && h) fx(h, mix[0], mix[1], (int)n); }
     float *ol = J.port_get_buffer(out_l, n), *orr = J.port_get_buffer(out_r, n);
     for (jack_nframes_t i = 0; i < n; i++) {
         ol[i] = tanhf(mix[0][i] * mix_gain) * master;              /* tanh: gentle limiting, as the Pi does */
@@ -684,7 +694,11 @@ void core_set_sends(int s, int v, float rev, float dly) {
 }
 void core_set_gain(int s, float g) { if (s >= 0 && s < MAX_SOURCES) sources[s].gain = g; }
 void core_set_master(float g) { master = g; }
-void core_set_insert(void *fn, void *h) { ins_fn = NULL; ins_h = h; ins_fn = h ? (void (*)(void *, float *, float *, int))fn : NULL; }
+void core_slot_insert(int k, void *fn, void *h) {      /* fn: sh_fx_process; the same for every slot */
+    if (k < 0 || k >= SLOTS) return;
+    if (fn) ins_fn = (void (*)(void *, float *, float *, int))fn;
+    slots[k].ins_h = h;
+}
 
 void core_set_effects(void *rp, void *r, void *dp, void *d) { rev_process = rp; reverb = r; dly_process = dp; delay = d; }
 void core_set_effect_levels(float r, float d) { rev_level = r; dly_level = d; }

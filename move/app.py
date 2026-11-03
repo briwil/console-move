@@ -199,9 +199,10 @@ class MoveBoard:
                     e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
                     e.seq_changed()
                 e.hit(lane, vel)
-                ins = getattr(e, "insert_fx", None)
-                if lane == 0 and ins is not None and ins.h:
-                    ins.midi(0x90, 36, vel)
+                if lane == 0:                                  # the kick triggers a Ducker on the other instruments
+                    for j, ins in list((getattr(e, "insert_fx", None) or {}).items()):
+                        if j != e.slot and ins.h:
+                            ins.midi(0x90, 36, vel)
                 voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
                 T.drum_voice = voice
                 T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()

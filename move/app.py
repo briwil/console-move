@@ -207,9 +207,14 @@ class MoveBoard:
                 T._drum_hits[voice % len(T._drum_hits)] = time.monotonic()
                 self.keys.put(("PICK_LANE", lane))
             return
+        if not vel:
+            ms.chrom.pop(p, None)                          # (a chromatic pad let go)
+            return
         if vel:                                            # right 4 x 4: the picked drum, a semitone a pad
             lane = min(T.seqp.lane, d.lanes - 1)
             semis = r * 4 + (c - 4) + 12 * getattr(T, "octave", 0)
+            if T.seq_page and ms.active():
+                ms.chrom[p] = semis                        # (hold it and tap steps: they get this note)
             locks = ms.pitch_locks(lane, {}, semis)
             if T.seq_page and ms.active() and ms.down and not ms.selected:
                 length = e.seq.lane(lane).length               # hold a step + a chromatic pad: that note on that step

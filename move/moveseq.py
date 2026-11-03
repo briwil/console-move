@@ -37,7 +37,8 @@ class MoveSeq:
         self.selected = []         # the steps picked with Shift (their settings are on the pads)
         self.knob_page = 0         # while a step is held: 0 STEP, 1.. the drum's sound pages
         self.sel = None            # while a step is held: the pad picked (its setting is on knob 1)
-        self.down = set()          # step buttons physically held (a right-half pad then puts its pitch on them)
+        self.down = set()
+        self.chrom = {}                                      # chromatic pads held: pad -> semitones (a step tapped meanwhile gets it)          # step buttons physically held (a right-half pad then puts its pitch on them)
         self._pitch = {}           # voice -> its pitch setting (or None)
         sequencer.PITCH = self.pitch_locks
 
@@ -310,6 +311,15 @@ class MoveSeq:
             return
         if self.selected:                                     # finished setting the selected steps
             self.selected, self.sel = [], None
+            return
+        if self.chrom and i < length:                         # a chromatic pad held + a step tapped: that note on it
+            semis = list(self.chrom.values())[-1]
+            with self.seq.lock:
+                st = self.seq.step(lane, i)
+                st.on = True
+                st.locks.update(self.pitch_locks(lane, {}, semis))
+            self.T.engine.seq_changed()
+            self.T.say("STEP %d  PITCH %+d" % (i + 1, semis), 2)
             return
         if i < length:
             self._toggle(lane, i)

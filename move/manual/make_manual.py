@@ -119,7 +119,7 @@ story += [
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
-         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, the instrument's insert effect, "
+         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, "
          "then off).  4 The recorder "
          "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
@@ -285,10 +285,10 @@ story += [
     p("FX", H2),
     p("The reverb and delay are on each instrument <i>before</i> the tape, so they are recorded with the sound.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: INSERT 1, again: INSERT 2, again: back."),
+        ("Left button 3", "Reverb page, again: delay page, again: back."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
-        ("INSERT 1 / 2", "Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "
+        ("INSERT 1 / 2", "The last two sound pages of an instrument (after LFO 2; wheel or arrows). Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "
          "granular...). Push the wheel to open the picture picker: turn to browse, push to choose, Back to cancel. "
          "Knobs 1-8 are the effect's first eight settings. They are on the instrument <i>before</i> the tape, "
          "so what you record from that instrument has the effects in it; nothing is added to the tape afterwards. "

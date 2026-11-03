@@ -1,4 +1,4 @@
-"""The LFO pages on the Move: after the last settings page of an instrument (Right past it), LFO 1 and LFO 2.
+"""The LFO pages on the Move: after the last settings page of an instrument (Right past it), LFO 1, LFO 2, INSERT 1 and INSERT 2.
 Step buttons: tap = that step of the LFO rests, hold + knob 2/4 = its own WAVE/DEPTH. Knobs 1-6: DEST, WAVE, SPEED, DEPTH, PHASE, MODE (see pi-app/lfo.py). Each pattern has its own."""
 import knobgate
 import lfo
@@ -19,6 +19,14 @@ class MoveLFO:
             self.tab = None
         return self.tab is not None and bool(T.drum_page and not T.seq_page and T.engine and T.engine.drums)
 
+    def last(self):
+        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2."""
+        return lfo.COUNT + (1 if self.T.insert_fx_available() else 0)
+
+    def insert_pos(self):
+        """0 / 1 while on the INSERT 1 / 2 page, else None."""
+        return self.tab - lfo.COUNT if self.tab is not None and self.tab >= lfo.COUNT else None
+
     def arrows(self, way, last_tab):
         """Left / Right on a sound page. Returns True if it moved between the LFO pages / off the settings."""
         T = self.T
@@ -30,10 +38,12 @@ class MoveLFO:
         self.tab = self.tab + way
         if self.tab < 0:
             self.tab = None
-        self.tab = None if self.tab is None else min(lfo.COUNT - 1, self.tab)
+        self.tab = None if self.tab is None else min(self.last(), self.tab)
         return True
 
     def step(self, n, down):
+        if self.insert_pos() is not None:
+            return
         """A step button (1-16): a tap mutes / unmutes that step of the LFO; hold it and turn DEPTH (knob 4) or WAVE
         (knob 2) to give the step its own."""
         i = n - 1
@@ -54,6 +64,8 @@ class MoveLFO:
             self.T.say("LFO %d STEP %d %s" % (self.tab + 1, n, "RESTS" if st.get("mute") else "PLAYS"), 2)
 
     def step_lights(self):
+        if self.insert_pos() is not None:
+            return [0] * 16
         steps = self.lfos()[self.tab].get("steps", {})
         out = []
         for i in range(16):
@@ -80,11 +92,20 @@ class MoveLFO:
                 ("DEPTH", "%+d%%" % l["depth"]), ("PHASE", "%d%%" % l["phase"]), ("MODE", lfo.MODES[l["mode"]])]
 
     def is_choice(self, n):
+        if self.insert_pos() is not None:
+            return False
         if self.held:
             return n == 2
         return (n - 1) in CHOICE
 
     def knob(self, number, delta, shift):
+        pos = self.insert_pos()
+        if pos is not None:                           # an INSERT page: knobs 1-8 are the effect's first eight settings
+            ins = self.T.insfx(None, pos)
+            if number <= 8:
+                ins.knob(number - 1, delta)
+                self.T._insfx_save()
+            return
         if number > len(LABELS):
             return
         e = self.T.engine

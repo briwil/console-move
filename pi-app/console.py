@@ -440,7 +440,7 @@ class Transport:
         elif name in ("VOL_UP", "VOL_DOWN"):
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name == "FX":
-            order = [None, "reverb", "delay"] + (["insert", "insert2"] if self.insert_fx_available() else [])
+            order = [None, "reverb", "delay"]                # (the inserts are pages of each instrument's sound)
             self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)

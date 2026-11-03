@@ -420,9 +420,30 @@ def listing(f, rows, pick, top=11, line=7, fit=None):
 
 # ------------------------------------------------------------------ an instrument's sound
 
+def insert_page(f, T, pos):
+    if T.fxpick.active:
+        carousel(f, T.fxpick)
+        return
+    ins = T.insfx(None, pos)
+    header(f, ("INSERT %d" % (ins.pos + 1)), "SLOT %d" % (ins.slot + 1))
+    f.text(2, 12, ins.name()[:21])
+    for i in range(8):
+        label, shown = ins.text(i)
+        if not label:
+            continue
+        col, row = divmod(i, 4)
+        x, y = col * 65, 24 + row * 9
+        f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
+        f.right(x + 62, y, shown[:6], small=True)
+    f.small(1, 59, (ins.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
+
+
 def lfo_page(f, T):
     ml = T.mlfo
     e = T.engine
+    if ml.insert_pos() is not None:
+        insert_page(f, T, ml.insert_pos())
+        return
     header(f, "LFO %d" % (ml.tab + 1), "PAT %d" % (e.seq.current + 1))
     for i, (label, value) in enumerate(ml.values()):
         col, row = divmod(i, 3)
@@ -430,7 +451,7 @@ def lfo_page(f, T):
         f.small(x + 1, y, "%d %s" % (i + 1, label))
         f.right(x + 62, y + 5, str(value)[:9], small=True)
     f.small(1, 50, "STEPS: TAP = REST, HOLD + 2/4")
-    f.small(1, 57, "< > : SETTINGS / LFO 1 / LFO 2")
+    f.small(1, 57, "< > : SETTINGS, LFOS, INSERTS")
 
 
 def sample_page(f, sb):
@@ -653,23 +674,6 @@ def song_page(f, T):
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
-    if which in ("insert", "insert2"):
-        if T.fxpick.active:
-            carousel(f, T.fxpick)
-            return
-        ins = T.insfx()
-        header(f, ("INSERT %d" % (ins.pos + 1)), "SLOT %d" % (ins.slot + 1))
-        f.text(2, 12, ins.name()[:21])
-        for i in range(8):
-            label, shown = ins.text(i)
-            if not label:
-                continue
-            col, row = divmod(i, 4)
-            x, y = col * 65, 24 + row * 9
-            f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
-            f.right(x + 62, y, shown[:6], small=True)
-        f.small(1, 59, (ins.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
-        return
     header(f, which.upper())
     for i, (k, name) in enumerate(T.FX_KNOBS[which]):
         y = 13 + i * 10

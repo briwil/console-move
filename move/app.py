@@ -574,8 +574,8 @@ def handle(name, T, m, e):
         if name in ("BACK", "FILE", "DRUMS_BACK"):
             fp.back()
             return
-    elif name == "HOME" and T.fx_page in ("insert", "insert2") and not (m.open or m.kits.open):
-        fp.open(T.insfx())                             # push the wheel on an INSERT page: choose its effect
+    elif name == "HOME" and T.mlfo.active() and T.mlfo.insert_pos() is not None and not (m.open or m.kits.open):
+        fp.open(T.insfx(None, T.mlfo.insert_pos()))    # push the wheel on an INSERT page: choose its effect
         return
     if sb.active:                                      # the sample browser has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:

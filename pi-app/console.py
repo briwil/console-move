@@ -364,8 +364,8 @@ class Transport:
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
             self.move(-1 if name.endswith("LEFT") else 1, tape.BEATS_PER_BAR if name.startswith("BAR") else t.step)
         elif self.inst_page and not self.fx_page and name in ("HOME", "HOME_PUSH_SHIFT"):
-            # the INSTRUMENTS page: knob 11 turns through the list, push it to choose (SHIFT: change / remove)
-            self.instp.push() if name == "HOME" else self.instp.shift_push()
+            # the INSTRUMENTS page: knob 11 turns through the list, push it: change / remove a loaded slot, or choose (SHIFT + push: open it)
+            self.instp.wheel_push() if name == "HOME" else self.instp.push()
         elif name in ("HOME", "HOME_PUSH_SHIFT"):
             start = e.loop_a / e.frames_per_beat() if (e and e.loop_on and e.loop_region()) else 0.0
             self.set_pos(start if t.pos > start + 1e-6 else 0.0)

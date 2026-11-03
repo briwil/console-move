@@ -311,17 +311,6 @@ def inst_page(f, T):
         carousel(f, ip)
         return
     header(f, "INSTRUMENTS")
-    if ip.mode == "store":
-        st = ip.store
-        header(f, "SCHWUNG", "%d" % len(st.items))
-        rows = [("FX  " if m["component_type"] == "audio_fx" else "") + m["name"].upper() for m in st.items]
-        if rows:
-            listing(f, rows, ip.pick, top=11, fit=5)
-            f.small(1, 47, (st.items[min(ip.pick, len(st.items) - 1)].get("description", "")).upper()[:31])
-            f.small(1, 53, (st.items[min(ip.pick, len(st.items) - 1)].get("description", "")).upper()[31:62])
-        f.rect(0, H - 7, W, 7, 1)
-        f.small(1, H - 6, (st.msg or "PUSH: INSTALL  BACK: LEAVE")[:31], 0)
-        return
     if ip.mode == "menu":
         items = [c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices]
         biglist(f, items, ip.pick)

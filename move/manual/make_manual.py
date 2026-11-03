@@ -166,9 +166,7 @@ story += [
     table([
         ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it)."),
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
-         "(the ones without a picture yet show their name). Push to choose. The last choice, <b>+ GET MORE FROM "
-         "SCHWUNG</b>, is a store of ready-made Schwung instruments and effects: push to install one (the Move "
-         "needs Wi-Fi; it downloads straight from GitHub)."),
+         "(the ones without a picture yet show their name). Push to choose."),
         ("SAMPLER", "A drum machine of 16 samples, one per drum: each takes a .wav from the Move's sample folders "
          "(SAMPLE, LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),

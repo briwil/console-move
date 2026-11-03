@@ -119,12 +119,13 @@ lights them one at a time (the screen says which step button it is under); `echo
   values, DEPTH, PHASE, MODE FREE/TRIG). Pages after the last sound page (Right past it). Kept per pattern; a never-used pattern
   starts as a copy of the one you came from. The Runner (core bridge tick) sends the moved value without changing the value on
   the page. Not done yet: LFO step sequencer / parameter locks.
-- GET MORE FROM SCHWUNG (pi-app/schwung/store.py): the instrument picker's last entry. Reads Schwung's module-catalog.json
-  from GitHub, downloads a module's release .tar.gz (ready-made for the Move) into schwung/modules/<id>/, records it in
-  /data/UserData/console/schwung-installed.json (catalog.add_record: sound generators join the instruments, audio_fx go in catalog.FX).
+- Ready-made Schwung modules (catalog.py entries with "asset", and FX_ASSETS for effects): build.py downloads each one's release
+  .tar.gz (Schwung's own Move build) into schwung/modules/<id>/ when the libraries are built (GitHub Actions), so they arrive with
+  the update and have pictures (move/instimg/<id>.txt). There is no in-app store any more. To add one: add an entry (id, title,
+  repo, asset name from Schwung's module-catalog.json), draw a picture, push.
 
 ## INSERT effect (Tapescam, Ducker...)
-Install an effect from FX → (page 3 appears once one is installed) via "GET MORE FROM SCHWUNG". FX key cycles REVERB → DELAY → INSERT. On INSERT: knob 1 picks the effect, knobs 2-4 its first three settings. It runs on the whole output (not on the tape tracks), and your choice is remembered. The Ducker gets a note whenever drum 1 (lane 1) is hit by a pad or the sequencer (the sequencer one only for the instrument you're looking at).
+Tapescam and Ducker come with the update (catalog.FX_ASSETS). FX key cycles REVERB → DELAY → INSERT. On INSERT: knob 1 picks the effect, knobs 2-4 its first three settings. It runs on the whole output (not on the tape tracks), and your choice is remembered. The Ducker gets a note whenever drum 1 (lane 1) is hit by a pad or the sequencer (the sequencer one only for the instrument you're looking at).
 Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).
 
 ## Newer features (this round)

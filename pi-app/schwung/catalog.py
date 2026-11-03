@@ -160,9 +160,71 @@ MODULES = [
      "json": "modules/sound_generators/amino/module.json", "files": ["presets"],
      "build": [["gcc", "-std=c11", "-O2", "-shared", "-fPIC", "-w", "-Isrc/dsp", "src/dsp/*.c", "-o", "{out}",
                 "-lm", "-ldl"]]},
+    # ---------------------------------------------------------------- ready-made from Schwung's releases
+    # (their own Move builds, downloaded when the libraries are built: see build.py "asset")
+    {"id": 'model-72', "title": 'MODEL-72', "kind": 'synth', "license": "see its repo",
+     "repo": 'sd88me/schwung-model72', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'model-72-module.tar.gz'},
+    {"id": '303', "title": '303', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-303', "commit": "release", "json": "module.json", "build": [],
+     "asset": '303-module.tar.gz'},
+    {"id": 'noisemaker', "title": 'NOISEMAKER', "kind": 'synth', "license": "see its repo",
+     "repo": 'legsmechanical/schwung-noisemaker', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'noisemaker-module.tar.gz'},
+    {"id": 'tenebrae', "title": 'TENEBRAE', "kind": 'synth', "license": "see its repo",
+     "repo": 'legsmechanical/schwung-tenebrae', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'tenebrae-module.tar.gz'},
+    {"id": 'nusaw', "title": 'NUSAW', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-nusaw', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'nusaw-module.tar.gz'},
+    {"id": 'omega', "title": 'OMEGA', "kind": 'drums', "license": "see its repo",
+     "repo": 'james-fish/schwung-omega', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'omega-module.tar.gz'},
+    {"id": 'quark', "title": 'QUARK', "kind": 'synth', "license": "see its repo",
+     "repo": 'james-fish/schwung-quark', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'quark-module.tar.gz'},
+    {"id": 'crest', "title": 'CREST', "kind": 'synth', "license": "see its repo",
+     "repo": 'klaine/crest', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'crest-module.tar.gz'},
+    {"id": 'chordism', "title": 'CHORDISM', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-chordism', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'chordism-module.tar.gz'},
+    {"id": 'setbfree-organ', "title": 'SETBFREE TONEWHEEL ORGAN', "kind": 'synth', "license": "see its repo",
+     "repo": 'pdubucq/schwung-setbfree', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'setbfree-organ-module.tar.gz'},
+    {"id": 'sf2', "title": 'SF2 SYNTH', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-sf2', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'sf2-module.tar.gz'},
+    {"id": 'surge', "title": 'SURGE XT', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-surge', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'surge-module.tar.gz'},
+    {"id": 'mono-voice', "title": 'MONO VOICE', "kind": 'synth', "license": "see its repo",
+     "repo": 'timncox/schwung-mono', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'mono-voice-module.tar.gz'},
+    {"id": 'hank', "title": 'HANK', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-hank', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'hank-module.tar.gz'},
+    {"id": 'tablor', "title": 'TABLOR', "kind": 'synth', "license": "see its repo",
+     "repo": 'athousanddetails/schwung-tablor', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'tablor-module.tar.gz'},
+    {"id": 'mrsample', "title": 'MRSAMPLE', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-mrsample', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'mrsample-module.tar.gz'},
+    {"id": 'chiptune', "title": 'CHIPTUNE', "kind": 'synth', "license": "see its repo",
+     "repo": 'charlesvestal/schwung-chiptune', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'chiptune-module.tar.gz'},
+    {"id": 'bizar', "title": 'BIZAR', "kind": 'synth', "license": "see its repo",
+     "repo": 'klaine/bizar', "commit": "release", "json": "module.json", "build": [],
+     "asset": 'bizar-module.tar.gz'},
 ]
 
-FX = []                             # audio effects installed from Schwung's catalog (store.py)
+FX = []                             # the audio effects (from FX_ASSETS below, once downloaded)
+FX_ASSETS = [                       # ready-made effects from Schwung's releases (downloaded by build.py)
+    {"id": "tapescam", "title": "TAPESCAM", "kind": "fx", "repo": "charlesvestal/schwung-tapescam",
+     "asset": "tapescam-module.tar.gz", "json": "module.json", "build": []},
+    {"id": "ducker", "title": "DUCKER", "kind": "fx", "repo": "charlesvestal/schwung-ducker",
+     "asset": "ducker-module.tar.gz", "json": "module.json", "build": []},
+]
 
 
 def add_record(mid, r):
@@ -194,6 +256,21 @@ def _add_installed():
 import os  # noqa: E402
 BY_ID = {m["id"]: m for m in MODULES}
 _add_installed()
+
+
+def _add_fx_assets():
+    here = os.path.dirname(os.path.abspath(__file__))
+    for a in FX_ASSETS:
+        folder = os.path.join(here, "modules", a["id"])
+        try:
+            info = json.load(open(os.path.join(folder, "module.json")))
+        except (OSError, ValueError):
+            continue
+        add_record(a["id"], {"kind": "fx", "title": a["title"], "dsp": info.get("dsp") or a["id"] + ".so",
+                             "description": info.get("description", "")})
+
+
+_add_fx_assets()
 
 
 def recipe_version(m):

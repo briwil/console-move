@@ -87,6 +87,9 @@ def fetch(m):
 
 
 def built(m):
+    if m.get("asset"):
+        return os.path.exists(os.path.join(OUT, m["id"], "module.json")) and (
+            m.get("kind") == "fx" or os.path.exists(os.path.join(OUT, m["id"], "dsp.so")))
     if m.get("prebuilt"):
         return True                      # installed ready-made from Schwung's catalog (store.py)
     stamp = os.path.join(OUT, m["id"], ".console-commit")
@@ -94,10 +97,65 @@ def built(m):
         and open(stamp).read().strip() == m["commit"] + catalog.recipe_version(m)
 
 
+def tarfile_error():
+    import tarfile
+    return tarfile.TarError
+
+
+def fetch_asset(m):
+    """A module Schwung publishes ready-made for the Move: download its release file into modules/<id>/."""
+    import tarfile
+    import tempfile
+    import urllib.request
+    url = "https://github.com/%s/releases/latest/download/%s" % (m["repo"], m["asset"])
+    req = urllib.request.Request(url, headers={"User-Agent": "console-move"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        blob = r.read(200 * 1024 * 1024)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "m.tar.gz")
+        open(path, "wb").write(blob)
+        out = os.path.join(tmp, "x")
+        os.makedirs(out)
+        with tarfile.open(path) as tar:
+            for t in tar.getmembers():
+                target = os.path.realpath(os.path.join(out, t.name))
+                if not target.startswith(os.path.realpath(out)) or t.issym() or t.islnk() or t.isdev():
+                    raise RuntimeError("unexpected file in the download")
+            tar.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else tar.extractall(out)
+        folder = None
+        for root, _dirs, files in os.walk(out):
+            if "module.json" in files:
+                folder = root
+                break
+        if folder is None:
+            raise RuntimeError("no module.json in the download")
+        info = json.load(open(os.path.join(folder, "module.json")))
+        dsp = info.get("dsp") or "dsp.so"
+        if not os.path.exists(os.path.join(folder, dsp)):
+            cands = [f for f in os.listdir(folder) if f.endswith(".so")]
+            if not cands:
+                raise RuntimeError("no library in the download")
+            dsp = cands[0]
+        dest = os.path.join(OUT, m["id"])
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.copytree(folder, dest, symlinks=False)
+        if dsp != "dsp.so" and m.get("kind") != "fx":
+            shutil.copy2(os.path.join(dest, dsp), os.path.join(dest, "dsp.so"))
+
+
 def build(m):
     """Fetch and compile one module. Returns None if it worked, else what went wrong."""
     if built(m):
         return None
+    if m.get("asset"):
+        try:
+            log("downloading %s..." % m["title"])
+            fetch_asset(m)
+            log("%s ready" % m["title"])
+            return None
+        except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, tarfile_error()) as e:
+            log("couldn't get %s: %s" % (m["title"], e))
+            return str(e)
     try:
         log("fetching %s..." % m["title"])
         d = fetch(m)
@@ -149,12 +207,12 @@ def build(m):
 
 def main(args):
     if "--list" in args:
-        for m in catalog.MODULES:
+        for m in catalog.MODULES + catalog.FX_ASSETS:
             print("%-14s %-6s %s" % (m["id"], m["kind"], "built" if built(m) else "-"))
         return 0
     if not build_host():
         return 1
-    want = [m for m in catalog.MODULES if not args or m["id"] in args]
+    want = [m for m in catalog.MODULES + catalog.FX_ASSETS if not args or m["id"] in args]
     bad = [m["title"] for m in want if build(m)]
     if bad:
         log("not built: %s" % ", ".join(bad))

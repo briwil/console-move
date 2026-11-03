@@ -15,12 +15,73 @@ import math
 import threading
 import time
 
+import ctypes
+import os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+LIB = os.path.join(HERE, "link", "liblink.so")      # Ableton's Link, built by move/build-for-move.sh (the Move)
+
+
+class _H(ctypes.Structure):                          # abl_link and abl_link_session_state: a struct around a pointer
+    _fields_ = [("impl", ctypes.c_void_p)]
+
+
+class _Abl:
+    """Ableton Link through its C interface (liblink.so), with the few things LinkSync uses from the aalink package."""
+
+    def __init__(self, bpm):
+        L = self.L = ctypes.CDLL(LIB)
+        c, d, b, i64, u64 = ctypes.c_void_p, ctypes.c_double, ctypes.c_bool, ctypes.c_int64, ctypes.c_uint64
+        for name, args, res in [
+                ("abl_link_create", [d], _H), ("abl_link_enable", [_H, b], None), ("abl_link_is_enabled", [_H], b),
+                ("abl_link_enable_start_stop_sync", [_H, b], None), ("abl_link_num_peers", [_H], u64),
+                ("abl_link_clock_micros", [_H], i64), ("abl_link_create_session_state", [], _H),
+                ("abl_link_capture_app_session_state", [_H, _H], None),
+                ("abl_link_commit_app_session_state", [_H, _H], None),
+                ("abl_link_tempo", [_H], d), ("abl_link_set_tempo", [_H, d, i64], None),
+                ("abl_link_beat_at_time", [_H, i64, d], d), ("abl_link_is_playing", [_H], b),
+                ("abl_link_set_is_playing", [_H, b, u64], None)]:
+            fn = getattr(L, name)
+            fn.argtypes, fn.restype = args, res
+        self.h = L.abl_link_create(float(bpm))
+        self.ss = L.abl_link_create_session_state()
+        self._quantum = 4.0
+
+    def _cap(self):
+        self.L.abl_link_capture_app_session_state(self.h, self.ss)
+        return self.ss
+
+    def _now(self):
+        return self.L.abl_link_clock_micros(self.h)
+
+    enabled = property(lambda s: bool(s.L.abl_link_is_enabled(s.h)),
+                       lambda s, v: s.L.abl_link_enable(s.h, bool(v)))
+    start_stop_sync_enabled = property(lambda s: True, lambda s, v: s.L.abl_link_enable_start_stop_sync(s.h, bool(v)))
+    num_peers = property(lambda s: int(s.L.abl_link_num_peers(s.h)))
+    quantum = property(lambda s: s._quantum, lambda s, v: setattr(s, "_quantum", float(v)))
+    tempo = property(lambda s: s.L.abl_link_tempo(s._cap()))
+    beat = property(lambda s: s.L.abl_link_beat_at_time(s._cap(), s._now(), s._quantum))
+    playing = property(lambda s: bool(s.L.abl_link_is_playing(s._cap())))
+
+    @tempo.setter
+    def tempo(self, bpm):
+        ss = self._cap()
+        self.L.abl_link_set_tempo(ss, float(bpm), self._now())
+        self.L.abl_link_commit_app_session_state(self.h, ss)
+
+    @playing.setter
+    def playing(self, on):
+        ss = self._cap()
+        self.L.abl_link_set_is_playing(ss, bool(on), self._now())
+        self.L.abl_link_commit_app_session_state(self.h, ss)
+
+
 try:
     import aalink
     AVAILABLE = True
 except Exception:
     aalink = None
-    AVAILABLE = False
+    AVAILABLE = os.path.exists(LIB)
 
 POLL = 0.004                  # seconds between looks at Link
 NUDGE_AT = 64                 # frames of drift before the tape is nudged back (about 1.5 ms)
@@ -63,7 +124,7 @@ class LinkSync:
 
     async def _main(self):
         e = self.engine
-        self.link = link = aalink.Link(e.bpm)
+        self.link = link = aalink.Link(e.bpm) if aalink else _Abl(e.bpm)
         link.start_stop_sync_enabled = True
         while True:
             await asyncio.sleep(POLL)

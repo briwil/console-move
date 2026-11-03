@@ -363,6 +363,9 @@ def main():
     e.select_arms = False                            # selecting a track doesn't arm it: Shift + step button does
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
     T = console.Transport(screen, e)
+    if e:
+        import linksync
+        T.link = linksync.LinkSync(e)                    # Ableton Link (MENU > SETTINGS > MIDI SYNC > LINK)
     m = menu_mod.Menu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits = kitmenu.KitMenu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits.main = m

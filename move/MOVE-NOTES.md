@@ -126,3 +126,9 @@ lights them one at a time (the screen says which step button it is under); `echo
 ## INSERT effect (Tapescam, Ducker...)
 Install an effect from FX → (page 3 appears once one is installed) via "GET MORE FROM SCHWUNG". FX key cycles REVERB → DELAY → INSERT. On INSERT: knob 1 picks the effect, knobs 2-4 its first three settings. It runs on the whole output (not on the tape tracks), and your choice is remembered. The Ducker gets a note whenever drum 1 (lane 1) is hit by a pad or the sequencer (the sequencer one only for the instrument you're looking at).
 Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).
+
+## Newer features (this round)
+- **Synth steps:** NUDGE (a step early/late) joins LENGTH/VELOCITY/CHANCE/MULTIPLY. A note you record live lasts as long as you hold the pad.
+- **LFO steps:** on an LFO page the 16 step buttons are the LFO's steps (1/16 notes, one bar). Tap = that step rests; hold a step + knob 2 = its own WAVE, knob 4 = its own DEPTH.
+- **Chromatic drum pads by hand:** on a drum sequencer, hold a step button and press a right-half pad: the step turns on with that pitch.
+- **Ableton Link:** MENU > SETTINGS > MIDI SYNC > LINK. Tempo is shared while stopped (a running tape keeps its tempo), PLAY/STOP are shared and start on the next bar. Needs the new libs (Link is built in the cloud like the rest).

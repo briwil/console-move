@@ -58,6 +58,7 @@ sudo docker run --rm ${DOCKER_PLATFORM:+--platform $DOCKER_PLATFORM} -v "$REPO":
   cp drums/libdrums.so drums/libdrums_live.so 2>/dev/null || true
   echo "- 606 / 808";      for m in 606 808; do g++ -O2 -shared -fPIC -w -o drums/schwung/lib$m.so drums/schwung/glue$m.cpp; done
   echo "- Sampler";       gcc -O2 -shared -fPIC -o drums/sampler/libsampler.so drums/sampler/sampler.c -lm
+  echo "- Ableton Link";   mkdir -p link && git clone -q --depth 1 --branch Link-3.1.3 --recursive https://github.com/Ableton/link.git /tmp/ablink && g++ -std=c++14 -O2 -shared -fPIC -w -DLINK_PLATFORM_UNIX=1 -DLINK_PLATFORM_LINUX=1 -I/tmp/ablink/include -I/tmp/ablink/modules/asio-standalone/asio/include -I/tmp/ablink/extensions/abl_link/include /tmp/ablink/extensions/abl_link/src/abl_link.cpp -o link/liblink.so -lpthread || echo "(Link failed to build)"
   echo "- Machinedrum";    g++ -O2 -std=c++11 -shared -fPIC -w -Idrums/md/vendor -Idrums/md -o drums/md/libmd.so drums/md/glue_md.cpp
   echo "- Schwung synths and drum machines (the longest part)"
   python3 schwung/build.py || echo "(some modules failed: see above)"

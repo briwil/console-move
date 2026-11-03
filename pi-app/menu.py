@@ -90,6 +90,8 @@ class Menu:
         if isinstance(name, tuple):
             if name[0] == "KNOB" and name[1] == 11:
                 self.turn(name[2])
+            elif name[0] == "KNOB" and name[1] == 10 and self.mode == "list":
+                self.turn(name[2])                       # Shift + the wheel: still moves (Shift shows DELETE / RENAME)
             elif name[0] == "KNOB" and name[1] == 10 and self.mode == "settings":
                 self.change(name[2], fine=name[3])
             elif name[0] == "CHAR":

@@ -202,7 +202,7 @@ class MoveSeq:
         lane, i = sp.lane, self.held
         clicks = self.T.knob_clicks(1, delta, shift)
         if isinstance(key, str) and key != "vel" and key != "chance":     # short lists (multiply, pulse, jump...)
-            one = knobgate.gate(("comp", key), delta, shift, 3)
+            one = knobgate.gate(("comp", key), delta, shift)
             if not one:
                 return
             delta = one
@@ -339,7 +339,7 @@ class MoveSeq:
             if number > len(LANE_KNOBS):
                 return
             if LANE_KNOBS[number - 1] == "rate":                  # a list of speeds: 6 clicks each
-                delta = knobgate.gate(("rate",), delta, shift, 6)
+                delta = knobgate.gate(("rate",), delta, shift)
                 if not delta:
                     return
                 shift = True

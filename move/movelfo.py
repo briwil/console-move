@@ -113,7 +113,7 @@ class MoveLFO:
         k = number - 1
         if self.held and k in (1, 3):                 # a held step: its own WAVE / DEPTH
             steps = self.lfos()[self.tab].setdefault("steps", {})
-            way = knobgate.gate(("lfostep", k), delta, shift, 3) if k == 1 else delta
+            way = knobgate.gate(("lfostep", k), delta, shift) if k == 1 else delta
             if not way:
                 return
             for i in self.held:
@@ -128,7 +128,7 @@ class MoveLFO:
             self.T.say("STEP %s  %s  %s" % (",".join(str(i + 1) for i in sorted(self.held)), LABELS[k], shown), 2)
             return
         if k in CHOICE:
-            way = knobgate.gate(("lfo", k), delta, shift, 3)
+            way = knobgate.gate(("lfo", k), delta, shift)
             if not way:
                 return
             one = 1 if way > 0 else -1

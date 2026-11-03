@@ -630,7 +630,7 @@ def handle(name, T, m, e):
                                                     or T.song_page)
         if (zoomed and n <= 3) or n == 10:
             # a mode or a list (mono / stereo, the input, the grid, the pattern): several clicks per choice
-            way = knobgate.gate(("knob", n, zoomed), name[2], False, 5 if zoomed else 3)
+            way = knobgate.gate(("knob", n, zoomed), name[2], False)
             if not way:
                 return
             name = ("KNOB", n, way, name[3])

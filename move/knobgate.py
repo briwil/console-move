@@ -9,8 +9,11 @@ PAUSE = 0.7                       # seconds without a click: the count starts ag
 _acc = {}
 
 
-def gate(key, delta, shift=False, clicks=CLICKS):
-    """The clicks to apply now: 0 until enough have come, then 1 or -1."""
+def gate(key, delta, shift=False, clicks=None):
+    """The clicks to apply now: 0 until enough have come, then 1 or -1. Without `clicks`: one more than the
+    knob speed (SPEED), so the one setting (Shift + the volume knob) makes every knob less or more touchy."""
+    if clicks is None:
+        clicks = SPEED + 1
     if shift:
         return 1 if delta > 0 else -1
     now = time.monotonic()

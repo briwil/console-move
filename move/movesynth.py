@@ -357,7 +357,7 @@ class MoveSynth:
         seq, e = self.seq, self.T.engine
         clicks = delta
         if key in ("chance", "ratchet", "nudge") + COMPS or (not isinstance(key, str) and knobgate.is_choice(self.d, key)):
-            clicks = knobgate.gate(("synstep", key), delta, shift, 3)
+            clicks = knobgate.gate(("synstep", key), delta, shift)
             if not clicks:
                 return
         one = 1 if clicks > 0 else -1
@@ -416,12 +416,12 @@ class MoveSynth:
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)      # the step lights show the length
             self.T.say("LENGTH %d" % v, 2)
         elif what == "rate":
-            way = knobgate.gate(("synrate",), delta, shift, 6)
+            way = knobgate.gate(("synrate",), delta, shift)
             if way:
                 seq.change_track("rate", way)
                 self.T.say("RATE %s" % notes_mod.RATES[seq.pattern.rate][0], 2)
         elif what == "type":
-            way = knobgate.gate(("syntype",), delta, shift, 3)
+            way = knobgate.gate(("syntype",), delta, shift)
             if way:
                 seq.move_type = 1 if way > 0 else 0
                 self.lane = None
@@ -434,12 +434,12 @@ class MoveSynth:
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)
             self.T.say("NOTE %s LENGTH %d" % (notes_mod.note_name(self.lane), v), 2)
         elif what == "key":
-            way = knobgate.gate(("synkey",), delta, shift, 3)
+            way = knobgate.gate(("synkey",), delta, shift)
             if way:
                 seq.set_scale(root=seq.root + way)
                 self.T.say("KEY %s" % notes_mod.NAMES[seq.root], 2)
         elif what == "scale":
-            way = knobgate.gate(("synscale",), delta, shift, 3)
+            way = knobgate.gate(("synscale",), delta, shift)
             if way:
                 seq.set_scale(scale=seq.scale + way)
                 self.T.say("SCALE %s" % notes_mod.SCALES[seq.scale][0], 2)

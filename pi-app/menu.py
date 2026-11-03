@@ -45,6 +45,7 @@ class Menu:
         self.open = True
         self.choice = 2                       # LOAD, as in the design
         self.mode = "list"                    # "list", "name" or "settings"
+        self.deleting = False                 # the LOAD list used to delete a project (Shift + push on NEW)
         self.editing = False                  # settings: the pushed row's value is being turned (push again: done)
         self.row = 0                          # the settings row being changed
         self.name = []
@@ -108,9 +109,23 @@ class Menu:
             self.turn(1)
         elif name in CONFIRM:
             self.choose()
+        elif name == "DELETE_MODE":
+            self.start_delete()
         elif name == "FILE":
             self.close()
         self.refresh()
+
+    def start_delete(self):
+        """Shift + push on NEW: choose a project to delete (then it asks: are you sure?)."""
+        e = self.engine
+        if ITEMS[self.choice][0] != "NEW" or not e:
+            return
+        self.songs = e.song_names()
+        if not self.songs:
+            self.say("NO SAVED PROJECTS TO DELETE")
+            return
+        self.deleting = True
+        self.mode, self.msg, self.confirm, self.pick = "load", "", None, 0
 
     def turn(self, delta):
         if self.mode == "wifi":
@@ -475,6 +490,9 @@ class Menu:
     def load_key(self, name):
         """The LOAD list: big knob or arrows pick, PLAY opens, CUT deletes (press twice), FILE goes back."""
         e = self.engine
+        if self.deleting:
+            self.delete_key(name)
+            return
         if name in ("LEFT", "UP", "BAR_LEFT"):
             self.turn(-1)
         elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
@@ -511,6 +529,35 @@ class Menu:
                 return
             self.transport.open_song(song)
             self.close()
+
+    def delete_key(self, name):
+        """Deleting a project: pick it, PLAY asks "are you sure?", PLAY again deletes it, FILE steps back."""
+        e = self.engine
+        if name in ("LEFT", "UP", "BAR_LEFT"):
+            self.turn(-1)
+        elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
+            self.turn(1)
+        elif name == "FILE":
+            if self.confirm:
+                self.confirm = None
+            else:
+                self.deleting = False
+                self.mode, self.msg = "list", ""
+        elif name in CONFIRM and self.songs:
+            song = self.songs[self.pick]
+            if song == e.song:
+                self.say("THAT PROJECT IS OPEN: OPEN ANOTHER ONE FIRST")
+            elif self.confirm != ("delete", song):
+                self.confirm = ("delete", song)
+            else:
+                e.delete_song(song)
+                self.songs = e.song_names()
+                self.pick = min(self.pick, max(0, len(self.songs) - 1))
+                self.confirm = None
+                self.say("DELETED %s" % song.upper())
+                if not self.songs:
+                    self.deleting = False
+                    self.mode = "list"
 
     def create(self):
         """Save the unnamed song with the name typed in (or, for Wi-Fi, connect with the password)."""
@@ -565,12 +612,13 @@ class Menu:
 
     def show(self):
         self.open, self.mode, self.msg, self.confirm_new, self.editing = True, "list", "", False, False
+        self.deleting = False
         self.refresh()
 
     def close(self):
         self.open = False
         self.mode = "list"
-        self.editing = False
+        self.editing = self.deleting = False
         self.msg = ""
 
     # ------------------------------------------------------------ drawing

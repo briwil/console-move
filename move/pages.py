@@ -23,6 +23,10 @@ def draw(f, T, menu=None):
             name_page(f, menu)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "settings":
             settings_page(f, menu)
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "load" and getattr(menu, "deleting", False):
+            delete_page(f, menu)
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "list":
+            menu_list_page(f, menu, T)
         elif menu is not None and menu.open:
             text_page(f, menu.s, getattr(menu, "msg", ""))
         elif menu is not None and menu.kits.open:
@@ -705,6 +709,39 @@ def kit_list(f, k):
     if msg:
         f.rect(0, H - 8, W, 8, 1)
         f.small(1, H - 6, str(msg).upper()[:31], 0)
+
+
+def menu_list_page(f, menu, T):
+    """The project menu: NEW, SAVE, LOAD, SETTINGS. Holding Shift turns NEW PROJECT into DELETE PROJECT."""
+    import menu as menu_mod
+    shift = bool(getattr(T, "shift_held", lambda: False)())
+    e = menu.engine
+    header(f, ((e.song or "UNTITLED") if e else "DEMO").upper()[:21])
+    rows = []
+    for label, _ in menu_mod.ITEMS:
+        rows.append({"NEW": "DELETE PROJECT" if shift else "NEW PROJECT", "SAVE": "SAVE PROJECT",
+                     "LOAD": "LOAD PROJECT", "SETTINGS": "SETTINGS"}[label])
+    biglist(f, rows, menu.choice, fit=4)
+    msg = str(getattr(menu, "msg", "") or "")
+    f.small(1, 58, (msg or ("SHIFT + PUSH: DELETE ONE" if shift else "")).upper()[:31])
+
+
+def delete_page(f, menu):
+    """Deleting a project: the list, then a full-screen "are you sure?"."""
+    if menu.confirm:
+        header(f, "DELETE PROJECT")
+        name = str(menu.confirm[1]).upper()
+        f.text(2, 16, "ARE YOU SURE?")
+        f.text(2, 30, name[:21])
+        f.small(2, 42, "IT IS GONE FOR GOOD")
+        f.small(1, 52, "PLAY: YES, DELETE IT")
+        f.small(1, 58, "BACK: NO, KEEP IT")
+        return
+    header(f, "DELETE WHICH PROJECT?", "%d" % len(menu.songs))
+    rows = [(s + ("  OPEN" if menu.engine and s == menu.engine.song else "")) for s in menu.songs]
+    biglist(f, [r.upper() for r in rows], menu.pick, fit=4)
+    msg = str(getattr(menu, "msg", "") or "")
+    f.small(1, 58, (msg or "PLAY: DELETE   BACK: CANCEL").upper()[:31])
 
 
 def settings_page(f, menu):

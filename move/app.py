@@ -757,6 +757,10 @@ def handle(name, T, m, e):
         if name[0] == "HOLD":
             (m if m.open else m.kits).key(name[1])
     elif m.open:
+        if getattr(m, "mode", "") == "name" and name in ("HOME", "HOME_PUSH_SHIFT"):
+            name = "RIGHT" if name == "HOME" else "LEFT"           # naming: the wheel's push goes to the next letter, PLAY saves
+        elif getattr(m, "mode", "") == "list" and name == "HOME_PUSH_SHIFT":
+            name = "DELETE_MODE"                                    # Shift + push on NEW PROJECT (DELETE PROJECT): delete one
         m.key("PLAY" if name == "HOME" else name)    # pushing the wheel chooses, as PLAY does
     elif m.kits.open:
         if m.kits.mode == "list" and name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):

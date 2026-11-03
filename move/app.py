@@ -70,8 +70,8 @@ def _shuffled(colours, seed):
 
 
 # the drum pads: bright colours, in a random order; the chromatic pads: pastels, in another random order
-DRUM_COLOURS = _shuffled([1, 3, 8, 9, 11, 13, 15, 16, 17, 21, 22, 23, 25, 26, 7, 12], 606)
-NOTE_COLOURS = _shuffled([47, 44, 46, 50, 52, 37, 38, 43, 42, 36, 51, 48, 40, 39, 45, 49], 808)
+DRUM_COLOURS = [16] * 16        # the left 4x4: one bright colour
+NOTE_COLOURS = [47] * 16        # the right 4x4: one pastel
 
 
 class MoveBoard:

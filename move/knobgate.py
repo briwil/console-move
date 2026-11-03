@@ -35,7 +35,7 @@ def is_choice(drums, param):
 # ---------------------------------------------------------------- the global knob speed
 # Every knob (1-8) that changes a number takes SPEED clicks of the encoder per step: one value for all of
 # them, kept in console/knob-sensitivity. Shift + the volume knob on the Move changes it.
-SPEED = 3
+SPEED = 4
 MIN_SPEED, MAX_SPEED = 1, 12
 _path = None
 

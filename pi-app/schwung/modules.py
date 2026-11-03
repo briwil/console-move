@@ -14,6 +14,7 @@ keep 0..127, and sent to the module as text.
 All talking to a module happens in the audio thread (render), as the plugin API asks: changes wait in
 _pending until then.
 """
+import math
 import ctypes
 import json
 import os
@@ -236,6 +237,8 @@ class Module:
                 if kind == "int":
                     steps = int(hi - lo)
                     entry.update(kind="num", int=True, lo=lo, hi=hi, steps=max(1, steps))
+                    if lo > 0 and hi / lo >= 100:             # a frequency (20-20000): even steps by octave, not by Hz
+                        entry.update(log=True, steps=127)
                 else:
                     step = _number(p.get("step")) or 0
                     steps = int(round((hi - lo) / step)) if step > 0 else 127
@@ -314,15 +317,26 @@ class Module:
         n = _number(text)
         if n is None:
             return 0
-        f = (n - p["lo"]) / (p["hi"] - p["lo"])
+        if p.get("log"):
+            n = max(p["lo"], min(p["hi"], n))
+            f = math.log(n / p["lo"]) / math.log(p["hi"] / p["lo"])
+        else:
+            f = (n - p["lo"]) / (p["hi"] - p["lo"])
         return max(0, min(p["steps"], int(round(f * p["steps"]))))
+
+    @staticmethod
+    def _at(p, pos):
+        """The setting's value at a knob position (log for frequencies)."""
+        if p.get("log"):
+            return p["lo"] * (p["hi"] / p["lo"]) ** (pos / p["steps"])
+        return p["lo"] + (p["hi"] - p["lo"]) * pos / p["steps"]
 
     def _text(self, i, pos):
         """A knob position as the text the module takes."""
         p = self.params[i]
         if p["kind"] == "menu":
             return p["raw"][max(0, min(p["steps"], pos))]
-        v = p["lo"] + (p["hi"] - p["lo"]) * pos / p["steps"]
+        v = self._at(p, pos)
         return str(int(round(v))) if p["int"] else "%.4f" % v
 
     def problem(self):
@@ -345,7 +359,7 @@ class Module:
         p = self.params[param]
         if p["kind"] == "menu":
             return p["options"][max(0, min(p["steps"], v))]
-        x = p["lo"] + (p["hi"] - p["lo"]) * v / p["steps"]
+        x = self._at(p, v)
         unit = p.get("unit") or ""
         if p["int"]:
             return "%d%s" % (round(x), (" " + unit.upper()) if unit else "")

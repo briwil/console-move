@@ -22,7 +22,7 @@ import threading
 import random
 
 import sequencer
-from sequencer import (CHANCES, DEFAULT_VELOCITY, MAX_RATCHET, MAX_STEPS, PATTERNS, RATES, UNDO_STEPS, bar_steps,
+from sequencer import (next_rate, CHANCES, DEFAULT_VELOCITY, MAX_RATCHET, MAX_STEPS, PATTERNS, RATES, UNDO_STEPS, bar_steps,
                        chance_index, chance_passes)
 
 ROWS = 8                             # rows on screen (and track keys)
@@ -260,7 +260,7 @@ class NoteSequencer:
                 p.length = max(1, min(MAX_STEPS, p.length + delta))
             elif what == "rate":
                 old = p.steps_per_beat()
-                p.rate = max(0, min(len(RATES) - 1, p.rate + (1 if delta > 0 else -1)))
+                p.rate = next_rate(p.rate, delta)
                 old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(p.steps_per_beat(), self.bar_beats)
                 if old_bar and new_bar and p.length % old_bar == 0 and p.length // old_bar * new_bar <= MAX_STEPS:
                     for pitch, ln in list(p.lane_len.items()):          # the rows with their own length scale too

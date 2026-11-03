@@ -251,12 +251,12 @@ class MoveSeq:
         for p in range(32):
             if p >= len(items):
                 out.append(0)
-            elif not self.engaged(items[p][0]):
-                out.append(20)                             # tapped to look at, not set: stays dim
+            elif self.engaged(items[p][0]):
+                out.append(127)                            # set (its value was changed): red
             elif p == self.sel:
-                out.append(127 if int(time.monotonic() * 4) % 2 else 0)
+                out.append(7)                              # tapped, not changed yet: yellow
             else:
-                out.append(127)
+                out.append(20)                             # not used: its own dim colour (also after it's cancelled)
         return out
 
     def playing_step(self):

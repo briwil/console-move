@@ -22,7 +22,17 @@ MAX_STEPS = 64
 PATTERNS = 16
 LANE_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
 LANE_VOICE = [0, 1, 2, 3, 4, 5, 5]          # the drum synth voice each lane plays (its settings)
-RATES = [("1/16", 4), ("1/16T", 6), ("1/8", 2), ("1/8T", 3), ("1/32", 8)]      # (name, steps per beat)
+# (name, steps per beat). The first five keep their places (saved songs store the place); RATE_ORDER is the order
+# the knob steps through them: slowest to fastest.
+RATES = [("1/16", 4), ("1/16T", 6), ("1/8", 2), ("1/8T", 3), ("1/32", 8),
+         ("1/4", 1), ("1/4T", 1.5), ("1/2", 0.5), ("1/2T", 0.75), ("1/1", 0.25)]
+RATE_ORDER = sorted(range(len(RATES)), key=lambda i: RATES[i][1])
+
+
+def next_rate(rate, delta):
+    """The rate one step slower (delta < 0) or faster (delta > 0) than this one (an index into RATES)."""
+    at = RATE_ORDER.index(rate) if rate in RATE_ORDER else RATE_ORDER.index(0)
+    return RATE_ORDER[max(0, min(len(RATE_ORDER) - 1, at + (1 if delta > 0 else -1)))]
 # chance: a percentage, or "A:B": plays on the A-th time round the lane out of every B
 CHANCES = ["%d%%" % p for p in range(100, -1, -10)] + ["1:2", "2:2", "1:3", "2:3", "3:3", "1:4", "2:4", "3:4", "4:4"]
 # songs saved before October 2026 stored chance as a place in this older list
@@ -90,7 +100,7 @@ def group_steps(steps_per_beat, time_sig):
     n = steps_per_beat * beat
     if abs(n - round(n)) < 1e-6 and round(n) >= 2:
         return int(round(n))
-    return bar_steps(steps_per_beat, num * 4.0 / den) or steps_per_beat
+    return bar_steps(steps_per_beat, num * 4.0 / den) or max(1, int(round(steps_per_beat)))
 
 
 class Lane:
@@ -253,7 +263,7 @@ class Sequencer:
                     self._fill(ln)
             elif what == "rate":
                 old = ln.steps_per_beat()
-                ln.rate = max(0, min(len(RATES) - 1, ln.rate + (1 if delta > 0 else -1)))
+                ln.rate = next_rate(ln.rate, delta)
                 # a lane that's a whole number of bars stays that many bars long at its new rate
                 old_bar, new_bar = bar_steps(old, self.bar_beats), bar_steps(ln.steps_per_beat(), self.bar_beats)
                 if old_bar and new_bar and ln.length % old_bar == 0:

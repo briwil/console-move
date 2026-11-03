@@ -577,6 +577,11 @@ def handle(name, T, m, e):
     on_sound = T.drum_page and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)
     if on_sound and e and e.drums:
         last = len(T.drum_pages()) - 1
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:       # the big wheel turns the pages
+            way = knobgate.gate(("wheel-pages",), name[2], False, 3)
+            if not way:
+                return
+            name = "RIGHT" if way > 0 else "LEFT"
         if name in ("LEFT", "RIGHT") or (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9 and name[3]):
             if T.mlfo.arrows(1 if name == "RIGHT" else -1, last):
                 return

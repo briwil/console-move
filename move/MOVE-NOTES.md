@@ -110,7 +110,7 @@ lights them one at a time (the screen says which step button it is under); `echo
   UNIFIED or PER NOTE (tap a pad: its steps only). Record button on a drum or synth sequencer page: live record into the
   pattern (T.live_rec), not the tape; right-hand drum pads record their pitch as a step lock.
 - SAMPLER (pi-app/sampler.py + drums/sampler/sampler.c, built by build-for-move.sh): 16 drums, each a .wav from the Move's sample
-  folders (/data/UserData/UserLibrary/Samples, /data/UserData/console/samples, or CONSOLE_SAMPLES=dir:dir). Per drum: SAMPLE, LEVEL,
+  folders (/data/UserData/UserLibrary/Samples, /data/UserData/console/samples, or CONSOLE_SAMPLES=dir:dir). Per drum: SAMPLE (push the big wheel: a folder browser), LEVEL,
   PITCH, START, DECAY, PAN, REVERB, DELAY. Songs keep a sample as its place in the sorted file list.
 - The Move's audio input (guitar, mic: system:capture_1/2) is a tape input: INPUT L / INPUT R (core channels EXT_IN = 88, 89),
   chosen in the zoomed track view (knobs 1-3) after the instrument channels. A track armed on it hears it while you play

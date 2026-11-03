@@ -427,8 +427,19 @@ def lfo_page(f, T):
 def sample_page(f, sb):
     header(f, sb.title())
     rows = [r[0] for r in sb.entries] or ["EMPTY"]
-    listing(f, rows, sb.pick, top=11, fit=6)
-    f.small(1, H - 7, "PUSH: OPEN / CHOOSE   BACK: UP")
+    fit = 5
+    first = max(0, min(sb.pick - fit // 2, len(rows) - fit))
+    for i in range(fit):
+        k = first + i
+        if k >= len(rows):
+            break
+        y = 11 + i * 9
+        if k == sb.pick:
+            f.rect(0, y - 1, W, 9, 1)
+            f.text(2, y, rows[k], 0, limit=W - 4)
+        else:
+            f.text(2, y, rows[k], 1, limit=W - 4)
+    f.small(1, H - 6, "PUSH: OPEN/CHOOSE  BACK: UP")
 
 
 def sound_page(f, T):

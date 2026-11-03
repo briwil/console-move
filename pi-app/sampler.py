@@ -141,7 +141,7 @@ class Sampler:
         self.init_values = [DEFAULTS[i % PER] for i in range(self.param_count)]
         self.values = list(self.init_values)
         self.lane_voice = list(range(LANES))
-        self.fast_params = {i * PER for i in range(LANES)}      # the SAMPLE settings: scroll a list, not a mode
+        self.fast_params = {i * PER for i in range(LANES)}      # the SAMPLE settings
         self._send_keys = [(v * PER + 6, v * PER + 7) for v in range(LANES)]
         self._lock = threading.Lock()
         self._pending = []
@@ -177,7 +177,7 @@ class Sampler:
     # ------------------------------------------------------------ what the screens ask
     def pages(self, voice):
         v = max(0, min(LANES - 1, voice))
-        return [("SOUND", [v * PER + k for k in range(PER)])]
+        return [("SOUND", [v * PER + k for k in range(1, PER)])]      # (the SAMPLE: push the wheel)
 
     def label(self, param):
         return self.params[param]["label"] if 0 <= param < len(self.params) else "?"

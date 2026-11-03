@@ -1,7 +1,7 @@
 """The SAMPLE BROWSER: choosing a sampler drum's sample by folders instead of one long list.
 
-Turn the SAMPLE knob (knob 1 on a sampler drum's page) to open it. Then: the big wheel (or knob 1) moves,
-push the wheel to open a folder / choose a sample, ".." goes up, Back goes up a folder (and leaves from the top).
+Push the big wheel on a sampler drum's page to open it. Then: the wheel turns through the list,
+push the wheel to open a folder / choose a sample, "< UP" goes up, Back goes up a folder (and leaves from the top).
 The highlighted sample is played as you land on it; leaving with Back puts the old sample back."""
 import os
 import threading
@@ -40,9 +40,9 @@ class SampleBrowser:
         node = self._tree.get(self.folder, {"dirs": (), "files": []})
         rows = []
         if self.folder != self.root:
-            rows.append(("..  (UP)", "up", os.path.dirname(self.folder)))
+            rows.append(("< UP", "up", os.path.dirname(self.folder)))
         for d in sorted(node["dirs"], key=str.lower):
-            rows.append(("[%s]" % os.path.basename(d).upper(), "dir", d))
+            rows.append(("> " + os.path.basename(d).upper(), "dir", d))
         for name, idx in sorted(node["files"], key=lambda x: x[0].lower()):
             rows.append((os.path.splitext(name)[0].upper(), "file", idx))
         self.entries = rows
@@ -62,13 +62,9 @@ class SampleBrowser:
         self.drums, self.voice = drums, voice
         self.orig = drums.get_param(voice * 8)
         cur = files[self.orig - 1] if 0 < self.orig <= len(files) else None
-        self.folder = os.path.dirname(cur) if cur else self.root
+        self.folder = self.root                        # always from the top of the samples
         self._list()
         self.pick = 0
-        if cur:
-            for k, (_l, kind, val) in enumerate(self.entries):
-                if kind == "file" and val == self.orig:
-                    self.pick = k
         self.active = True
 
     def close(self, keep):

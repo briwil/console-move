@@ -555,8 +555,8 @@ def handle(name, T, m, e):
         return
     ms = T.mseq
     sb = T.sbrowse
-    if sb.active:                                      # the sample browser has the wheel, knob 1 and Back
-        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] in (1, 11):
+    if sb.active:                                      # the sample browser has the wheel and Back
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
             sb.turn(name[2])
             return
         if name in ("HOME", "PLAY"):
@@ -565,14 +565,10 @@ def handle(name, T, m, e):
         if name in ("BACK", "FILE", "DRUMS_BACK"):
             sb.back()
             return
-    elif (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 1 and not name[3] and T.drum_page and e
-          and e.drums and getattr(e.drums, "id", "") == "sampler" and not (
-              T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)):
-        pg = T.drum_pages()
-        prm = pg[min(T.drum_tab, len(pg) - 1)][1]
-        if prm and prm[0] % 8 == 0 and not T.mlfo.active():
-            sb.open(e.drums, T.drum_voice)
-            return
+    elif (name == "HOME" and T.drum_page and e and e.drums and getattr(e.drums, "id", "") == "sampler"
+          and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)):
+        sb.open(e.drums, T.drum_voice)                 # push the wheel on a sampler drum: choose its sample
+        return
     if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8 and not choice_knob(T, m, e, name):
         way = knobgate.numeric(("num", name[1], name[3]), name[2])    # every number knob: SPEED clicks a step
         if not way:

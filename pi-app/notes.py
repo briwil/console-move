@@ -354,7 +354,7 @@ class NoteSequencer:
                 pats.append({"length": p.length, "rate": p.rate, "notes": notes,
                              "lanes": {str(k): v for k, v in p.lane_len.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
-                    "low": self.low, "patterns": pats}
+                    "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats}
 
     def from_json(self, data):
         with self.lock:
@@ -366,6 +366,7 @@ class NoteSequencer:
                 self.root = int(data.get("root", 0)) % 12
                 self.scale = max(0, min(len(SCALES) - 1, int(data.get("scale", 0))))
                 self.low = max(0, int(data.get("low", self.low)))
+                self.move_type = 1 if int(data.get("move_type", 0)) else 0
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     p.length = max(1, min(MAX_STEPS, int(pd.get("length", 16))))
                     p.rate = max(0, min(len(RATES) - 1, int(pd.get("rate", 0))))

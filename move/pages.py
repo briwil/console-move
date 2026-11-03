@@ -436,15 +436,67 @@ def sound_page(f, T):
             f.rect(x + 1 + int(frac * 59), y + 6, 2, 3)
 
 
+def synth_seq_page(f, T):
+    """The synth sequencer (see movesynth.py): the 16 steps the buttons show, and the knobs or the held step."""
+    import notes
+    e, ms = T.engine, T.msyn
+    seq = e.seq
+    first = ms.first()
+    pat = "PAT %d" % (seq.current + 1) + (">%d" % (seq.queued + 1) if seq.queued is not None else "")
+    rec = "REC " if T.live_rec else ""
+    if ms.selected:
+        header(f, ms.which(), pat)
+    elif ms.lane is not None and ms.kind:
+        header(f, rec + "NOTE " + notes.note_name(ms.lane), pat)
+    else:
+        header(f, rec + ("PER NOTE" if ms.kind else "UNIFIED"), pat)
+    at = ms.playing_step()
+    length = ms.length()
+    for k in range(16):
+        i = first + k
+        x, y = 1 + k * 8, 11
+        if i >= length:
+            f.dot(x + 3, y + 3)
+            continue
+        on = (ms.lane in ms.notes_at(i)) if (ms.lane is not None and ms.kind) else bool(ms.notes_at(i))
+        (f.rect if on else f.frame)(x, y, 7, 7)
+        if i in ms.down or i in ms.selected:
+            f.frame(x - 1, y - 1, 9, 9)
+        if at is not None and i == at:
+            f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
+    f.small(1, 20, "STEPS %d-%d OF %d" % (first + 1, min(first + 16, length), length))
+    if ms.selected:
+        f.frame(8, 27, 112, 26)
+        f.rect(9, 28, 110, 24, 0)
+        if ms.sel is None:
+            f.centre(64, 31, "PRESS A PAD")
+            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
+        else:
+            key, label = ms.pad_items()[ms.sel]
+            f.centre(64, 30, str(label)[:16])
+            f.centre(64, 40, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
+            f.centre(64, 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
+        return
+    if ms.down:
+        f.small(1, 28, "PADS: ADD / TAKE OFF NOTES")
+        f.small(1, 35, "TAP A LATER STEP: LENGTH")
+        f.small(1, 42, "KNOB 1: LENGTH")
+        return
+    for i, (label, value, _x) in enumerate(ms.knob_list()):
+        col, row = divmod(i, 4)
+        x, y = col * 65, 28 + row * 7
+        f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
+        f.right(x + 62, y, str(value)[:5], small=True)
+    f.small(66, 49, "SHIFT+STEPS: SETTINGS")
+
+
 def seq_page(f, T):
     """The drum sequencer: the picked lane's 16 steps on the buttons (drawn small at the top), and what the
     knobs do: the lane's settings, or while a step button is held, that step's (see moveseq.py)."""
     e = T.engine
     synth = T.synth_shown()
     if synth:
-        header(f, "SYNTH SEQ", "PAT %d" % (getattr(e.seq, "current", 0) + 1))
-        f.small(1, 12, "SYNTH SEQUENCER:")
-        f.small(1, 19, "STEP BUTTONS COMING NEXT")
+        synth_seq_page(f, T)
         return
     ms = T.mseq
     sp, seq = T.seqp, e.seq

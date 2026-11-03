@@ -105,3 +105,7 @@ lights them one at a time (the screen says which step button it is under); `echo
   (move/pages.py carousel). Pictures are move/instimg/<module id>.txt (64 rows x 32 hex digits, from the screen
   designer's PIXELS); an instrument without one shows its name in a frame. Have: hush1, 808, 606, braids, dexed, obxd.
 - NUDGE step component (pad after RAMP DOWN): a step plays up to 50% of a step early or late (-50..+50% in 10s; sequencer.py "nudge").
+- Synth sequencer (move/movesynth.py, over pi-app/notes.py): step buttons = steps (tap: notes on / off; hold + pads: add / remove
+  notes; hold + a later step: the length; Shift + steps: select, pads = settings, knob 1 sets). Two types per track (knob 3):
+  UNIFIED or PER NOTE (tap a pad: its steps only). Record button on a drum or synth sequencer page: live record into the
+  pattern (T.live_rec), not the tape; right-hand drum pads record their pitch as a step lock.

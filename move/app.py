@@ -37,6 +37,7 @@ import kitmenu                    # noqa: E402
 import pages                      # noqa: E402
 import moveseq                    # noqa: E402
 import movesong                   # noqa: E402
+import movesynth                  # noqa: E402
 import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
@@ -134,7 +135,7 @@ class MoveBoard:
                 if val:
                     k.put(("ROW", n, "CUT" in self.held))  # song mode's rows (Delete + a row: take it out)
                 return
-            if T.seq_page and not T.synth_shown():
+            if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
             if not val:
@@ -160,6 +161,8 @@ class MoveBoard:
             return
         mid = e.slots[e.slot]
         if e.is_synth(mid):
+            if T.msyn.active() and T.msyn.pad(p, vel):
+                return                                     # a setting of selected steps, not a note
             if vel:
                 seq = e.seqs.get(mid)
                 try:
@@ -187,6 +190,9 @@ class MoveBoard:
             if lane >= d.lanes:
                 return
             if vel:
+                if T.live_rec and e.playing and T.seq_page:
+                    e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
+                    e.seq_changed()
                 e.hit(lane, vel)
                 voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
                 T.drum_voice = voice
@@ -196,7 +202,13 @@ class MoveBoard:
         if vel:                                            # right 4 x 4: the picked drum, a semitone a pad
             lane = min(T.seqp.lane, d.lanes - 1)
             semis = r * 4 + (c - 4) + 12 * getattr(T, "octave", 0)
-            e._auditions.append((0, lane, vel, ms.pitch_locks(lane, {}, semis)))
+            locks = ms.pitch_locks(lane, {}, semis)
+            if T.live_rec and e.playing and T.seq_page:      # recorded with its pitch: the step locks it
+                i = e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
+                with e.seq.lock:
+                    e.seq.step(lane, i).locks.update(locks)
+                e.seq_changed()
+            e._auditions.append((0, lane, vel, locks))
 
 
 def pattern_seq(T):
@@ -237,7 +249,7 @@ class Lights:
     def update(self, T, board):
         e = T.engine
         self.cc(85, T.playing)
-        self.cc(86, T.recording)
+        self.cc(86, T.recording or bool(T.live_rec and T.seq_page))
         self.cc(58, bool(e and e.loop_on))
         self.cc(88, bool(e and not e.audible(T.armed - 1)))
         self.cc(49, board.shift)
@@ -246,13 +258,14 @@ class Lights:
         for b in (43, 42, 41, 40):
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
-        seq_lights = T.mseq.step_lights() if T.mseq.active() else None
+        syn = T.msyn.active()
+        seq_lights = T.msyn.step_lights() if syn else T.mseq.step_lights() if T.mseq.active() else None
         song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
         for i in range(16):
             v = 0
             if song:
                 v = song[i]
-            elif T.mseq.active():
+            elif seq_lights is not None:
                 v = seq_lights[i]
             elif i < 8:
                 sel, armed = i == T.armed - 1, bool(e and i in e.arm_extra)
@@ -265,6 +278,8 @@ class Lights:
             for p in range(16):
                 pat = q.patterns[p]
                 out[p] = 127 if p == q.current else 20 if not pat.empty() else 0
+        elif T.msyn.active():
+            out = T.msyn.pad_lights()
         elif T.mseq.active() and T.mseq.held is not None:
             out = T.mseq.pad_lights()
         elif e and e.slot is not None and e.drums:
@@ -347,6 +362,8 @@ def main():
     board = MoveBoard(keys, T)
     T.shift_held = lambda: board.shift
     T.mseq = moveseq.MoveSeq(T)
+    T.msyn = movesynth.MoveSynth(T)
+    T.live_rec = False
     T.song_page = False
     T.octave = 0                                     # Up / Down on a sound page: the pads' octave
     T.song = movesong.Song(T)
@@ -447,6 +464,10 @@ def main():
             sys.exit(moveupdater.RESTART_CODE)
 
 
+def menus_open(m):
+    return bool(m.open or m.kits.open)
+
+
 def choice_knob(T, m, e, name):
     """True for a knob that picks from a list or a mode (they count their own clicks, see knobgate), and in the
     menus; the rest are numbers and get the global knob speed."""
@@ -459,6 +480,8 @@ def choice_knob(T, m, e, name):
         return True
     if not (e and e.drums):
         return False
+    if T.msyn.active():
+        return T.msyn.is_choice_knob(n)
     if T.fx_page:
         return n == 1 and T.fx_page == "delay"                 # the delay's TIME steps through note lengths
     ms = T.mseq
@@ -514,6 +537,10 @@ def handle(name, T, m, e):
             return
         if name in ("LEFT", "RIGHT"):
             name = ("KNOB", 9, 1 if name == "RIGHT" else -1, False)
+    if name == "RECORD" and T.seq_page and not menus_open(m) and (ms.active() or T.msyn.active()):
+        T.live_rec = not T.live_rec                  # on a sequencer page: the pads you play go into the pattern
+        T.say("RECORDING INTO THE PATTERN: PLAY PADS" if T.live_rec else "PATTERN RECORDING OFF", 2)
+        return
     if name == "RECORD" and e and not T.recording and not e.record_tracks():
         T.say("ARM A TRACK FIRST: SHIFT + STEP BUTTON", 3)
         return
@@ -540,6 +567,8 @@ def handle(name, T, m, e):
     if isinstance(name, tuple) and name[0] == "STEP":
         if ms.active():
             ms.step(name[1], name[2], name[3])
+        elif T.msyn.active():
+            T.msyn.step(name[1], name[2], name[3])
         return
     if isinstance(name, tuple) and name[0] == "STEP_PAD":
         if ms.active():
@@ -582,6 +611,16 @@ def handle(name, T, m, e):
         return
     if name in ("DRUMS", "FX", "DRUMS_BACK"):
         T.song_page = False
+    if T.msyn.active() and not (m.open or m.kits.open) and T.fx_page is None:
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            T.msyn.knob(name[1], name[2], name[3])
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
+            T.msyn.plus_minus(1 if name[2] > 0 else -1)
+            return
+        if name in ("LEFT", "RIGHT"):
+            T.msyn.arrows(-1 if name == "LEFT" else 1)
+            return
     if ms.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             ms.knob(name[1], name[2], name[3])

@@ -307,10 +307,10 @@ def focus_page(f, T):
 
 def inst_page(f, T):
     e, ip = T.engine, T.instp
-    header(f, "INSTRUMENTS")
     if ip.mode == "pick":
         carousel(f, ip)
         return
+    header(f, "INSTRUMENTS")
     if ip.mode == "store":
         st = ip.store
         header(f, "SCHWUNG", "%d" % len(st.items))
@@ -381,7 +381,10 @@ def carousel(f, ip):
             x0, x1 = max(0, dx), min(W, dx + W)
             if x1 > x0:
                 f.px[0:64, x0:x1] = img[:, x0 - dx:x1 - dx]
-        else:
+        else:                                          # no picture yet: the whole screen, just the name
+            x0, x1 = max(0, dx), min(W, dx + W)
+            if x1 > x0:
+                f.px[0:H, x0:x1] = 0
             f.frame(dx + 4, 4, W - 8, H - 8)
             f.centre(dx + W // 2, 26, str(title)[:19])
     if pos > 0.05:
@@ -421,7 +424,17 @@ def lfo_page(f, T):
     f.small(1, 57, "< > : SETTINGS / LFO 1 / LFO 2")
 
 
+def sample_page(f, sb):
+    header(f, sb.title())
+    rows = [r[0] for r in sb.entries] or ["EMPTY"]
+    listing(f, rows, sb.pick, top=11, fit=6)
+    f.small(1, H - 7, "PUSH: OPEN / CHOOSE   BACK: UP")
+
+
 def sound_page(f, T):
+    if T.sbrowse.active:
+        sample_page(f, T.sbrowse)
+        return
     if T.mlfo.active():
         lfo_page(f, T)
         return

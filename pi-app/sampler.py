@@ -266,6 +266,8 @@ class Sampler:
         if not 0 < index <= len(self.files):
             return None
         if index not in self._cache:
+            if len(self._cache) > 48:
+                self._cache = {k: v for k, v in self._cache.items() if k in set(self.values[::8])}
             self._cache[index] = read_wav(self.files[index - 1])
         return self._cache[index]
 

@@ -39,6 +39,7 @@ import moveseq                    # noqa: E402
 import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
+import samplebrowse              # noqa: E402
 import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
@@ -390,6 +391,7 @@ def main():
     T.mseq = moveseq.MoveSeq(T)
     T.msyn = movesynth.MoveSynth(T)
     T.mlfo = movelfo.MoveLFO(T)
+    T.sbrowse = samplebrowse.SampleBrowser(T)
     T.live_rec = False
     T.song_page = False
     T.octave = 0                                     # Up / Down on a sound page: the pads' octave
@@ -552,6 +554,25 @@ def handle(name, T, m, e):
         T.say("KNOB SPEED: %d CLICK%s A STEP" % (v, "" if v == 1 else "S"), 3)
         return
     ms = T.mseq
+    sb = T.sbrowse
+    if sb.active:                                      # the sample browser has the wheel, knob 1 and Back
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] in (1, 11):
+            sb.turn(name[2])
+            return
+        if name in ("HOME", "PLAY"):
+            sb.push()
+            return
+        if name in ("BACK", "FILE", "DRUMS_BACK"):
+            sb.back()
+            return
+    elif (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 1 and not name[3] and T.drum_page and e
+          and e.drums and getattr(e.drums, "id", "") == "sampler" and not (
+              T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)):
+        pg = T.drum_pages()
+        prm = pg[min(T.drum_tab, len(pg) - 1)][1]
+        if prm and prm[0] % 8 == 0 and not T.mlfo.active():
+            sb.open(e.drums, T.drum_voice)
+            return
     if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8 and not choice_knob(T, m, e, name):
         way = knobgate.numeric(("num", name[1], name[3]), name[2])    # every number knob: SPEED clicks a step
         if not way:

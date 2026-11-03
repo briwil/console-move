@@ -1500,6 +1500,39 @@ class Engine:
             self.dirty.add(-1)
         return v
 
+    def change_inst_sends(self, kind, delta):
+        """The picked instrument's reverb or delay: every drum's send moved together by delta (0..1). They are
+        printed onto the tape with the sound (not applied by the tape tracks). Returns the loudest send, or None
+        if the instrument has none (a synth has its own effects)."""
+        m = self.drums
+        if m is None:
+            return None
+        if hasattr(m, "_send_keys"):
+            idx = [k[0 if kind == "reverb" else 1] for k in m._send_keys]
+        else:
+            import drumparams as dp
+            idx = list(dp.REVERB_SEND if kind == "reverb" else dp.DELAY_SEND)
+        idx = [i for i in idx if i is not None]
+        if not idx:
+            return None
+        step = int(round(delta * 127))
+        top = 0
+        with self.lock:
+            for i in idx:
+                v = max(0, min(127, m.get_param(i) + step))
+                m.set_param(i, v)
+                top = max(top, v)
+            self.dirty.add(-1)
+        return top / 127
+
+    def inst_send(self, kind):
+        m = self.drums
+        if m is None or not hasattr(m, "sends"):
+            return None
+        r, d = m.sends()
+        a = r if kind == "reverb" else d
+        return float(a.max()) if len(a) and (hasattr(m, "_send_keys") or len(a)) else None
+
     def seq_changed(self):
         """The sequencer's patterns changed: save them with the song."""
         with self.lock:

@@ -325,6 +325,7 @@ def main():
     if getattr(e, "core", None) is None:
         sys.exit("The sound core didn't start: is console mode running? (%s)" % e.status)
     core = e.core
+    T.inst_sends = True
     knobgate.load(os.path.join(os.path.dirname(os.environ["CONSOLE_DATA"]), "knob-sensitivity"))
     e.select_arms = False                            # selecting a track doesn't arm it: Shift + step button does
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
@@ -458,6 +459,8 @@ def choice_knob(T, m, e, name):
         return True
     if not (e and e.drums):
         return False
+    if T.fx_page:
+        return n == 1 and T.fx_page == "delay"                 # the delay's TIME steps through note lengths
     ms = T.mseq
     if T.seq_page and ms.active():
         if ms.selected:

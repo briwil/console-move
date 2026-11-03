@@ -486,12 +486,15 @@ def song_page(f, T):
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
-    keys = [k for k in (e.fx or {}) if k.startswith("rev" if which == "reverb" else "dly")]
     header(f, which.upper())
-    for i, k in enumerate(keys):
+    for i, (k, name) in enumerate(T.FX_KNOBS[which]):
         y = 13 + i * 10
-        f.small(1, y, "%d %s" % (i + 1, k.split("_", 1)[1].upper()))
+        f.small(1, y, "%d %s" % (i + 1, name))
         f.right(W - 2, y, T.fx_value_text(k)[:10], small=True)
+    s = e.inst_send(which) if e else None
+    f.small(1, 43, "4 THIS INSTRUMENT'S SEND")
+    f.right(W - 2, 51, ("%d%%" % round(s * 100)) if s is not None else "NONE: OWN FX", small=True)
+    f.small(1, 59, "GOES ONTO THE TAPE WITH IT")
 
 
 # ------------------------------------------------------------------ the menus (any of the Pi's menu screens)

@@ -2867,8 +2867,8 @@ class Engine:
             # what you played now was in time with what you heard (latency - read_ahead) ago
             w0 = pos - (self.latency - self.read_ahead)
             a, b = max(0, w0), min(self.frames, w0 + m)
-            region = self.loop_region()
-            if region:                               # in/out points set: only record between them (punch in)
+            region = self.loop_region() if self.loop_on else None
+            if region:                               # loop on, in/out points set: only record between them (punch in)
                 a, b = max(a, region[0]), min(b, region[1])
             if b > a:
                 for t, spec in targets.items():

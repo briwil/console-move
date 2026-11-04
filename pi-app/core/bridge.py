@@ -169,8 +169,8 @@ class CoreBridge:
         if loop != self._loop:
             self._loop = loop
             self.core.tape_loop(*loop)
-            region = e.loop_region()
-            self.core.tape_punch(*(region or (0, 0)))      # in / out points set: recording only between them
+            region = e.loop_region() if e.loop_on else None
+            self.core.tape_punch(*(region or (0, 0)))      # loop on, in / out points set: recording only between them
         if e.rec_mode != self._overdub:
             self._overdub = e.rec_mode
             self.core.tape_overdub(e.rec_mode == "overdub")

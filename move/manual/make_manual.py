@@ -27,6 +27,7 @@ H2 = ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=14, leading=18, te
 BODY = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=14, textColor=INK, alignment=TA_LEFT,
                       spaceAfter=6)
 SMALL = ParagraphStyle("small", parent=BODY, fontSize=9, leading=12, textColor=MUTED)
+H3 = ParagraphStyle("h3", parent=BODY, fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=ACCENT, spaceBefore=8)
 CELL = ParagraphStyle("cell", parent=BODY, fontSize=9.5, leading=12.5, spaceAfter=0)
 KEY = ParagraphStyle("key", parent=CELL, fontName="Helvetica-Bold")
 CODE = ParagraphStyle("code", parent=BODY, fontName="Courier", fontSize=8.5, leading=11, backColor=SHADE,
@@ -84,7 +85,7 @@ story += [
     p("Console on the Move", H1),
     p("How to drive the Console app on an Ableton Move: an 8-track tape with OP-1-style editing, up to 8 "
       "instruments (drum machines and synths) and a step sequencer. This covers the controls as they are in "
-      "November 2026. Things still to come are listed at the end.", BODY),
+      "November 2026 (updated 3 November). Things still to come are listed at the end.", BODY),
 
     p("Starting and stopping", H2),
     table([
@@ -115,7 +116,7 @@ story += [
         ("Capture", "Drop (paste) what was copied or cut at the playhead.  Shift: insert it, pushing the rest "
          "of the track later."),
         ("Mute", "Mute the selected track.  Shift: solo it."),
-        ("Menu", "The project menu (songs, tempo, settings). On the drum page: the kit menu.  "
+        ("Menu", "The project menu (songs, tempo, settings). On a sound page: the instrument menu.  "
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
@@ -182,22 +183,40 @@ story += [
         ("Knobs 1-8", "The settings on this page. While one turns, it shows big."),
         ("Up / Down (+ / -)", "The pads' octave (a synth's pads, and the chromatic drum pads on the right). The "
          "screen shows OCT +1 etc."),
-        ("Left / Right", "The previous / next page of settings."),
+        ("Left / Right", "The previous / next page of settings. On a synth's sound pages the big wheel also turns the pages, one page a click."),
         ("Shift + touch a knob", "That setting back to its starting value."),
         ("Settings that pick a mode", "DIST, CHOKE, a wave, on / off: it takes 5 clicks the same way to move to "
          "the next choice, so you don't skip past. Shift + turn: one choice a click. Lists get 3 clicks a choice: "
          "the lane's RATE, MULTIPLY / PULSE / HOLD / JUMP and the pitch ones, song-mode patterns, the grid "
          "and the pattern (Shift + wheel). Numbers (volume, velocity, tune...) take 3 clicks a step."),
         ("Knob speed", "Shift + turn the volume knob: how many clicks of a knob make one step of a number "
-         "(1-12, starts at 4). More clicks = easier to be precise. It is kept when you switch off."),
+         "(1-12, starts at 4). More clicks = easier to be precise. Lists use the speed plus one. It is kept when you switch off."),
         ("Reverb and delay", "Each drum's REVERB and DELAY knobs on its sound page set how much of that drum goes "
          "to the effect. The effects' own settings (size, time, tone, feedback, level) are on left button 3."),
         ("Pads", "Play the drums (or the synth)."),
-        ("Menu", "The kit menu (load / save kits)."),
+        ("File / Menu", "The INSTRUMENT MENU: SAVE PRESET, LOAD PRESET, COPY / PASTE PATTERN, CLEAR PATTERN, CLEAR LOCKS "
+         "(see Presets below)."),
+    ]),
+    p("Presets (instrument menu)", H2),
+    p("Press File (or Menu) on an instrument's sound page. Presets are the old \"kits\": a sound saved for that one "
+      "instrument (a Dexed patch, a drum kit, a Braids sound) and kept with it.", BODY),
+    table([
+        ("SAVE PRESET", "Name it on the naming screen (below). It is saved for this instrument only."),
+        ("LOAD PRESET", "A list of that instrument's presets: turn the wheel to pick, push to load."),
+        ("COPY / PASTE PATTERN", "Copy the pattern and paste it onto another pattern or another instrument of the same kind."),
+        ("CLEAR PATTERN / CLEAR LOCKS", "Empty the pattern, or only the step settings. Both ask ARE YOU SURE? first."),
+    ]),
+    p("Naming screen", H2),
+    p("Used for songs, presets and renaming. The letter you are on is shown inverted, in a white box.", BODY),
+    table([
+        ("Turn the wheel", "Change the letter."),
+        ("Push the wheel / Shift + push", "Move to the next / previous letter."),
+        ("Delete", "Erase the letter."),
+        ("Play", "Save the name.   Back: cancel."),
     ]),
     p("LFOs", H2),
     p("Every instrument has two LFOs per pattern (a new pattern starts as a copy of the one you came from, then "
-      "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2.", BODY),
+      "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2, then INSERT 1 and 2 (see FX).", BODY),
     table([
         ("Knob 1  DEST", "Which setting it moves (numbers only)."),
         ("Knob 2  WAVE", "Sine, triangle, saw up / down, square, random."),
@@ -223,7 +242,8 @@ story += [
         ("Shift + step buttons", "Select steps to set (below)."),
         ("Left / Right arrows", "Steps 17-32, 33-48, 49-64 (for lanes longer than 16)."),
         ("Knob 1", "LENGTH: the lane's number of steps (1-64)."),
-        ("Knob 2", "RATE: the lane's speed (1/16, 1/16 triplets, 1/8, 1/8 triplets, 1/32)."),
+        ("Knob 2", "RATE: the lane's speed. Ten rates, slowest to fastest, so turning right always speeds up. "
+         "It only changes the speed: the lane keeps its steps (double time = a faster rate, same length)."),
         ("Knob 3", "EUCLID: spread a number of hits evenly over the lane (OFF to switch it off)."),
         ("Knob 4", "SHIFT: turn the lane's pattern around by steps."),
         ("+ / -", "The pads' octave (the chromatic drum pads, a synth's notes). Patterns: Shift + a pad; while playing, the next one waits its turn (shown as PAT 1>2)."),
@@ -267,6 +287,31 @@ story += [
     ]),
     p("The synth sequencer", H2),
     p("A synth's sequencer works on chords. The 16 step buttons are the steps (Left / Right for more).", BODY),
+    p("UNIFIED or PER NOTE?", H2),
+    p("Knob 3 chooses how the pattern is built.", BODY),
+    table([
+        ("UNIFIED", "One sequence of chords. Every step holds a chord, and the whole pattern shares one LENGTH and "
+         "one RATE. Step settings (pulse, hold, jump...) apply to the step as a whole. Easiest: it works like a "
+         "normal step sequencer, and a chord is just several pads on one step."),
+        ("PER NOTE", "Every pitch gets its own row. Tap a pad to pick a note (it turns white): the 16 steps now show "
+         "only that note. Each note has its <b>own LENGTH (knob 1) and its own RATE (knob 2)</b>, and its own "
+         "pulse / hold / jump / chance. Pads of notes that already have steps light <b>orange</b>; a step you are "
+         "holding lights red."),
+    ]),
+    p("Why use PER NOTE", H3),
+    table([
+        ("Polyrhythm", "Give a low C a length of 3 and a high G a length of 4: they drift against each other and only "
+         "line up every 12 steps, so a simple two-note pattern keeps changing."),
+        ("Drone under a melody", "One note with a long length and a slow rate (a held bass or pedal tone) "
+         "while a melody note runs 1/16 on top of it."),
+        ("Arpeggio that evolves", "Lay out an arpeggio one note per row, each with a different length (5, 7, 8, 11): "
+         "the pattern takes a long time to repeat."),
+        ("Different speeds", "Bass at 1/8 while the lead is at 1/16 or in triplets, in one instrument."),
+        ("Per-note feel", "Chance 50% on a high note only, a jump or hold on one pitch only, "
+         "so a pattern breathes without touching the rest."),
+        ("Use UNIFIED when", "you want chords, a hook that is the same length all the way through, or the "
+         "quickest way to write a loop."),
+    ]),
     table([
         ("Step buttons", "Tap: the notes on / off. Hold a step: the pads light its notes; tap pads to add or "
          "remove notes. Hold a step and tap a later step: that is where the notes end (also across pages)."),
@@ -278,19 +323,22 @@ story += [
          "Knob 1 sets the picked one."),
         ("Record", "On a drum or synth sequencer page: the pads you play go into the pattern while it plays "
          "(a synth note lasts as long as you hold the pad; chromatic drum pads keep their pitch). Press again to stop. "
-         "It doesn't touch the tape."),
+         "It doesn't touch the tape. Nothing is recorded into the pattern unless Record is on; it turns itself off at "
+         "Stop and when you leave the page."),
+        ("Step settings colours", "Pads of tapped steps: yellow for the steps you picked, red for settings you changed, dim for the rest."),
+        ("Stop", "Every sounding note is let go at Stop (Dexed and other synths too)."),
         ("Drums, by hand", "Hold a step button and press a right-half pad: the step turns on with that pitch."),
     ]),
 
     p("FX", H2),
-    p("The reverb and delay are on each instrument <i>before</i> the tape, so they are recorded with the sound.", BODY),
+    p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: back."),
+        ("Left button 3", "Reverb page, again: delay page, again: off. (Only reverb and delay: the inserts are on the instrument.)"),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
         ("INSERT 1 / 2", "The last two sound pages of an instrument (after LFO 2; wheel or arrows). Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "
          "granular...). Push the wheel to open the picture picker: turn to browse, push to choose, Back to cancel. "
-         "Knobs 1-8 are the effect's first eight settings. They are on the instrument <i>before</i> the tape, "
+         "Knobs 1-8 are the effect's first eight settings; every effect has its own picture. They are on the instrument <i>before</i> the tape, "
          "so what you record from that instrument has the effects in it; nothing is added to the tape afterwards. "
          "A Ducker ducks its instrument whenever drum 1 of another instrument is hit."),
     ]),
@@ -303,6 +351,11 @@ story += [
     table([
         ("Menu", "The project menu: songs (new, open, save as), tempo, time signature, export format, "
          "settings. Jog wheel: pick, push: choose, Back: close."),
+        ("Shift in the project menu", "NEW PROJECT becomes DELETE PROJECT and SAVE PROJECT becomes RENAME PROJECT. "
+         "Pick the project, then confirm ARE YOU SURE? to delete (you go back to the main menu). Shift + wheel "
+         "still moves up and down."),
+        ("Settings", "Push the wheel on a setting to edit it (the value shows in a white box), turn to change, push "
+         "again to let go."),
         ("Shift + Menu", "Export: a stereo mix and one file per track, in "
          "/data/UserData/console/data/exports/(song name and time)/."),
     ]),

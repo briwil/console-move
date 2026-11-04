@@ -32,6 +32,11 @@ LANE_KNOBS = ["length", "rate", "type", "lane", "key", "scale"]
 LABELS = {"length": "LENGTH", "rate": "RATE", "type": "TYPE", "lane": "NOTE LEN", "key": "KEY", "scale": "SCALE"}
 
 
+def lane_free(ms):
+    """True unless the pad of the lit note is being held (it is already sounding)."""
+    return ms.lane not in getattr(ms, 'pads_down', {}).values()
+
+
 class MoveSynth:
     def __init__(self, T):
         self.T = T
@@ -171,8 +176,8 @@ class MoveSynth:
         seq, e = self.seq, self.T.engine
         if self.kind and self.lane is not None:
             on = seq.toggle(i, self.lane)
-            if on:                                              # a short preview of the note (then let it go)
-                d, lane = self.T.engine.drums, self.lane
+            if on and not e.playing and lane_free(self):        # a short preview, only when stopped (playing, the step sounds itself)
+                d, lane = e.drums, self.lane
                 d.note_on(lane, 100)
                 threading.Timer(0.25, d.note_off, (lane,)).start()
         elif self.notes_at(i):

@@ -68,6 +68,12 @@ class Updater:
             new = head["sha"]
             old, _ = installed()
             if old and new.startswith(old):
+                if self._new_libs():                     # the same code, but GitHub has built new libraries since
+                    self._new = new
+                    self.detail = "NEW SYNTH / EFFECT LIBRARIES"
+                    self.count = 1
+                    self.state = "available"
+                    return
                 self.state = "current"
                 return
             self._new = new
@@ -83,6 +89,20 @@ class Updater:
         except Exception as e:
             self.state, self.detail = "error", str(e).upper()[:60]
             self.log("Update check failed: %s" % e)
+
+    @staticmethod
+    def _new_libs():
+        """True if GitHub's built libraries (release libs-latest) aren't the ones installed (console/libs-version,
+        written by move-update.py). They're built a while after the code is pushed, so an update installed in
+        between gets the code but the old libraries: this lets the next update get them."""
+        try:
+            rel = _get("https://api.github.com/repos/%s/releases/tags/libs-latest" % REPO)
+            asset = [a for a in rel.get("assets", []) if a["name"] == "move-libs.tgz"][0]
+            want = "%s %s" % (asset["id"], asset["updated_at"])
+            have = open(os.path.join(CONSOLE, "libs-version")).read()
+            return want != have
+        except Exception:                                    # noqa: BLE001
+            return False
 
     def _install(self):
         script = os.path.join(HERE, "move-update.py")

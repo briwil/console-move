@@ -450,7 +450,8 @@ class Menu:
                 self.msg = ""
             else:
                 e.save(wait=True)
-                self.say("SAVED %s" % e.song.upper())
+                self.close()                               # saved: back to the main screen
+                self.transport.say("SAVED %s" % e.song.upper(), 3)
         elif what == "SETTINGS":
             self.mode, self.row, self.msg = "settings", 0, ""
             if self.updater is None:
@@ -627,8 +628,8 @@ class Menu:
             self.say("COULDN'T SAVE: %s" % str(err).upper())
             return
         self.transport.s.set("song", t=name)
-        self.mode = "list"
-        self.say("SAVED AS %s" % name.upper())
+        self.close()                                       # saved: back to the main screen
+        self.transport.say("SAVED AS %s" % name.upper(), 3)
 
     def show(self):
         self.open, self.mode, self.msg, self.confirm_new, self.editing = True, "list", "", False, False

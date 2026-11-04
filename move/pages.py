@@ -41,14 +41,14 @@ def draw(f, T, menu=None):
                 confirm_page(f, menu.kits)
             else:
                 text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
+        elif T.fx_page:                                   # left button 3: over the instrument's pages too
+            fx_page(f, T)
         elif T.seq_page:
             seq_page(f, T)
         elif T.drum_page:
             sound_page(f, T)
         elif T.inst_page:
             inst_page(f, T)
-        elif T.fx_page:
-            fx_page(f, T)
         elif getattr(T, "song_page", False):
             song_page(f, T)
         elif T.focus.track is not None:

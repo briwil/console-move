@@ -37,6 +37,8 @@ def draw(f, T, menu=None):
                 name_page(f, menu.kits, "NAME THIS PRESET")
             elif menu.kits.mode == "load":
                 preset_list(f, menu.kits)
+            elif menu.kits.mode in ("clear_all", "clear", "paste"):
+                confirm_page(f, menu.kits)
             else:
                 text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
         elif T.seq_page:
@@ -715,6 +717,32 @@ def kit_list(f, k):
     if msg:
         f.rect(0, H - 8, W, 8, 1)
         f.small(1, H - 6, str(msg).upper()[:31], 0)
+
+
+def confirm_page(f, k):
+    """Clear pattern / clear locks / paste: a question, what it affects, PLAY or BACK."""
+    import notes as notes_mod
+    synth = isinstance(k.seq, notes_mod.NoteSequencer)
+    n = k.seq.current + 1
+    if k.mode == "clear_all":
+        on = k.on_count()
+        header(f, "CLEAR PATTERN %d?" % n)
+        f.text(2, 16, "%d %s ON" % (on, ("NOTE" if on == 1 else "NOTES") if synth else ("STEP" if on == 1 else "STEPS")))
+        f.small(2, 30, "STEPS, LOCKS, LENGTHS, RATES")
+        f.small(2, 37, "ALL BACK TO A NEW PATTERN")
+    elif k.mode == "clear":
+        locks, steps = k.lock_count()
+        header(f, "CLEAR LOCKS?  PATTERN %d" % n)
+        f.text(2, 16, "%d LOCK%s" % (locks, "" if locks == 1 else "S"))
+        f.small(2, 30, "ON %d %s" % (steps, "NOTES" if synth else "STEPS"))
+        f.small(2, 37, "NOTES STAY, SETTINGS RESET")
+    else:
+        header(f, "PASTE PATTERN %d?" % (k.pattern_clip[1] + 1))
+        f.text(2, 16, "ONTO PATTERN %d" % n)
+        f.small(2, 30, "IT HAS NOTES OR STEPS:")
+        f.small(2, 37, "PASTING REPLACES THEM")
+    f.small(1, 51, "PLAY: YES")
+    f.small(1, 58, "BACK: NO, KEEP IT")
 
 
 def preset_list(f, k):

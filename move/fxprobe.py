@@ -236,6 +236,7 @@ def sweep(mid, key, mode=""):
 
 
 SKIP_FX = set(x for x in os.environ.get("FXPROBE_SKIP", "").split(",") if x)
+ONLY_FX = set(x for x in os.environ.get("FXPROBE_ONLY", "").split(",") if x)     # (narrowing down: just these)
 
 
 def together_child(inst_ids, rounds, seed):
@@ -267,6 +268,8 @@ def together_child(inst_ids, rounds, seed):
     a, b = insertfx.Insert(None, 0, 0), insertfx.Insert(None, 0, 1)
     n = len(catalog.FX)
     ids = [f["id"] for f in catalog.FX]
+    if ONLY_FX:
+        rounds = max(rounds, 70 // max(1, len(ONLY_FX)))      # (a few effects: round more times)
     others = []                                  # (like your song: TAPESCAM and JUNOLOGUE on other instruments)
     for k, fx in enumerate(("tapescam", "tapescam", "junologue-chorus")):
         if fx in ids:
@@ -276,8 +279,11 @@ def together_child(inst_ids, rounds, seed):
     for r in range(rounds):
         for i in range(1, n + 1):
             j = rng.randrange(n + 1)
-            if ids[i - 1] in SKIP_FX:
+            if ids[i - 1] in SKIP_FX or (ONLY_FX and ids[i - 1] not in ONLY_FX):
                 continue
+            if ONLY_FX:
+                pool = [k + 1 for k, x in enumerate(ids) if x in ONLY_FX]
+                j = rng.choice(pool + [0])
             if j and ids[j - 1] in SKIP_FX:
                 j = 0
             na, nb = ids[i - 1], (ids[j - 1] if j else "none")
@@ -300,6 +306,9 @@ def together_child(inst_ids, rounds, seed):
     b.choose(0)
     print("stage: done", flush=True)
     return 0
+
+
+SKIP_FX_ARG = set()
 
 
 def together(env):
@@ -332,7 +341,22 @@ def together(env):
 
     print("Effects one after another in one process, as in the stress test (memory checks on)...\n", flush=True)
     if crashes([], "effects only, no instruments"):
-        print("\nIt's among the effects themselves (no instrument needed).")
+        print("\nIt's among the effects themselves (no instrument needed). Narrowing them down...\n", flush=True)
+        import catalog
+        group = [f["id"] for f in catalog.FX if f["id"] not in SKIP_FX_ARG]
+        while len(group) > 1 and tries[0] < 60:
+            half = len(group) // 2
+            found = None
+            for part in (group[:half], group[half:]):
+                env["FXPROBE_ONLY"] = ",".join(part)
+                if crashes([], "effects " + _names(part)):
+                    found = part
+                    break
+            if found is None:
+                print("\nIt takes effects from both halves together: %s" % ", ".join(group))
+                return
+            group = found
+        print("\nThe effect that crashes: %s" % ", ".join(group))
         return
     if not crashes(allinst, "after all %d instruments" % len(allinst)):
         print("\nNo crash this way: send this to Claude.")
@@ -398,6 +422,7 @@ def main():
         skip = [a[5:] for a in sys.argv[2:] if a.startswith("skip=")]
         if skip:
             env["FXPROBE_SKIP"] = ",".join(",".join(skip).split(","))
+            SKIP_FX_ARG.update(env["FXPROBE_SKIP"].split(","))
             print("(leaving out: %s)" % env["FXPROBE_SKIP"])
         return together(env)
     bad = []

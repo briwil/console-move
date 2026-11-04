@@ -331,7 +331,7 @@ story += [
     ]),
 
     p("Pads: key and scale (synths)", H2),
-    p("On a synth's settings pages hold <b>Shift</b>: the icons light under the step buttons. <b>Shift + step button 2</b> (the hexagon) opens the PADS page (or press Right past the ARP page): "
+    p("On a synth's settings pages hold <b>Shift</b>: the icons light under the step buttons. <b>Shift + step button 2</b> (the hexagon) opens the PADS page (or press Right past the ARP page). Press the icon again, or <b>Back</b>, to return to the settings pages: "
       "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
       "as the synth sequencer's knobs 5 and 6.", BODY),

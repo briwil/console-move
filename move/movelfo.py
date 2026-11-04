@@ -51,6 +51,9 @@ class MoveLFO:
 
     def goto_pads(self):
         if self.has_arp():
+            if self.pads_on_page():
+                self.tab = None
+                return
             self.tab = self.pads_tab()
             self.T.say("PADS", 2)
 
@@ -88,6 +91,9 @@ class MoveLFO:
     def goto_arp(self):
         """The ARP icon (step button 3 on a synth's sound page): straight to the arp page."""
         if self.has_arp():
+            if self.arp_on_page():                    # its own icon again: back to the settings pages
+                self.tab = None
+                return
             self.tab = self.arp_tab()
             self.T.say("ARP", 2)
 

@@ -611,6 +611,9 @@ def handle(name, T, m, e):
         if name in ("BACK", "FILE", "DRUMS_BACK"):
             fp.back()
             return
+    elif name == "BACK" and T.mlfo.active() and not (m.open or m.kits.open or sb.active):
+        T.mlfo.tab = None                              # Back from an LFO / INSERT / ARP / PADS page: the settings pages
+        return
     elif name == "HOME" and T.mlfo.active() and T.mlfo.insert_pos() is not None and not (m.open or m.kits.open):
         fp.open(T.insfx(None, T.mlfo.insert_pos()))    # push the wheel on an INSERT page: choose its effect
         return

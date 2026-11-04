@@ -178,7 +178,10 @@ class Slot:
                     c.midi(self.live, 0x80, t[1], 0)
                 elif what == "all_off":
                     for s in self.sources():
-                        c.midi(s, 0xB0, 123, 0)
+                        c.midi(s, 0xB0, 64, 0)                  # the sustain pedal up
+                        c.midi(s, 0xB0, 123, 0)                 # all notes off (some synths ignore it)...
+                        for note in range(128):                 # ...so every note is let go one by one (they ring out)
+                            c.midi(s, 0x80, note, 0)
                 elif what == "param":
                     for inst in insts:
                         m._apply(_InstCalls(c, inst), t[1], t[2])

@@ -60,11 +60,14 @@ class NotePattern:
         self.rate = 0                    # index into RATES
         self.notes = {}                  # step -> {MIDI note: Note}
         self.lane_len = {}               # MIDI note -> its own length in steps (no entry: the pattern's)
+        self.lane_rate = {}              # MIDI note -> its own rate (an index into RATES; no entry: the pattern's)
 
     def lane_length(self, pitch):
         return self.lane_len.get(pitch, self.length)
 
-    def steps_per_beat(self):
+    def steps_per_beat(self, pitch=None):
+        if pitch is not None and pitch in self.lane_rate:
+            return RATES[self.lane_rate[pitch]][1]
         return RATES[self.rate][1]
 
     def empty(self):
@@ -252,6 +255,17 @@ class NoteSequencer:
                 p.lane_len[pitch] = n
             return n
 
+    def change_lane_rate(self, pitch, delta):
+        """One row's own rate. Back at the pattern's rate, it follows the pattern again. Returns its rate (an index)."""
+        with self.lock:
+            p = self.pattern
+            r = next_rate(p.lane_rate.get(pitch, p.rate), delta)
+            if r == p.rate:
+                p.lane_rate.pop(pitch, None)
+            else:
+                p.lane_rate[pitch] = r
+            return r
+
     def change_track(self, what, delta):
         """The pattern's "length" (steps) or "rate". Returns the new value."""
         with self.lock:
@@ -266,7 +280,7 @@ class NoteSequencer:
         """A note played while recording: onto the nearest step. Returns the step."""
         with self.lock:
             p = self.pattern
-            step_frames = frames_per_beat / p.steps_per_beat()
+            step_frames = frames_per_beat / p.steps_per_beat(note)
             k = round((tape_frame - self.anchor) / step_frames)
             i = k % p.lane_length(note)
             p.notes.setdefault(i, {})[note] = Note(length)
@@ -327,15 +341,25 @@ class NoteSequencer:
         return out
 
     def _events(self, a, b, block_start, fpb):
+        """The pattern's rate, then each rate a row has chosen for itself (a row's own rate: its steps are longer
+        or shorter than the pattern's)."""
+        p = self.pattern
+        out = self._events_at(a, b, block_start, fpb, p.steps_per_beat(), lambda pitch: pitch not in p.lane_rate)
+        for r in sorted(set(p.lane_rate.values())):
+            out += self._events_at(a, b, block_start, fpb, RATES[r][1], lambda pitch, r=r: p.lane_rate.get(pitch) == r)
+        out.sort(key=lambda e: e[0])
+        return out
+
+    def _events_at(self, a, b, block_start, fpb, spb, want):
         out = []
         p = self.pattern
-        step_frames = fpb / p.steps_per_beat()
+        step_frames = fpb / spb
         first = math.floor((a - self.anchor) / step_frames) - 1        # (a nudged note can start a step away)
         last = math.floor((b - self.anchor) / step_frames) + 1
         per_note = getattr(self, "move_type", 0) == 1
         rows = {}
         if per_note:                                          # every pitch is a row of its own: pulse / hold / jump work
-            pitches = {pitch for ns in p.notes.values() for pitch in ns}
+            pitches = {pitch for ns in p.notes.values() for pitch in ns if want(pitch)}
             rows = {pitch: _Row(p, pitch) for pitch in pitches}
         for k in range(first, last + 1):
             if per_note:
@@ -348,8 +372,13 @@ class NoteSequencer:
                     if n is not None and plays:
                         hits.append((pitch, n, cycle))
             else:
-                hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items() if pitch not in p.lane_len]
-                for pitch, ln in p.lane_len.items():              # a row with its own length loops on its own
+                own = set(p.lane_len) | set(p.lane_rate)
+                hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items()
+                        if pitch not in own and want(pitch)]
+                for pitch in own:                                  # a row with its own length or rate loops on its own
+                    if not want(pitch):
+                        continue
+                    ln = p.lane_length(pitch)
                     n = p.at(k % ln).get(pitch)
                     if n is not None:
                         hits.append((pitch, n, k // ln))
@@ -380,7 +409,6 @@ class NoteSequencer:
                             locks = dict(n.locks)
                             locks["gate"] = max(1, int(gate))
                             out.append((int(t - block_start), out_pitch, n.vel, locks))
-        out.sort(key=lambda e: e[0])
         return out
 
     def position(self, tape_frame, frames_per_beat):
@@ -389,10 +417,11 @@ class NoteSequencer:
             p = self.pattern
             return [math.floor((tape_frame - self.anchor) / (frames_per_beat / p.steps_per_beat())) % p.length]
 
-    def raw_step(self, tape_frame, frames_per_beat):
-        """How many steps have played since the pattern began (a row with its own length wraps it itself)."""
+    def raw_step(self, tape_frame, frames_per_beat, pitch=None):
+        """How many steps have played since the pattern began (a row with its own length wraps it itself); at a
+        row's own rate, when its pitch is given."""
         with self.lock:
-            return math.floor((tape_frame - self.anchor) / (frames_per_beat / self.pattern.steps_per_beat()))
+            return math.floor((tape_frame - self.anchor) / (frames_per_beat / self.pattern.steps_per_beat(pitch)))
 
     # ------------------------------------------------------------ saving
     def to_json(self):
@@ -406,7 +435,8 @@ class NoteSequencer:
                             n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge, dict(n.comp)]
                 import lfo
                 pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
-                             "lanes": {str(k): v for k, v in p.lane_len.items()}})
+                             "lanes": {str(k): v for k, v in p.lane_len.items()},
+                             "lane_rates": {str(k): v for k, v in p.lane_rate.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
                     "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats}
 
@@ -428,6 +458,9 @@ class NoteSequencer:
                     lfo.from_json(p, pd.get("lfos"))
                     p.lane_len = {int(k): max(1, min(MAX_STEPS, int(v))) for k, v in (pd.get("lanes") or {}).items()
                                   if 0 <= int(k) <= 127 and int(v) != p.length}
+                    p.lane_rate = {int(k): max(0, min(len(RATES) - 1, int(v)))
+                                   for k, v in (pd.get("lane_rates") or {}).items()
+                                   if 0 <= int(k) <= 127 and int(v) != p.rate}
                     for step, ns in (pd.get("notes") or {}).items():
                         step = int(step)
                         if not 0 <= step < MAX_STEPS:

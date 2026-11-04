@@ -97,7 +97,7 @@ class MoveSynth:
             seq = self.seq
             if self.lane is not None and self.kind:
                 n = self.seq.pattern.lane_length(self.lane)
-                return seq.raw_step(e._heard_frame(), e.frames_per_beat()) % n
+                return seq.raw_step(e._heard_frame(), e.frames_per_beat(), self.lane) % n
             return seq.position(e._heard_frame(), e.frames_per_beat())[0]
         except Exception:
             return None
@@ -208,7 +208,7 @@ class MoveSynth:
                 e, seq = self.T.engine, self.seq
                 i, nt, frame = rec
                 with seq.lock:
-                    step_frames = e.frames_per_beat() / seq.pattern.steps_per_beat()
+                    step_frames = e.frames_per_beat() / seq.pattern.steps_per_beat(note)
                     nt.length = max(1, min(notes_mod.MAX_LENGTH, round((e._heard_frame() - frame) / step_frames)))
                 e.seq_changed()
             return False
@@ -418,8 +418,12 @@ class MoveSynth:
         elif what == "rate":
             way = knobgate.gate(("synrate",), delta, shift)
             if way:
-                seq.change_track("rate", way)
-                self.T.say("RATE %s" % notes_mod.RATES[seq.pattern.rate][0], 2)
+                if self.kind and self.lane is not None:                       # PER NOTE, a note picked: its own rate
+                    r = seq.change_lane_rate(self.lane, way)
+                    self.T.say("NOTE %s RATE %s" % (notes_mod.note_name(self.lane), notes_mod.RATES[r][0]), 2)
+                else:
+                    seq.change_track("rate", way)
+                    self.T.say("RATE %s" % notes_mod.RATES[seq.pattern.rate][0], 2)
         elif what == "type":
             way = knobgate.gate(("syntype",), delta, shift)
             if way:
@@ -452,7 +456,9 @@ class MoveSynth:
             if w == "length":
                 v = self.length()
             elif w == "rate":
-                v = notes_mod.RATES[seq.pattern.rate][0]
+                pt = seq.pattern
+                v = notes_mod.RATES[pt.lane_rate.get(self.lane, pt.rate) if self.kind and self.lane is not None
+                                    else pt.rate][0]
             elif w == "type":
                 v = TYPES[self.kind][:5]
             elif w == "lane":

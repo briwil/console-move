@@ -39,6 +39,22 @@ PROBLEM = ""              # why the drum synth is off, if it is
 LIVE_TAIL = 8 * 44100     # the hand-played copy of an instrument sleeps this long after your last hit (frames)
 
 
+
+def stale_copy(src, copy):
+    """True if copy (a second copy of a library, for its own engine) isn't the same as src: missing, or a
+    different size or time. (Older than wasn't enough: an update brings libraries built earlier than the
+    copies made before it, and the old copy then kept running, bugs and all.)"""
+    try:
+        a, b = os.stat(src), os.stat(copy)
+    except OSError:
+        return True
+    return a.st_size != b.st_size or int(a.st_mtime) != int(b.st_mtime)
+
+
+def make_copy(src, copy):
+    shutil.copy2(src, copy + ".tmp")                 # (copy2: the same time as src, for stale_copy)
+    os.replace(copy + ".tmp", copy)
+
 def asleep(machine):
     """True if neither copy of the instrument has anything to sound and nothing is waiting to be done."""
     return machine._seq_left <= 0 and machine._live_left <= 0 and not machine._pending
@@ -79,9 +95,8 @@ def _load(path=LIB):
     if path != LIB:
         # the same library under another name loads as a separate engine with its own settings and voices
         try:
-            if not os.path.exists(path) or os.path.getmtime(path) < os.path.getmtime(LIB):
-                shutil.copyfile(LIB, path + ".tmp")
-                os.replace(path + ".tmp", path)
+            if stale_copy(LIB, path):
+                make_copy(LIB, path)
         except OSError as e:
             print("Drums: couldn't copy the library for a second engine: %s" % e)
             return None
@@ -421,6 +436,8 @@ def _sw_build_now(mid):
     newest = max((os.path.getmtime(f) for f in srcs), default=0)
     if os.path.exists(lib) and os.path.getmtime(lib) >= newest:
         return lib
+    if not shutil.which("g++"):
+        return lib if os.path.exists(lib) else None      # the Move: GitHub builds them (an update brings them)
     try:
         r = subprocess.run(["g++", "-O2", "-shared", "-fPIC", "-w", "-o", lib + ".tmp",
                             os.path.join(SW_DIR, "glue%s.cpp" % mid)], capture_output=True, text=True, timeout=600)
@@ -465,9 +482,8 @@ class Schwung:
         live_path = lib[:-3] + "_live.so" if lib else None
         if self._lib and live_path:
             try:
-                if not os.path.exists(live_path) or os.path.getmtime(live_path) < os.path.getmtime(lib):
-                    shutil.copyfile(lib, live_path + ".tmp")
-                    os.replace(live_path + ".tmp", live_path)
+                if stale_copy(lib, live_path):
+                    make_copy(lib, live_path)
             except OSError:
                 live_path = None
         self._live = (_sw_load(live_path) if live_path else None) or self._lib
@@ -685,6 +701,8 @@ def _md_build():
         newest = max((os.path.getmtime(f) for f in srcs if not f.endswith(".so")), default=0)
         if os.path.exists(lib) and os.path.getmtime(lib) >= newest:
             return lib
+        if not shutil.which("g++"):
+            return lib if os.path.exists(lib) else None  # the Move: GitHub builds it (an update brings it)
         try:
             r = subprocess.run(["g++", "-O2", "-std=c++11", "-shared", "-fPIC", "-w", "-I" + os.path.join(MD_DIR, "vendor"),
                                 "-I" + MD_DIR, "-o", lib + ".tmp", os.path.join(MD_DIR, "glue_md.cpp")],
@@ -732,9 +750,8 @@ class Machinedrum(Schwung):
         live_path = lib[:-3] + "_live.so" if lib else None
         if self._lib and live_path:
             try:
-                if not os.path.exists(live_path) or os.path.getmtime(live_path) < os.path.getmtime(lib):
-                    shutil.copyfile(lib, live_path + ".tmp")
-                    os.replace(live_path + ".tmp", live_path)
+                if stale_copy(lib, live_path):
+                    make_copy(lib, live_path)
             except OSError:
                 live_path = None
         self._live = (_md_load(live_path) if live_path else None) or self._lib

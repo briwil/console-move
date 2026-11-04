@@ -125,7 +125,7 @@ class Sampler:
             return
         live = lib_path()[:-3] + "_live.so"
         try:
-            shutil.copyfile(lib_path(), live + ".tmp")
+            shutil.copy2(lib_path(), live + ".tmp")
             os.replace(live + ".tmp", live)
         except OSError:
             live = None

@@ -177,9 +177,9 @@ class Module:
         try:
             if spec.get("one_copy"):
                 raise RuntimeError("one copy")
-            if not os.path.exists(live) or os.path.getmtime(live) < os.path.getmtime(dsp):
-                shutil.copyfile(dsp, live + ".tmp")
-                os.replace(live + ".tmp", live)
+            import drums as _drums
+            if _drums.stale_copy(dsp, live):
+                _drums.make_copy(dsp, live)
             self._live = Instance(live, folder, defaults)
         except (OSError, RuntimeError):
             self._live = self._seq                    # one copy: your hits are made ahead too

@@ -96,6 +96,26 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   exits with 75 and RNBOLauncher starts it again). Shift + Menu: export.
 - Shift + Back: save, quit and hand the Move back.
 
+## Crash logs (move/crashlog.py)
+
+Every run writes console/crashes/running.log: what the app prints, every button / knob / pad, and (with
+faulthandler) the Python line of a crash inside an effect or synth; if the main loop stops for 20 s, every
+thread's line too (a freeze). A normal quit deletes it. Found at the next start: it's kept as
+crashes/crash-<date>.log (the last 20) and the screen says so. So after a crash, any time later:
+
+    ssh -i ~/.ssh/move_key ableton@move.local "ls /data/UserData/console/crashes; tail -150 /data/UserData/console/crashes/\$(ls /data/UserData/console/crashes | grep crash- | tail -1)"
+
+## Stress test (move/stress.py)
+
+    ssh -i ~/.ssh/move_key ableton@move.local "echo 60 > /data/UserData/console/stress"
+
+(minutes; "60 random" skips parts 1-2). A running Console restarts into it. Its own data (console/stress-data),
+so your songs aren't touched. 1: every instrument loaded and played (memory each takes); 2: every insert effect
+(with a second beside it) on a playing synth; 3: random presses ~10/s plus a random instrument / insert /
+save / open / new project every 12-30 s; every 8 min an empty project's memory (they should stay level).
+Memory every 30 s, sudden jumps (+40 MB) with the actions just before. Report: console/stress-report.txt.
+At the end Console restarts as normal. A crash: the report says so at the next start, crash in crashes/.
+
 ## Step icon test
 The icons printed under the 16 step buttons are lights of their own (controller numbers 16-31, channel 16, the value
 is the colour: 120 white, 118 light grey). To see which icon is which: `touch /data/UserData/console/icontest`

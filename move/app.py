@@ -28,6 +28,25 @@ APP = os.path.join(REPO, "pi-app")
 STUBS = os.path.join(REPO, "tools", "sim", "stubs")
 sys.path[:0] = [STUBS, APP, HERE]
 os.environ.setdefault("CONSOLE_PLATFORM", "move")
+PIDFILE = os.environ.get("CONSOLE_PIDFILE", "/data/UserData/console/app.pid")
+
+
+def already_running():
+    """The pid of another copy of the app that's still running (the one the Move started), or None."""
+    try:
+        pid = int(open(PIDFILE).read().strip())
+        if pid != os.getpid() and os.path.exists("/proc/%d" % pid) and \
+                "app.py" in open("/proc/%d/cmdline" % pid).read():
+            return pid
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+import crashlog                   # noqa: E402  (console/crashes: what happened before a crash)
+import stress                     # noqa: E402  (the stress test: console/stress)
+# the stress test uses its own projects (stress-data): it has to say so before anything reads CONSOLE_DATA
+STRESS_MINUTES = stress.prepare() if __name__ == "__main__" and not already_running() else None
 os.environ.setdefault("CONSOLE_DATA", "/data/UserData/console/data")
 
 import pygame                     # noqa: E402  (the simulator's stand-in: the app draws nothing real)
@@ -360,20 +379,7 @@ class Lights:
 
 PADS_ICON = 1                     # the hexagon, under step button 2: the pads' key and scale
 ARP_ICON = 2                      # the branching-nodes icon, under step button 3 (see MOVE-NOTES.md)
-PIDFILE = "/data/UserData/console/app.pid"
 ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
-
-
-def already_running():
-    """The pid of another copy of the app that's still running (the one the Move started), or None."""
-    try:
-        pid = int(open(PIDFILE).read().strip())
-        if pid != os.getpid() and os.path.exists("/proc/%d" % pid) and \
-                "app.py" in open("/proc/%d/cmdline" % pid).read():
-            return pid
-    except (OSError, ValueError):
-        pass
-    return None
 
 
 def main():
@@ -386,6 +392,7 @@ def main():
             fh.write(str(os.getpid()))
     except OSError:
         pass
+    crashed = crashlog.start("STRESS TEST, %g MINUTES" % STRESS_MINUTES if STRESS_MINUTES else "")
     import signal
 
     def stop_signal(*_):
@@ -445,6 +452,11 @@ def main():
     T.pad_curve = max(0, min(2, int(e.settings.get("pad_curve", 1)))) if e else 1
     T.song = movesong.Song(T)
     T.key("DRUMS")                                   # start on left button 1: the instruments
+    st = stress.Stress(STRESS_MINUTES, T, m, e, board) if STRESS_MINUTES else None
+    if st:
+        T.say("STRESS TEST: %g MINUTES. SHIFT + BACK STOPS IT" % STRESS_MINUTES, 5)
+    elif crashed:
+        T.say("CONSOLE CRASHED LAST TIME. SAVED IN CONSOLE/CRASHES: %s" % crashed.upper(), 6)
     frame = Frame()
     lights = Lights(core)
     print("Console on the Move: running. Ctrl+C quits (the song is saved).")
@@ -460,9 +472,13 @@ def main():
                     board(e.move_midi.get_nowait())
                 except queue.Empty:
                     break
+            crashlog.alive(time.monotonic())
+            if st is not None and not st.tick(time.monotonic()) and not m.restart:
+                m.restart = True                          # the test is over: start again as normal
             quit_now = False
             while not keys.empty():
                 name = keys.get()
+                crashlog.action(name)
                 if name == "QUIT":
                     quit_now = True
                     break
@@ -496,6 +512,9 @@ def main():
                 if mode is None and icon_test is not None:
                     lights.icons(set())                      # finished: the icons go dark
                 icon_test = mode
+                if st is None and os.path.exists(stress.FLAG) and not m.restart:
+                    T.say("STRESS TEST: RESTARTING INTO IT", 3)
+                    m.restart = True                         # (it starts with the app: see stress.py)
             if icon_test is not None:
                 # the icon test: turn the wheel to step through the icons (or all of them: put "all" in the file)
                 k = icon_k
@@ -520,6 +539,10 @@ def main():
                     T.say("PATTERN RECORDING OFF", 2)
                 T._rec_was_playing = bool(e.playing)
                 pages.draw(frame, T, m)
+                if st is not None:                            # the stress test: the time left, bottom right
+                    left = st.left()
+                    frame.rect(99, 57, 29, 7, 1)
+                    frame.small(100, 58, "T%3d:%02d" % (left // 60, left % 60), 0)
                 core.display(frame.bytes())
             if now >= next_lights:
                 next_lights = now + 0.03
@@ -530,7 +553,10 @@ def main():
     finally:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        failed = sys.exc_info()[0] is not None
         T.playing = False
+        if st is not None:
+            st.finish("stopped early" if not failed else "Console hit a Python error (see console/crashes)")
         e.save(wait=True)
         frame.clear()
         core.display(frame.bytes())
@@ -538,6 +564,8 @@ def main():
         e.stop()
         time.sleep(0.2)
         print("Saved. Bye.")
+        if not failed:
+            crashlog.done()                          # a normal quit: this run's crash log isn't needed
         if hand_back:                                # Shift + Back: back to the normal Move (see RNBOLauncher)
             try:
                 open("/data/UserData/console/STOP", "w").close()

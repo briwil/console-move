@@ -44,9 +44,13 @@ class MoveSeq:
 
     # ------------------------------------------------------------ pitch (RANDOM / RAMPS and the right-hand pads)
 
-    def pitch_param(self, voice):
-        if voice not in self._pitch:
-            d, found = self.T.engine.drums, None
+    def pitch_param(self, voice, d=None, mid=None):
+        e = self.T.engine
+        if d is None:
+            d, mid = e.drums, (e.slots[e.slot] if e.slot is not None else None)
+        key = (mid, voice)                                   # (per instrument: they differ)
+        if key not in self._pitch:
+            found = None
             for _name, params in d.pages(voice):
                 for p in params:
                     if any(w in d.label(p).upper() for w in PITCH_WORDS):
@@ -54,14 +58,21 @@ class MoveSeq:
                         break
                 if found is not None:
                     break
-            self._pitch[voice] = found
-        return self._pitch[voice]
+            self._pitch[key] = found
+        return self._pitch[key]
 
-    def pitch_locks(self, lane, locks, semis):
-        """locks, with the lane's drum moved by some semitones (its pitch setting locked)."""
-        d = self.T.engine.drums
+    def pitch_locks(self, lane, locks, semis, seq=None):
+        """locks, with the lane's drum moved by some semitones (its pitch setting locked). seq: the
+        sequence playing it (another slot's instrument, not the one shown)."""
+        e = self.T.engine
+        d, mid = e.drums, (e.slots[e.slot] if e.slot is not None else None)
+        if seq is not None:
+            mid = next((k for k, v in list(e.seqs.items()) if v is seq), None)
+            d = e.drums.get(mid) if mid else None
+            if d is None:
+                return locks
         lv = d.lane_voice
-        p = self.pitch_param(lv[min(len(lv) - 1, lane)])
+        p = self.pitch_param(lv[min(len(lv) - 1, lane)], d, mid)
         if p is None or not semis:
             return locks
         out = dict(locks)

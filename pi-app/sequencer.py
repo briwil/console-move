@@ -412,7 +412,7 @@ class Sequencer:
                     d = rng.randrange(n) if name == "rand" else cycle % n
                     semis = round(d * 12 * octs / n) * (-1 if name == "rdown" else 1)
                     try:
-                        locks = PITCH(li, locks, semis)
+                        locks = PITCH(li, locks, semis, self)
                     except Exception:
                         pass
                 for r in range(hits):

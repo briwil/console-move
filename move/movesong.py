@@ -171,7 +171,7 @@ class Song:
         if not (self.on and self.rows):
             self._was_playing, self.playing_row = playing, None
             return
-        if playing and not self._was_playing:
+        if playing and (not self._was_playing or self.playing_row is None):   # (or song mode turned on while playing)
             self.playing_row, self._loops, self._cycle, self._queued = 0, 0, None, False
         elif not playing:
             if self._was_playing or not getattr(self, "_ready", False):

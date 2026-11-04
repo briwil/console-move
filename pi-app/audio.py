@@ -1324,7 +1324,7 @@ class Engine:
             if p in self.stereo or p + 1 in self.stereo:
                 continue
             self.stereo.add(p)
-            self.tracks[p + RIGHT] = self.tracks[p + 1].copy()
+            self.tracks[p + RIGHT] = self._copy_used(self.tracks[p + 1])
             self.regions[p + RIGHT] = self.regions[p + 1]
             self.tracks[p + 1][:] = 0
             self.regions[p + 1] = []
@@ -1342,8 +1342,16 @@ class Engine:
         """Save changed tracks in the background. Returns False if there was nothing to save."""
         with self.lock:
             # a stereo track is saved as one 2-channel file
-            todo = {t: (np.stack([self.tracks[t], self.tracks[t + RIGHT]], axis=1) if t in self.stereo
-                        else self.tracks[t].copy()) for t in self.dirty if 0 <= t < TRACKS}
+            # (only up to where its audio ends: that's all that's written, and copying the empty rest of the tape
+            # took hundreds of MB on the Move)
+            todo = {}
+            for t in self.dirty:
+                if 0 <= t < TRACKS:
+                    if t in self.stereo:
+                        end = max(self._extent(self.tracks[t]), self._extent(self.tracks[t + RIGHT]))
+                        todo[t] = np.stack([self.tracks[t][:end], self.tracks[t + RIGHT][:end]], axis=1)
+                    else:
+                        todo[t] = self.tracks[t][:self._extent(self.tracks[t])].copy()
             changed = bool(self.dirty)
             self.dirty.clear()
             meta = {"bpm": self.bpm, "time_sig": self.time_sig, "rate": self.rate, "volumes": self.volumes,
@@ -1400,14 +1408,29 @@ class Engine:
 
     @staticmethod
     def _extent(x):
-        """Where the audio ends: frames (any channel, for a 2-channel array)."""
+        """Where the audio ends: frames (any channel, for a 2-channel array). Looked for from the end a piece
+        at a time: a whole-tape np.abs() took as much memory again as the track (a lot, on the Move)."""
         if x is None:
             return 0
-        a = np.abs(x)
-        if a.ndim == 2:
-            a = a.max(axis=1)
-        nz = np.flatnonzero(a > 1e-6)
-        return int(nz[-1]) + 1 if len(nz) else 0
+        end, piece = len(x), 1 << 16
+        while end > 0:
+            start = max(0, end - piece)
+            a = np.abs(x[start:end])
+            if a.ndim == 2:
+                a = a.max(axis=1)
+            nz = np.flatnonzero(a > 1e-6)
+            if len(nz):
+                return start + int(nz[-1]) + 1
+            end = start
+        return 0
+
+    def _copy_used(self, x):
+        """A copy of a track that only takes memory for its audio (a full copy of the empty part filled the
+        Move's memory: np.zeros costs nothing until it's written to)."""
+        out = np.zeros(len(x), np.float32)
+        end = self._extent(x)
+        out[:end] = x[:end]
+        return out
 
     def export(self):
         """Write stems (every track with audio, all the same length) and a stereo mix. Returns the folder name.
@@ -1416,7 +1439,9 @@ class Engine:
         reverb and delay (with their tails); those two are also written as stereo "return" stems, so the
         dry stems plus the returns rebuild the mix."""
         with self.lock:
-            tracks = [x.copy() if x is not None else None for x in self.tracks]
+            # (only up to where the audio ends: a copy of every whole track took 400 MB and more on the Move)
+            used = max([self._extent(x) for x in self.tracks if x is not None] or [0])
+            tracks = [x[:used].copy() if x is not None else None for x in self.tracks]
             boxes = [[list(r) for r in rs] for rs in self.regions]
             vols, mutes, pans, stereo = list(self.volumes), set(self.mutes), list(self.pans), set(self.stereo)
             rev_sends, dly_sends, fx = list(self.rev_sends), list(self.dly_sends), dict(self.fx)
@@ -2351,7 +2376,7 @@ class Engine:
             entries = [("stereo", t, t in self.stereo, self.tracks[t + RIGHT],
                         [list(r) for r in self.regions[t + RIGHT]], self.inputs[t])]
             if on:
-                self.tracks[t + RIGHT] = self.tracks[t].copy()
+                self.tracks[t + RIGHT] = self._copy_used(self.tracks[t])
                 self.regions[t + RIGHT] = [list(r) for r in self.regions[t]]
                 self.stereo.add(t)
                 if not isinstance(self.inputs[t], (list, tuple)):

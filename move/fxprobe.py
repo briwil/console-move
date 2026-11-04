@@ -231,7 +231,7 @@ def sweep(mid, key, mode=""):
                 for n in range(128):
                     if n % 3 == 0:
                         inst.midi(0x80, n, 0)
-        print("ok (it says %r)" % inst.get(key), flush=True)
+            print("ok (it says %r)" % inst.get(key), flush=True)
 
 
 def _signame(n):

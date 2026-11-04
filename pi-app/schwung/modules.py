@@ -221,7 +221,7 @@ class Module:
         for p in chain:
             key = p.get("key")
             if not key or p.get("access") == "write" or key.startswith(("ui_", "cv_", "midi")) \
-                    or key in SKIP:
+                    or key in SKIP or key in self.spec.get("skip", ()):
                 continue
             voice, label = None, p.get("name") or key
             m = VOICE_KEY.match(key)

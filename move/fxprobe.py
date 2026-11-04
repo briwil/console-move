@@ -207,8 +207,12 @@ def main():
                  "/usr/lib/aarch64-linux-gnu/libc_malloc_debug.so.0", "/usr/lib/x86_64-linux-gnu/libc_malloc_debug.so.0") if os.path.exists(p)), None)
     if dbg:
         env["LD_PRELOAD"] = dbg
+    try:
+        old_libc = tuple(int(x) for x in os.confstr("CS_GNU_LIBC_VERSION").split()[1].split(".")[:2]) < (2, 34)
+    except (ValueError, OSError, IndexError):
+        old_libc = False
     print("Trying %d %s, one at a time (memory checks %s)...\n" %
-          (len(ids), "instruments" if insts else "insert effects", "on" if dbg else "partly on: no libc_malloc_debug here"),
+          (len(ids), "instruments" if insts else "insert effects", "on" if (dbg or old_libc) else "partly on"),
           flush=True)
     for fx in ids:
         t = time.time()

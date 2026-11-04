@@ -186,7 +186,8 @@ MODULES = [
      "asset": '303-module.tar.gz'},
     {"id": 'noisemaker', "title": 'NOISEMAKER', "kind": 'synth', "license": "see its repo",
      "repo": 'legsmechanical/schwung-noisemaker', "commit": "release", "json": "module.json", "build": [],
-     "asset": 'noisemaker-module.tar.gz'},
+     "asset": 'noisemaker-module.tar.gz',
+     "skip": ["voices"]},           # changing VOICES while it plays crashed it (and Console): fxprobe.py
     {"id": 'tenebrae', "title": 'TENEBRAE', "kind": 'synth', "license": "see its repo",
      "repo": 'legsmechanical/schwung-tenebrae', "commit": "release", "json": "module.json", "build": [],
      "asset": 'tenebrae-module.tar.gz'},

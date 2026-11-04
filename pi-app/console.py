@@ -457,15 +457,18 @@ class Transport:
     PAD_NAMES = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT"]
 
     def drums_key(self):
-        """The MIDI key, forwards: the tape -> the INSTRUMENTS page -> the picked slot's drum page, then
-        between the drum page and its sequencer. Over an FX page it closes the FX page first."""
+        """The MIDI key, forwards: the tape -> the INSTRUMENTS page -> the picked slot's drum page -> its
+        sequencer -> back to the INSTRUMENTS page (round and round). Over an FX page it closes the FX page first."""
         e = self.engine
         if self.fx_page:
             self.fx_page = None
             if self.drum_page or self.inst_page:
                 return
         if self.drum_page:
-            self.seq_page = not self.seq_page
+            if self.seq_page:                 # the sequencer, pressed again: round to the instrument list
+                self.back_key()
+                return
+            self.seq_page = True              # the sound -> its sequencer
             self.seqp.held = {}
             self.synthp.held = {}
             return

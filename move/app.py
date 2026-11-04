@@ -92,7 +92,7 @@ PRESS = {85: ("PLAY", "HOME"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_R
          43: ("DRUMS", "DRUMS_BACK"), 42: ("SONG", "SONG_TOGGLE"), 41: ("FX", "FX"), 40: ("TAPE", "ARM_ALL")}
 HOLD = {60: "COPY", 119: "CUT"}            # hold and move to take several boxes (Shift + Copy: select)
 SHIFT, BACK, PLUS, MINUS, WHEEL, VOLUME = 49, 51, 55, 54, 14, 79
-# left buttons, top to bottom: 1 instruments (again: the drum's sound, its sequencer), 2 song, 3 FX,
+# left buttons, top to bottom: 1 instruments (again: the sound, its sequencer, back to the instruments), 2 song, 3 FX,
 # 4 the recorder (the tape; again: the selected track zoomed)
 KNOBS = range(71, 79)                      # knobs 1-8
 STEPS = range(16, 32)                      # step buttons 1-16 (notes)

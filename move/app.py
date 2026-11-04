@@ -386,11 +386,17 @@ def main():
 
     def kit_list_turn(delta, k=m.kits):                # the drums menu's list stops at its ends (it wrapped round)
         if k.mode == "list":
-            k.choice = max(0, min(kitmenu.ALL - 1, k.choice + delta))
+            k.choice = max(1, min(kitmenu.ALL - 1, k.choice + delta))   # (not 0: DRUM MACHINE is hidden here)
             k.msg = ""
         else:
             kit_turn(delta)
     m.kits.turn = kit_list_turn
+    kit_show = m.kits.show
+
+    def kits_show(k=m.kits):
+        kit_show()
+        k.choice = max(1, k.choice)                      # (DRUM MACHINE, row 0, isn't offered here)
+    m.kits.show = kits_show
     m.open = False                                   # start on the tape, not the project menu
     keys = queue.Queue()
     board = MoveBoard(keys, T)

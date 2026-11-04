@@ -141,13 +141,13 @@ class MoveBoard:
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
-            if T.mlfo.active():
-                k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
-                return
-            if (n - 1 in (ARP_ICON, PADS_ICON) and not self.shift and T.drum_page and T.synth_shown()
+            if (n - 1 in (ARP_ICON, PADS_ICON) and self.shift and T.drum_page and T.synth_shown()
                     and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
                 if val:
                     k.put("ARP_JUMP" if n - 1 == ARP_ICON else "PADS_JUMP")   # the icons: the arp page, the pads page
+                return
+            if T.mlfo.active():
+                k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
                 return
             if not val:
                 return
@@ -342,9 +342,9 @@ class Lights:
                         out[p] = WHITE if k % 12 == 0 else NOTE_COLOURS[k]
         for p in range(32):
             self.note(68 + p, out[p])
-        # the icons under the step buttons: on a synth's sound page, the ARP icon (step 3): bright when the arp is on
+        # the icons under the step buttons: lit only while Shift is held (as on the Move's own software), on a synth's sound page
         icons = {}
-        if T.drum_page and not T.seq_page and T.synth_shown() and not (T.fx_page or T.inst_page or T.song_page):
+        if board.shift and T.drum_page and not T.seq_page and T.synth_shown() and not (T.fx_page or T.inst_page or T.song_page):
             on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
             icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
             icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20

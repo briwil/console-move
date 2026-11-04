@@ -503,7 +503,7 @@ def lfo_page(f, T):
         col, row = divmod(i, 3)
         x, y = col * 65, 13 + row * 11
         f.small(x + 1, y, "%d %s" % (i + 1, label))
-        f.right(x + 62, y + 5, str(value)[:9], small=True)
+        f.right(x + 62, y, str(value)[:9], small=True)
     f.small(1, 50, "STEPS: TAP = REST, HOLD + 2/4")
     f.small(1, 57, "< > : SETTINGS, LFOS, INSERTS")
 

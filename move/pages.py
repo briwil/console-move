@@ -23,9 +23,8 @@ def draw(f, T, menu=None):
             name_page(f, menu)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "settings":
             settings_page(f, menu)
-        elif menu is not None and menu.open and getattr(menu, "mode", "") == "load" and (
-                getattr(menu, "deleting", False) or getattr(menu, "rename_pick", False)):
-            delete_page(f, menu)
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "load":
+            delete_page(f, menu)                          # open / delete / rename: the same list
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "list":
             menu_list_page(f, menu, T)
         elif menu is not None and menu.open:
@@ -890,11 +889,17 @@ def delete_page(f, menu):
         f.small(1, 58, "BACK: NO, KEEP IT")
         return
     renaming = getattr(menu, "rename_pick", False)
-    header(f, "RENAME WHICH PROJECT?" if renaming else "DELETE WHICH PROJECT?", "%d" % len(menu.songs))
+    deleting = getattr(menu, "deleting", False)
+    title = "RENAME WHICH PROJECT?" if renaming else "DELETE WHICH PROJECT?" if deleting else "OPEN PROJECT"
+    header(f, title, "%d" % len(menu.songs))
+    if not menu.songs:
+        f.text(2, 24, "NO SAVED PROJECTS")
     rows = [(s + ("  OPEN" if menu.engine and s == menu.engine.song else "")) for s in menu.songs]
     biglist(f, [r.upper() for r in rows], menu.pick, fit=4)
     msg = str(getattr(menu, "msg", "") or "")
-    f.small(1, 58, (msg or ("PLAY: RENAME   BACK: CANCEL" if renaming else "PLAY: DELETE   BACK: CANCEL")).upper()[:31])
+    hint = "PLAY: RENAME   BACK: CANCEL" if renaming else "PLAY: DELETE   BACK: CANCEL" if deleting else \
+        "PLAY: OPEN   BACK: CANCEL"
+    f.small(1, 58, (msg or hint).upper()[:31])
 
 
 def settings_page(f, menu):

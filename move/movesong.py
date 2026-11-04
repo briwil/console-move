@@ -193,6 +193,10 @@ class Song:
         cycle = (m.anchor, int(max(0, e.seq_clock - m.anchor) // max(1, length)))
         if self._cycle is None:
             self._cycle = cycle
+        if cycle[0] == self._cycle[0] and cycle[1] < self._cycle[1]:
+            # the clock went back (PLAY: the sequencer's clock is reset a moment after this first looked at it, so
+            # it first saw the old stopped time): start counting again, it isn't a pass played
+            self._cycle = cycle
         if cycle != self._cycle:
             self._cycle = cycle
             if self._queued:                               # the next row has started

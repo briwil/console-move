@@ -479,10 +479,11 @@ def pads_page(f, T):
     ml = T.mlfo
     header(f, "PADS", "SLOT %d" % (T.engine.slot + 1))
     for i, (label, shown) in enumerate(ml.pads_values()):
-        y = 16 + i * 13
-        f.text(2, y, "%d %s" % (i + 1, label))
-        f.right(W - 3, y, str(shown)[:12])
-    f.small(1, 57, "THE PADS PLAY THIS KEY AND SCALE")
+        col, row = divmod(i, 3)
+        x, y = col * 65, 13 + row * 14
+        f.small(x + 1, y, "%d %s" % (i + 1, label))
+        f.text(x + 1, y + 6, str(shown)[:10])
+    f.small(1, 57, "KEY, SCALE, OCTAVE, PAD FEEL")
 
 
 def lfo_page(f, T):

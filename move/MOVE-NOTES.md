@@ -142,7 +142,7 @@ Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).
 ## Step icons (which is under which step button)
 1 folded square, 2 hexagon, 3 branching nodes (ARP), 4 arch, 5 clock, 6 two dots, 7 wavy lines, 8 grid box, 9 note with a flag,
 10 note with lines, 11 circle with waves, 12 staggered lines, 13 sparkle, 14 plus with a square, 15 copy, 16 bars with a box.
-Icons light only while Shift is held, on a synth's sound pages; Shift + step 2 or 3 opens them (the same again, or Back, returns to the settings pages). Hexagon (2): the PADS page (key, scale, octave) on a synth.
+Icons light only while Shift is held, on a synth's sound pages; Shift + step 2 or 3 opens them (the same again, or Back, returns to the settings pages). Hexagon (2): the PADS page (key, scale, octave, pad velocity, pad curve) on a synth.
 
 ## Arpeggiator (synths)
 `pi-app/arp.py`; settings in the synth sequencer's `arp_cfg` (saved with the instrument). It sits between the notes and the

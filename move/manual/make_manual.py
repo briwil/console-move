@@ -334,7 +334,7 @@ story += [
     p("On a synth's settings pages hold <b>Shift</b>: the icons light under the step buttons. <b>Shift + step button 2</b> (the hexagon) opens the PADS page (or press Right past the ARP page). Press the icon again, or <b>Back</b>, to return to the settings pages: "
       "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
-      "as the synth sequencer's knobs 5 and 6.", BODY),
+      "as the synth sequencer's knobs 5 and 6. Knob 4 VELOCITY: TOUCH (the pads play and record how hard you hit them) or a fixed velocity (turn up from TOUCH: 100, then in fives). Knob 5 CURVE: SOFT (easier to play loud), NORMAL or HARD (needs a harder hit). Pattern recording now stores the velocity you played.", BODY),
     p("Arpeggiator (synths)", H2),
     p("A synth's last sound page is ARP (Right past INSERT 2; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
       "its sound pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "

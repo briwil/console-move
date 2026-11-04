@@ -172,6 +172,8 @@ class MoveBoard:
             return
         mid = e.slots[e.slot]
         if e.is_synth(mid):
+            if vel:
+                vel = pad_velocity(T, vel)                 # PADS page: touch (with a curve) or a fixed velocity
             if T.msyn.active() and T.msyn.pad(p, vel):
                 return                                     # a setting of selected steps, not a note
             if vel:
@@ -432,6 +434,8 @@ def main():
     T.live_rec = False
     T.song_page = False
     T.octave = 0                                     # Up / Down on a sound page: the pads' octave
+    T.pad_vel = int(e.settings.get("pad_vel", 0)) if e else 0          # 0: as you hit them
+    T.pad_curve = max(0, min(2, int(e.settings.get("pad_curve", 1)))) if e else 1
     T.song = movesong.Song(T)
     T.key("DRUMS")                                   # start on left button 1: the instruments
     frame = Frame()
@@ -540,6 +544,18 @@ def main():
 
 def menus_open(m):
     return bool(m.open or m.kits.open)
+
+
+CURVES = ("SOFT", "NORMAL", "HARD")
+
+
+def pad_velocity(T, vel):
+    """The velocity a pad plays and records: fixed (PADS page, knob 4), or what you hit through a curve (knob 5)."""
+    fixed = getattr(T, "pad_vel", 0)
+    if fixed:
+        return fixed
+    g = (0.7, 1.0, 1.5)[getattr(T, "pad_curve", 1)]
+    return max(1, min(127, int(round(127 * (vel / 127.0) ** g))))
 
 
 def choice_knob(T, m, e, name):

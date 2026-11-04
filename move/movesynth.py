@@ -205,6 +205,8 @@ class MoveSynth:
 
     def pad(self, p, vel):
         """A pad. Returns True if it has been used as a setting (so it makes no sound)."""
+        if vel:
+            self.vel = vel                                      # (a recorded note gets the velocity you played)
         note = self.pad_note(p)
         if not vel:
             self.pads_down.pop(p, None)
@@ -232,7 +234,7 @@ class MoveSynth:
             return False
         if self.T.live_rec and e.playing:
             frame = e._heard_frame()
-            i = seq.live_place(note, frame, e.frames_per_beat())
+            i = seq.live_place(note, frame, e.frames_per_beat(), vel=getattr(self, "vel", 100))
             self.rec[p] = (i, seq.pattern.notes[i][note], frame)
             e.seq_changed()
             return False

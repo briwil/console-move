@@ -59,8 +59,10 @@ class MoveLFO:
 
     def pads_values(self):
         seq, oc = self.T.engine.seq, getattr(self.T, "octave", 0)
+        v = getattr(self.T, "pad_vel", 0)
         return [("KEY", notes_mod.NAMES[seq.root]), ("SCALE", notes_mod.SCALES[seq.scale][0]),
-                ("OCTAVE", "%+d" % oc if oc else "0")]
+                ("OCTAVE", "%+d" % oc if oc else "0"), ("VELOCITY", str(v) if v else "TOUCH"),
+                ("CURVE", ("SOFT", "NORMAL", "HARD")[getattr(self.T, "pad_curve", 1)])]
 
     def pads_knob(self, number, delta, shift):
         T = self.T
@@ -75,6 +77,14 @@ class MoveLFO:
             seq.set_scale(scale=seq.scale + one)
         elif number == 3:
             T.octave = max(-4, min(4, getattr(T, "octave", 0) + one))
+        elif number == 4:                                # TOUCH (as you hit them) or a fixed velocity
+            v = getattr(T, "pad_vel", 0)
+            v = 100 if (v == 0 and one > 0) else v + 5 * one
+            T.pad_vel = 0 if v < 10 else min(127, v)
+            T.engine.remember("pad_vel", T.pad_vel)
+        elif number == 5:
+            T.pad_curve = max(0, min(2, getattr(T, "pad_curve", 1) + one))
+            T.engine.remember("pad_curve", T.pad_curve)
         else:
             return
         T.engine.seq_changed()

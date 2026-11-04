@@ -278,14 +278,14 @@ class NoteSequencer:
                 p.rate = next_rate(p.rate, delta)
             return getattr(p, what)
 
-    def live_place(self, note, tape_frame, frames_per_beat, length=1):
+    def live_place(self, note, tape_frame, frames_per_beat, length=1, vel=DEFAULT_VELOCITY):
         """A note played while recording: onto the nearest step. Returns the step."""
         with self.lock:
             p = self.pattern
             step_frames = frames_per_beat / p.steps_per_beat(note)
             k = round((tape_frame - self.anchor) / step_frames)
             i = k % p.lane_length(note)
-            p.notes.setdefault(i, {})[note] = Note(length)
+            p.notes.setdefault(i, {})[note] = Note(length, vel)
             if self.anchor + k * step_frames > tape_frame:
                 self._skip.add((note, k))
             return i

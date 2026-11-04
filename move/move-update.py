@@ -118,7 +118,19 @@ def fetch_libs():
     app = os.path.join(CONSOLE, "pi-app")
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as t:
         members = [m for m in t.getmembers() if ".." not in m.name.split("/") and not os.path.isabs(m.name)]
-        t.extractall(app, members=members)
+        for m in members:
+            # each file written beside the old one, then swapped in: writing over a library Console has loaded
+            # changed its code under it, and Console crashed in the middle of the update
+            dest = os.path.join(app, m.name)
+            if m.isdir():
+                os.makedirs(dest, exist_ok=True)
+            elif m.isfile():
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with t.extractfile(m) as src, open(dest + ".new", "wb") as out:
+                    shutil.copyfileobj(src, out)
+                os.chmod(dest + ".new", m.mode & 0o777 or 0o644)
+                os.utime(dest + ".new", (m.mtime, m.mtime))
+                os.replace(dest + ".new", dest)
     with open(stamp, "w") as f:
         f.write(version)
     say("Installed %d library files." % len(members))

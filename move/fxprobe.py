@@ -175,6 +175,49 @@ def one_inst(mid):
     return 0
 
 
+def sweep(mid, key):
+    """fxprobe.py sweep noisemaker voices: what the module says about one setting, then every value of it in
+    turn while notes play (in a child process: a crash shows the value it was on)."""
+    if os.environ.get("FXPROBE_CHILD") != "1":
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), "sweep", mid, key],
+                           env=dict(os.environ, FXPROBE_CHILD="1"), capture_output=True, text=True, timeout=300)
+        out = (r.stdout + r.stderr).strip()
+        print(out)
+        if r.returncode:
+            print("\nCRASHED (%s) on the last value above" % (_signame(-r.returncode) if r.returncode < 0 else r.returncode))
+        return
+    import json
+    import numpy as np
+    import catalog
+    import modules
+    folder = os.path.join(modules.MODULES_DIR, mid)
+    inst = modules.Instance(os.path.join(folder, "dsp.so"), folder, {})
+    chain = json.loads(inst.get("chain_params", big=True) or "[]")
+    entry = next((c for c in chain if c.get("key") == key), None)
+    print("chain_params entry: %s" % json.dumps(entry))
+    print("its value now: %r" % inst.get(key), flush=True)
+    if entry and entry.get("options"):
+        values = list(entry["options"]) + list(range(len(entry["options"])))
+    else:
+        lo, hi = (entry or {}).get("min", 0), (entry or {}).get("max", 16)
+        step = (entry or {}).get("step") or (1 if entry and entry.get("type") == "int" else (hi - lo) / 16.0)
+        values, v = [], lo - step
+        while v <= hi + step + 1e-9:
+            values.append(round(v, 4))
+            v += step
+    out = np.zeros((128, 2), np.float32)
+    for v in values:
+        print("value %s ..." % v, end=" ", flush=True)
+        inst.set(key, v)
+        for b in range(60):
+            if b % 6 == 0:
+                inst.midi(0x90, 48 + b % 24, 100)
+            if b % 6 == 3:
+                inst.midi(0x80, 48 + (b - 3) % 24, 0)
+            inst.render(out)
+        print("ok (it says %r)" % inst.get(key), flush=True)
+
+
 def _signame(n):
     try:
         return signal.Signals(n).name
@@ -187,6 +230,8 @@ def main():
         sys.exit(one(sys.argv[2]))
     if len(sys.argv) > 2 and sys.argv[1] == "--inst":
         sys.exit(one_inst(sys.argv[2]))
+    if len(sys.argv) > 3 and sys.argv[1] == "sweep":
+        return sweep(sys.argv[2], sys.argv[3])
     insts = len(sys.argv) > 1 and sys.argv[1] == "instruments"
     if insts:
         import drums

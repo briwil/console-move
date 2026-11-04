@@ -159,8 +159,9 @@ class Insert:
         return (label, shown)
 
     def midi(self, b0, b1, b2):
-        """For effects that listen to notes (the Ducker's trigger)."""
-        if self.h:
+        """For effects that listen to notes: only the Ducker (its trigger). The others crash the whole app on a
+        note (TAPESCAM did, in the stress test), so they never get one, whoever asks."""
+        if self.h and self.name() == "DUCKER":
             self._lib().sh_fx_midi(self.h, b0, b1, b2)
 
     # a saved song's choice

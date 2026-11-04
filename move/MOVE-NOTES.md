@@ -103,7 +103,8 @@ faulthandler) the Python line of a crash inside an effect or synth; if the main 
 thread's line too (a freeze). A normal quit deletes it. Found at the next start: it's kept as
 crashes/crash-<date>.log (the last 20) and the screen says so. So after a crash, any time later:
 
-    ssh -i ~/.ssh/move_key ableton@move.local "ls /data/UserData/console/crashes; tail -150 /data/UserData/console/crashes/\$(ls /data/UserData/console/crashes | grep crash- | tail -1)"
+    ssh -i ~/.ssh/move_key ableton@move.local "cd /data/UserData/console/crashes; ls; tail -150 running.log"     # just crashed (Console not started again)
+    ssh -i ~/.ssh/move_key ableton@move.local "cd /data/UserData/console/crashes; tail -150 \$(ls -t crash-*.log | head -n 1)"   # later
 
 ## Stress test (move/stress.py)
 

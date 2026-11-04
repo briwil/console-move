@@ -231,7 +231,7 @@ class MoveBoard:
                 e.hit(lane, vel)
                 if lane == 0:                                  # the kick triggers a Ducker on the other instruments
                     for j, ins in list((getattr(e, "insert_fx", None) or {}).items()):
-                        if j[0] != e.slot and ins.h:
+                        if j[0] != e.slot and ins.h and ins.name() == "DUCKER":   # (only it listens: others crashed)
                             ins.midi(0x90, 36, vel)
                 voice = d.lane_voice[lane] if lane < len(d.lane_voice) else 0
                 T.drum_voice = voice

@@ -235,6 +235,9 @@ def sweep(mid, key, mode=""):
             print("ok (it says %r)" % inst.get(key), flush=True)
 
 
+SKIP_FX = set(x for x in os.environ.get("FXPROBE_SKIP", "").split(",") if x)
+
+
 def together_child(inst_ids, rounds, seed):
     """In one process, as in Console: these instruments started (and played a little), then every insert
     effect in turn with a second one beside it, sound going through them."""
@@ -273,10 +276,16 @@ def together_child(inst_ids, rounds, seed):
     for r in range(rounds):
         for i in range(1, n + 1):
             j = rng.randrange(n + 1)
-            print("stage: effects %s + %s" % (catalog.FX[i - 1]["id"], catalog.FX[j - 1]["id"] if j else "none"),
-                  flush=True)
+            if ids[i - 1] in SKIP_FX:
+                continue
+            if j and ids[j - 1] in SKIP_FX:
+                j = 0
+            na, nb = ids[i - 1], (ids[j - 1] if j else "none")
+            print("stage: closing %s, starting %s (insert 1)" % (ids[a.index - 1] if a.index else "none", na), flush=True)
             a.choose(i)
+            print("stage: closing %s, starting %s (insert 2)" % (ids[b.index - 1] if b.index else "none", nb), flush=True)
             b.choose(j)
+            print("stage: sound through %s + %s" % (na, nb), flush=True)
             for k in range(150):
                 left = (np.random.standard_normal(BLOCK) * 0.2).astype(np.float32)
                 right = left.copy()
@@ -385,7 +394,12 @@ def main():
     if wanted:
         ids = [i for i in ids if i in wanted]
     if len(sys.argv) > 1 and sys.argv[1] == "together":
-        return together(_check_env()[0])
+        env = _check_env()[0]
+        skip = [a[5:] for a in sys.argv[2:] if a.startswith("skip=")]
+        if skip:
+            env["FXPROBE_SKIP"] = ",".join(",".join(skip).split(","))
+            print("(leaving out: %s)" % env["FXPROBE_SKIP"])
+        return together(env)
     bad = []
     # the C library's memory checks on in each test: an effect that writes where it shouldn't is caught (a
     # damaged heap often doesn't crash the effect that did it, only something later, somewhere else)

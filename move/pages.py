@@ -33,6 +33,8 @@ def draw(f, T, menu=None):
         elif menu is not None and menu.kits.open:
             if menu.kits.mode == "list":
                 kit_list(f, menu.kits)
+            elif menu.kits.mode == "name":
+                name_page(f, menu.kits, "NAME THIS KIT")
             else:
                 text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
         elif T.seq_page:
@@ -776,12 +778,12 @@ def settings_page(f, menu):
     f.small(1, 58, msg.upper()[:31])
 
 
-def name_page(f, menu):
+def name_page(f, menu, prompt=None):
     """Naming (a project, a Wi-Fi password): the name in big letters, the letter under the cursor inverted in a
     white box (at the end: an empty box, the next letter)."""
-    prompt = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(menu, "renaming", ""),
+    title = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(menu, "renaming", ""),
               "wifi": "PASSWORD FOR %s" % getattr(menu, "joining", "")}.get(menu.naming, "NAME THIS PROJECT")
-    header(f, prompt.upper()[:21])
+    header(f, (prompt or title).upper()[:21])
     name = "".join(menu.name)
     per = 20
     cur = menu.cursor

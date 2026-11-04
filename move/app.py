@@ -765,6 +765,8 @@ def handle(name, T, m, e):
     elif m.kits.open:
         if m.kits.mode == "list" and name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
             return                                   # (the Pi's two columns: here it's one list)
+        if m.kits.mode == "name" and name in ("HOME", "HOME_PUSH_SHIFT"):
+            name = "RIGHT" if name == "HOME" else "LEFT"           # naming a kit: push = next letter, PLAY saves
         m.kits.key("PLAY" if name == "HOME" else name)
     elif name == "FILE" and T.inst_page and T.instp.mode:
         T.instp.cancel()

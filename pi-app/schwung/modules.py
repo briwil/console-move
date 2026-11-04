@@ -77,6 +77,9 @@ def build_missing():
     import build as builder
     if all(builder.built(m) for m in catalog.MODULES) and os.path.exists(HOST_LIB):
         return
+    import shutil
+    if not shutil.which("nice"):
+        return                       # the Move: its modules come ready-made with the update (GitHub builds them)
     building = True
     try:
         subprocess.run(["nice", "-n", "19", "python3", os.path.join(HERE, "build.py")],

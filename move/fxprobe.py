@@ -141,7 +141,9 @@ def one_inst(mid):
     def twist():
         p = random.choice(params)
         try:
-            m.set_param(p, m.stepped(p, m.get_param(p), random.choice((-40, -3, 3, 40))))
+            v = m.stepped(p, m.get_param(p), random.choice((-40, -3, 3, 40)))
+            print("set %s = %s" % (m.label(p), m.value_text(p, v) if hasattr(m, "value_text") else v), flush=True)
+            m.set_param(p, v)
         except Exception:                                # noqa: BLE001
             pass
     stage("playing, settings moving")
@@ -220,7 +222,8 @@ def main():
                    else (ex.stdout or "")).strip().splitlines()
             code = "hung"
         stages = [l[7:] for l in out if l.startswith("stage: ")]
-        notes = [l for l in out if not l.startswith("stage: ") and l.strip()
+        sets = [l for l in out if l.startswith("set ")]
+        notes = [l for l in out if not l.startswith("stage: ") and l.strip() and not l.startswith("set ")
                  and not l.startswith("insert effect: starting") and not l.startswith("instrument: starting")]
         where = stages[-1] if stages else "?"
         if code == 0:
@@ -234,6 +237,8 @@ def main():
             print("  %s  %s, while: %s" % (why, fx, where), flush=True)
             for n in notes[-6:]:
                 print("             " + n[:160])
+            if sets:
+                print("             the last settings changed: " + "; ".join(l[4:] for l in sets[-4:])[:300])
             bad.append(fx)
     print("\n%s" % ("Every one that starts is fine on its own." if not bad else
                     "Problem effects: " + ", ".join(bad)), flush=True)

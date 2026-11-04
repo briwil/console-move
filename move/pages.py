@@ -474,9 +474,23 @@ def arp_page(f, T):
     f.small(1, 57, "STEPS: NOTE, ACCENT, REST")
 
 
+def pads_page(f, T):
+    """The pads' key, scale and octave (the hexagon icon on a synth's sound pages)."""
+    ml = T.mlfo
+    header(f, "PADS", "SLOT %d" % (T.engine.slot + 1))
+    for i, (label, shown) in enumerate(ml.pads_values()):
+        y = 16 + i * 13
+        f.text(2, y, "%d %s" % (i + 1, label))
+        f.right(W - 3, y, str(shown)[:12])
+    f.small(1, 57, "THE PADS PLAY THIS KEY AND SCALE")
+
+
 def lfo_page(f, T):
     ml = T.mlfo
     e = T.engine
+    if ml.pads_on_page():
+        pads_page(f, T)
+        return
     if ml.arp_on_page():
         arp_page(f, T)
         return

@@ -330,6 +330,11 @@ story += [
         ("Drums, by hand", "Hold a step button and press a right-half pad: the step turns on with that pitch."),
     ]),
 
+    p("Pads: key and scale (synths)", H2),
+    p("On a synth's settings pages press the <b>hexagon icon under step button 2</b> (or press Right past the ARP page): "
+      "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
+      "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
+      "as the synth sequencer's knobs 5 and 6.", BODY),
     p("Arpeggiator (synths)", H2),
     p("A synth's last sound page is ARP (Right past INSERT 2), or press the branching-nodes icon under step button 3 on "
       "its settings pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "

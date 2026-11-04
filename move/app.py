@@ -144,10 +144,10 @@ class MoveBoard:
             if T.mlfo.active():
                 k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
                 return
-            if (n - 1 == ARP_ICON and not self.shift and T.drum_page and T.synth_shown()
+            if (n - 1 in (ARP_ICON, PADS_ICON) and not self.shift and T.drum_page and T.synth_shown()
                     and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
                 if val:
-                    k.put("ARP_JUMP")                          # the ARP icon: the synth's arp page
+                    k.put("ARP_JUMP" if n - 1 == ARP_ICON else "PADS_JUMP")   # the icons: the arp page, the pads page
                 return
             if not val:
                 return
@@ -322,6 +322,14 @@ class Lights:
         elif e and e.slot is not None and e.drums:
             if e.is_synth(e.slots[e.slot]):
                 out = [20] * 32
+                try:                                           # the key's root notes light white
+                    q = e.seq
+                    base = q.note_row(q.shown_notes()[0])
+                    for p in range(32):
+                        if q.row_note(base + p) % 12 == q.root:
+                            out[p] = WHITE
+                except Exception:                              # noqa: BLE001
+                    pass
             else:
                 lanes, picked = e.drums.lanes, T.seqp.lane
                 for p in range(32):
@@ -339,11 +347,13 @@ class Lights:
         if T.drum_page and not T.seq_page and T.synth_shown() and not (T.fx_page or T.inst_page or T.song_page):
             on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
             icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
+            icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20
         self.icons(icons)
 
 
 # ---------------------------------------------------------------- the app
 
+PADS_ICON = 1                     # the hexagon, under step button 2: the pads' key and scale
 ARP_ICON = 2                      # the branching-nodes icon, under step button 3 (see MOVE-NOTES.md)
 PIDFILE = "/data/UserData/console/app.pid"
 ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
@@ -679,6 +689,9 @@ def handle(name, T, m, e):
         return
     if name == "ARP_JUMP":
         T.mlfo.goto_arp()
+        return
+    if name == "PADS_JUMP":
+        T.mlfo.goto_pads()
         return
     if isinstance(name, tuple) and name[0] == "LFOSTEP":
         if T.mlfo.active():

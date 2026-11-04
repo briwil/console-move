@@ -3,6 +3,7 @@ Step buttons: tap = that step of the LFO rests, hold + knob 2/4 = its own WAVE/D
 import arp
 import knobgate
 import lfo
+import notes as notes_mod
 import sequencer
 
 LABELS = ["DEST", "WAVE", "SPEED", "DEPTH", "PHASE", "MODE"]
@@ -33,13 +34,48 @@ class MoveLFO:
 
     def last(self):
         """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's ARP."""
-        return lfo.COUNT + self._inserts() - 1 + (1 if self.has_arp() else 0)
+        return lfo.COUNT + self._inserts() - 1 + (2 if self.has_arp() else 0)
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
         if self.tab is not None and lfo.COUNT <= self.tab < lfo.COUNT + self._inserts():
             return self.tab - lfo.COUNT
         return None
+
+    def pads_tab(self):
+        return self.arp_tab() + 1 if self.has_arp() else None
+
+    def pads_on_page(self):
+        """True on the PADS page (the hexagon icon): the pads' key, scale and octave."""
+        return self.tab is not None and self.tab == self.pads_tab()
+
+    def goto_pads(self):
+        if self.has_arp():
+            self.tab = self.pads_tab()
+            self.T.say("PADS", 2)
+
+    def pads_values(self):
+        seq, oc = self.T.engine.seq, getattr(self.T, "octave", 0)
+        return [("KEY", notes_mod.NAMES[seq.root]), ("SCALE", notes_mod.SCALES[seq.scale][0]),
+                ("OCTAVE", "%+d" % oc if oc else "0")]
+
+    def pads_knob(self, number, delta, shift):
+        T = self.T
+        seq = T.engine.seq
+        way = knobgate.gate(("pads", number), delta, shift)
+        if not way:
+            return
+        one = 1 if way > 0 else -1
+        if number == 1:
+            seq.set_scale(root=seq.root + one)
+        elif number == 2:
+            seq.set_scale(scale=seq.scale + one)
+        elif number == 3:
+            T.octave = max(-4, min(4, getattr(T, "octave", 0) + one))
+        else:
+            return
+        T.engine.seq_changed()
+        T.say("%s  %s" % self.pads_values()[number - 1], 2)
 
     def arp_on_page(self):
         """True on the ARP page."""
@@ -114,6 +150,8 @@ class MoveLFO:
         return True
 
     def step(self, n, down):
+        if self.pads_on_page():
+            return
         if self.arp_on_page():
             self.arp_step(n, down)
             return
@@ -139,6 +177,8 @@ class MoveLFO:
             self.T.say("LFO %d STEP %d %s" % (self.tab + 1, n, "RESTS" if st.get("mute") else "PLAYS"), 2)
 
     def step_lights(self):
+        if self.pads_on_page():
+            return [0] * 16
         if self.arp_on_page():
             return [{0: 20, 1: 45, 2: 120}[x] for x in self.cfg()["rhythm"]]
         if self.insert_pos() is not None:
@@ -169,6 +209,8 @@ class MoveLFO:
                 ("DEPTH", "%+d%%" % l["depth"]), ("PHASE", "%d%%" % l["phase"]), ("MODE", lfo.MODES[l["mode"]])]
 
     def is_choice(self, n):
+        if self.pads_on_page():
+            return True
         if self.arp_on_page():
             return (n - 1) in (0, 1, 2, 3, 5)
         if self.insert_pos() is not None:
@@ -178,6 +220,9 @@ class MoveLFO:
         return (n - 1) in CHOICE
 
     def knob(self, number, delta, shift):
+        if self.pads_on_page():
+            self.pads_knob(number, delta, shift)
+            return
         if self.arp_on_page():
             self.arp_knob(number, delta, shift)
             return

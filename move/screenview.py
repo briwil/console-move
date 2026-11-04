@@ -262,7 +262,7 @@ def seq_data(T):
             for note, n in sorted(d.items()):
                 nl.append([step, note, n.length, n.vel, n.chance, n.ratchet, len(n.locks), len(n.comp)])
         shown = seq.shown_notes()
-        static = {"kind": "notes", "title": title, "length": pat.length,
+        static = {"kind": "notes", "title": title, "slot": e.slot + 1, "length": pat.length,
                   "rate": sequencer.RATES[pat.rate][0], "notes": nl,
                   "lane_len": {str(k): v for k, v in pat.lane_len.items()},
                   "root": notes.NAMES[seq.root], "scale": notes.SCALES[seq.scale][0],
@@ -288,7 +288,7 @@ def seq_data(T):
                       "group": sequencer.group_steps(ln.steps_per_beat(), tuple(getattr(e, "time_sig", (4, 4)))),
                       "straight": not any(st.comp for st in ln.steps[:ln.length]),     # (plays its steps in order)
                       "steps": steps})
-    static = {"kind": "drums", "title": title, "lanes": lanes, "chances": sequencer.CHANCES}
+    static = {"kind": "drums", "title": title, "slot": e.slot + 1, "lanes": lanes, "chances": sequencer.CHANCES}
     try:
         at = seq.position(e._heard_frame(), fpb) if playing else None
     except Exception:                                    # noqa: BLE001

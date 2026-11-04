@@ -99,7 +99,7 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
 ## Step icon test
 The icons printed under the 16 step buttons are lights of their own (controller numbers 16-31, channel 16, the value
 is the colour: 120 white, 118 light grey). To see which icon is which: `touch /data/UserData/console/icontest`
-lights them one at a time (the screen says which step button it is under); `echo all > ...icontest` lights all 16;
+lights one, and the jog wheel steps to the next (the screen says which step button it is under); `echo all > ...icontest` lights all 16;
 `rm /data/UserData/console/icontest` ends it. (Octave on the original Move OS: the Up / Down buttons, CC 55 / 54.)
 - Choosing an instrument (instruments page, push on a slot): one picture at a time, the wheel slides left / right
   (move/pages.py carousel). Pictures are move/instimg/<module id>.txt (64 rows x 32 hex digits, from the screen

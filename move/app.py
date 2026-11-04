@@ -417,7 +417,7 @@ def main():
     last = time.monotonic()
     next_screen = 0.0
     next_lights = 0.0
-    next_icon_check, icon_test = 0.0, None
+    next_icon_check, icon_test, icon_k = 0.0, None, 0
     hand_back = False
     try:
         while True:
@@ -432,6 +432,10 @@ def main():
                 if name == "QUIT":
                     quit_now = True
                     break
+                if icon_test is not None:                # the icon test: the wheel steps through the icons
+                    if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and name[2]:
+                        icon_k = (icon_k + (1 if name[2] > 0 else -1)) % 16
+                    continue
                 handle(name, T, m, e)
             if m.restart and not quit_now:          # a software update was installed: start the new version
                 frame.clear()
@@ -459,8 +463,8 @@ def main():
                     lights.icons(set())                      # finished: the icons go dark
                 icon_test = mode
             if icon_test is not None:
-                # the icon test: each icon in turn for 2 seconds (or all of them: put "all" in the file)
-                k = int(now / 2) % 16
+                # the icon test: turn the wheel to step through the icons (or all of them: put "all" in the file)
+                k = icon_k
                 lit = set(range(16)) if icon_test == "all" else {k}
                 lights.icons(lit)
                 if now >= next_screen:
@@ -470,7 +474,7 @@ def main():
                     frame.text(1, 1, "ICON TEST", 0)
                     frame.centre(64, 20, "ALL ON" if icon_test == "all" else "ICON %d OF 16" % (k + 1))
                     frame.small(1, 40, "UNDER STEP BUTTON %s" % ("1-16" if icon_test == "all" else k + 1))
-                    frame.small(1, 52, "DELETE THE FILE TO END")
+                    frame.small(1, 52, "TURN THE WHEEL. DELETE FILE TO END")
                     core.display(frame.bytes())
                 time.sleep(0.005)
                 continue

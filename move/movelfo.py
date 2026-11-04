@@ -225,8 +225,24 @@ class MoveLFO:
         e = self.T.engine
         return lfo.of(e.seq.pattern)
 
+    def insert_dests(self):
+        """[dest] the number settings of this instrument's two insert effects (the LFO can move them too)."""
+        out = []
+        if not self.T.insert_fx_available():
+            return out
+        for pos in (0, 1):
+            ins = self.T.insfx(None, pos)
+            if ins.h:
+                out += [lfo.INSERT_DEST + 8 * pos + i for i, p in enumerate(ins.params) if not p[6]]
+        return out
+
+    def insert_label(self, dest):
+        pos, idx = divmod(dest - lfo.INSERT_DEST, 8)
+        ins = self.T.insfx(None, pos)
+        return "I%d %s" % (pos + 1, ins.params[idx][1] if idx < len(ins.params) else "?")
+
     def dests(self):
-        return lfo.settings_dest(self.T.engine.drums)
+        return lfo.settings_dest(self.T.engine.drums) + self.insert_dests()
 
     def values(self):
         """[(label, text)] for knobs 1-6."""
@@ -234,7 +250,9 @@ class MoveLFO:
         l = self.lfos()[self.tab]
         d = e.drums
         dest = "OFF"
-        if l["dest"] >= 0 and l["dest"] < getattr(d, "param_count", 0):
+        if l["dest"] >= lfo.INSERT_DEST:
+            dest = self.insert_label(l["dest"])[:9] if l["dest"] in self.insert_dests() else "OFF"
+        elif l["dest"] >= 0 and l["dest"] < getattr(d, "param_count", 0):
             dest = ("%s" % d.label(l["dest"]))[:9]
         return [("DEST", dest), ("WAVE", lfo.WAVES[l["wave"]]), ("SPEED", lfo.SPEEDS[l["speed"]][0]),
                 ("DEPTH", "%+d%%" % l["depth"]), ("PHASE", "%d%%" % l["phase"]), ("MODE", lfo.MODES[l["mode"]])]

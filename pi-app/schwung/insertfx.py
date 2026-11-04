@@ -130,6 +130,18 @@ class Insert:
         text = p[6][int(v)] if p[6] else ("%d" % v if p[5] >= 1 and float(v).is_integer() else "%.3f" % v)
         self._lib().sh_fx_set(self.h, key.encode(), str(text).encode())
 
+    def modulate(self, slot, value):
+        """An LFO moves setting `slot` (0-7) to this value, without changing the one kept on the page."""
+        if slot >= len(self.params) or not self.h:
+            return
+        key = self.params[slot][0]
+        self._lib().sh_fx_set(self.h, key.encode(), ("%.4f" % value).encode())
+
+    def restore(self, slot):
+        """An LFO lets go of setting `slot`: back to the page's value."""
+        if slot < len(self.params) and self.h:
+            self._send(self.params[slot][0])
+
     def knob(self, slot, delta):
         """slot 0-7 -> the effect's first eight settings."""
         if slot >= len(self.params) or not self.h:

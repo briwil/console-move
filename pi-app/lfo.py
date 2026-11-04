@@ -22,6 +22,7 @@ SPEEDS = [("8BAR", 32.0), ("4BAR", 16.0), ("2BAR", 8.0), ("1BAR", 4.0), ("1/2", 
 MODES = ["FREE", "TRIG"]
 COUNT = 2
 STEPS = 16
+INSERT_DEST = 1000                 # a dest at or above this is an insert effect's setting: 1000 + 8 * (insert 0 / 1) + knob 0-7
 
 
 def default():
@@ -138,15 +139,17 @@ class Runner:
                 key = (k, j)
                 prev = self.last.get(key)
                 if prev and prev[0] != dest:
-                    self._restore(m, prev[0])
+                    self._restore(k, m, prev[0])
                     self.last.pop(key, None)
                 running = e.playing or k == e.slot          # stopped: the instrument you're on still moves (to play it by hand)
-                if not l or dest < 0 or dest >= getattr(m, "param_count", 0) or not running:
+                ins = self._insert(k, dest)
+                known = ins is not None if dest >= INSERT_DEST else 0 <= dest < getattr(m, "param_count", 0)
+                if not l or dest < 0 or not known or not running:
                     if prev and prev[0] == dest and not running:
-                        self._restore(m, dest)
+                        self._restore(k, m, dest)
                         self.last.pop(key, None)
                     continue
-                if m.kind(dest) not in ("num", "pm", "send"):
+                if dest < INSERT_DEST and m.kind(dest) not in ("num", "pm", "send"):
                     continue
                 if e.playing:
                     frame = e.seq_clock + e.read_ahead
@@ -161,6 +164,15 @@ class Runner:
                 if lock:
                     shape, depth = lock.get("wave", shape), lock.get("depth", depth)
                 v = 0.0 if lock and lock.get("mute") else wave(shape, ph, 0, (k, j))
+                if dest >= INSERT_DEST:                     # an insert effect's setting (a number, in its own range)
+                    idx = (dest - INSERT_DEST) % 8
+                    _k, _l, lo, hi, _d, _s, _o = ins.params[idx]
+                    base = ins.values.get(ins.params[idx][0], lo)
+                    val = round(max(lo, min(hi, base + v * depth / 100.0 * (hi - lo) / 2)), 3)
+                    if prev is None or prev[1] != val:
+                        self.last[key] = (dest, val)
+                        ins.modulate(idx, val)
+                    continue
                 base = m.get_param(dest)
                 span = top(m, dest)
                 val = int(round(max(0, min(span, base + v * depth / 100.0 * span / 2))))
@@ -168,12 +180,27 @@ class Runner:
                     self.last[key] = (dest, val)
                     self._send(m, dest, val)
 
+    def _insert(self, k, dest):
+        """The insert effect a dest (>= INSERT_DEST) points at on slot k, if it is loaded and that setting is a number."""
+        if dest < INSERT_DEST:
+            return None
+        ins = (getattr(self.e, "insert_fx", None) or {}).get((k, (dest - INSERT_DEST) // 8))
+        idx = (dest - INSERT_DEST) % 8
+        if ins is None or not ins.h or idx >= len(ins.params) or ins.params[idx][6]:
+            return None
+        return ins
+
     def _release(self, k, _m):
         for key in [x for x in self.last if x[0] == k]:
             self.last.pop(key, None)
 
-    def _restore(self, m, dest):
+    def _restore(self, k, m, dest):
         try:
+            if dest >= INSERT_DEST:
+                ins = (getattr(self.e, "insert_fx", None) or {}).get((k, (dest - INSERT_DEST) // 8))
+                if ins is not None:
+                    ins.restore((dest - INSERT_DEST) % 8)
+                return
             self._send(m, dest, m.get_param(dest))
         except Exception:
             pass

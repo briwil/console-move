@@ -218,7 +218,8 @@ story += [
     p("Every instrument has two LFOs per pattern (a new pattern starts as a copy of the one you came from, then "
       "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2, then INSERT 1 and 2 (see FX).", BODY),
     table([
-        ("Knob 1  DEST", "Which setting it moves (numbers only)."),
+        ("Knob 1  DEST", "Which setting it moves (numbers only): the instrument's settings, then the number settings of "
+         "its two insert effects (shown I1 / I2 and the setting's name, e.g. I1 CUTOFF). Choose the effect first."),
         ("Knob 2  WAVE", "Sine, triangle, saw up / down, square, random."),
         ("Knob 3  SPEED", "8 bars down to 1/32 of a beat, in time with the tempo."),
         ("Knob 4  DEPTH", "How far it swings, -100 to +100 %."),

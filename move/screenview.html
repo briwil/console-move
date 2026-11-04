@@ -9,6 +9,10 @@
 <link rel="icon" href="/icon.svg">
 <title>Console</title>
 <style>
+  @font-face { font-family: BC; src: url(/fonts/BarlowCondensed-Medium.ttf); font-weight: 500; }
+  @font-face { font-family: BC; src: url(/fonts/BarlowCondensed-SemiBold.ttf); font-weight: 600; }
+  @font-face { font-family: BC; src: url(/fonts/BarlowCondensed-Bold.ttf); font-weight: 700; }
+  @font-face { font-family: BC; src: url(/fonts/BarlowCondensed-ExtraBold.ttf); font-weight: 800; }
   :root {
     --bg: #0b0c0e; --panel: #131519; --line: #23262d; --dim: #5c616c; --text: #e8e9ec; --soft: #a3a8b3;
     --amber: #f2b33d; --red: #ff5a4e; --green: #49d17d; --orange: #ff9a3c;
@@ -20,7 +24,7 @@
     gap: 1.2vh; background: rgba(11,12,14,.92); font-size: 2.4vh; color: var(--soft); text-align: center; }
   #offline b { color: var(--text); font-size: 3.2vh; font-weight: 600; }
   #fs { position: fixed; left: 50%; top: 1.6vh; transform: translateX(-50%); padding: .8vh 1.2vw; border-radius: 1vh; border: 1px solid var(--line);
-    background: var(--panel); color: var(--soft); font-size: 1.6vh; }
+    background: var(--panel); color: var(--soft); font-size: 1.9vh; font-family: BC, sans-serif; font-weight: 600; letter-spacing: .12em; }
 </style>
 </head>
 <body>
@@ -103,10 +107,18 @@ function rr(x, y, w, h, r) {
   g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
   g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
 }
-function text(s, x, y, size, color, weight, align, font) {
-  g.font = (weight || 400) + " " + Math.round(size) + "px " + (font || "system-ui, -apple-system, Roboto, sans-serif");
+const FONT = "BC, 'Barlow Condensed', system-ui, sans-serif";
+for (const w of [500, 600, 700, 800]) { try { document.fonts.load(w + " 20px BC"); } catch (e) {} }
+function font(size, weight, spacing) {
+  g.font = (weight || 500) + " " + Math.round(size) + "px " + FONT;
+  if ("letterSpacing" in g) g.letterSpacing = (spacing ? Math.round(size * spacing) : 0) + "px";
+}
+function text(s, x, y, size, color, weight, align, fnt, spacing) {
+  if (fnt && fnt !== MONO) g.font = (weight || 500) + " " + Math.round(size) + "px " + fnt; else font(size, weight, spacing);
+  if (fnt === MONO) font(size, weight, spacing);
   g.fillStyle = color; g.textAlign = align || "left"; g.textBaseline = "middle"; g.fillText(s, x, y);
 }
+function tw(s, size, weight, spacing) { font(size, weight, spacing); return g.measureText(s).width; }
 const MONO = "ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace";
 
 function draw() {
@@ -116,23 +128,20 @@ function draw() {
   const u = Math.min(W / 2448, H / 1848) * 1.0;          // one unit: the Fold's open screen at 1
   const pad = 28 * u, P = pos();
   // ---------------------------------------------------------------- the top line
-  const topH = 120 * u;
+  const topH = 116 * u, cyT = topH / 2;
   const st = S.recording ? (S.overdub ? "ODUB" : "REC") : S.playing ? "PLAY" : "STOP";
   const stc = S.recording ? (S.overdub ? "#ff9a3c" : "#ff5a4e") : S.playing ? "#49d17d" : "#5c616c";
-  rr(pad, pad, 190 * u, 76 * u, 18 * u); g.fillStyle = stc; g.fill();
-  text(st, pad + 95 * u, pad + 39 * u, 40 * u, "#0b0c0e", 800, "center");
-  text(S.position, pad + 230 * u, pad + 40 * u, 66 * u, "#e8e9ec", 600, "left", MONO);
-  let x = pad + 230 * u + g.measureText(S.position).width + 44 * u;
-  text(S.bpm.toFixed(S.bpm % 1 ? 1 : 0) + " BPM", x, pad + 40 * u, 38 * u, "#a3a8b3", 500); x += g.measureText(S.bpm + " BPM").width + 34 * u;
-  text(S.sig[0] + "/" + S.sig[1], x, pad + 40 * u, 38 * u, "#a3a8b3", 500); x += 110 * u;
-  const badge = (label, on, color) => {
-    g.font = "700 " + Math.round(26 * u) + "px system-ui"; const w = g.measureText(label).width + 36 * u;
-    rr(x, pad + 18 * u, w, 44 * u, 12 * u); g.fillStyle = on ? color : "#1a1d22"; g.fill();
-    text(label, x + w / 2, pad + 40 * u, 26 * u, on ? "#0b0c0e" : "#5c616c", 700, "center"); x += w + 14 * u;
-  };
-  badge("LOOP", S.loop_on && S.loop, "#f2b33d");
-  if (S.song_mode) badge("SONG", true, "#b38cff");
-  text(S.song || "NEW PROJECT", W - pad, pad + 40 * u, 38 * u, S.song ? "#e8e9ec" : "#5c616c", 600, "right");
+  let w0 = tw(st, 44 * u, 800, 0.08) + 64 * u;
+  rr(pad, cyT - 32 * u, w0, 64 * u, 16 * u); g.fillStyle = stc; g.fill();
+  text(st, pad + w0 / 2, cyT + 2 * u, 44 * u, "#0b0c0e", 800, "center", null, 0.08);
+  let x = pad + w0 + 44 * u;
+  text(S.position, x, cyT + 2 * u, 68 * u, "#eceef1", 600, "left", null, 0.04); x += tw(S.position, 68 * u, 600, 0.04) + 44 * u;
+  const meta = S.bpm.toFixed(S.bpm % 1 ? 1 : 0) + " BPM · " + S.sig[0] + "/" + S.sig[1] + (S.loop_on && S.loop ? " · LOOP" : "") + (S.song_mode ? " · SONG" : "");
+  text(meta, x, cyT + 2 * u, 44 * u, "#9aa0ab", 500, "left", null, 0.04);
+  const right = (S.seq && S.page !== "tape" ? "PATTERN " + S.seq.pattern + "    " : "");
+  text(S.song || "NEW PROJECT", W - pad, cyT + 2 * u, 44 * u, S.song ? "#eceef1" : "#5c616c", 600, "right", null, 0.04);
+  if (right) text(right, W - pad - tw(S.song || "NEW PROJECT", 44 * u, 600, 0.04), cyT + 2 * u, 44 * u, "#9aa0ab", 500, "right", null, 0.04);
+  g.fillStyle = "#1e2127"; g.fillRect(0, topH, W, 2 * u);
 
   const footH = 250 * u;
   if (S.page === "seq" && SEQ && S.seq) {
@@ -195,7 +204,7 @@ function draw() {
     if (t.solo) chips.push(["S", "#f2b33d"]);
     if (t.stereo) chips.push(["ST", "#4fb3ff"]);
     let cx = pad + 92 * u;
-    for (const [lab, cc] of chips) { text(lab, cx, y + h * 0.3, 26 * u, cc, 800); g.font = "800 " + Math.round(26 * u) + "px system-ui"; cx += g.measureText(lab).width + 14 * u; }
+    for (const [lab, cc] of chips) { text(lab, cx, y + h * 0.3, 26 * u, cc, 800); font(26 * u, 800); cx += g.measureText(lab).width + 14 * u; }
     // volume bar, pan dot
     const vx = pad + 92 * u, vw = gutter - 140 * u, vy = y + h * 0.58;
     g.fillStyle = "#23262d"; g.fillRect(vx, vy, vw, 8 * u);
@@ -261,7 +270,7 @@ function draw() {
          pad + 250 * u, fy + 34 * u, 34 * u, "#a3a8b3", 600);
     text("IN  " + sel.input, pad, fy + 96 * u, 30 * u, "#7c818c", 500);
   }
-  if (S.message) {
+  if (S.message && S.page !== "sound") {
     rr(pad, fy + 140 * u, W - 2 * pad - sw - 50 * u, 76 * u, 14 * u); g.fillStyle = "#1d2027"; g.fill();
     text(S.message.slice(0, 90), pad + 24 * u, fy + 178 * u, 32 * u, "#e8e9ec", 600);
   }
@@ -293,8 +302,8 @@ function dial(cx, cy, r, k, u, accent) {
     rr(cx - r, cy - r * 0.55, r * 2, r * 1.1, 22 * u); g.fillStyle = "#16181d"; g.fill();
     g.strokeStyle = k.turning ? accent : "#2b2f37"; g.lineWidth = 3 * u; g.stroke();
     let t = String(k.text), size = 46 * u;
-    g.font = "800 " + Math.round(size) + "px system-ui";
-    while (g.measureText(t).width > r * 1.8 && size > 18 * u) { size -= 2 * u; g.font = "800 " + Math.round(size) + "px system-ui"; }
+    font(size, 800);
+    while (g.measureText(t).width > r * 1.8 && size > 18 * u) { size -= 2 * u; font(size, 800); }
     text(t, cx, cy, size, "#e8e9ec", 800, "center");
   } else {
     g.lineCap = "round";
@@ -311,72 +320,117 @@ function dial(cx, cy, r, k, u, accent) {
     g.beginPath(); g.moveTo(cx + Math.cos(ap) * (r - 40 * u), cy + Math.sin(ap) * (r - 40 * u));
     g.lineTo(cx + Math.cos(ap) * (r + 12 * u), cy + Math.sin(ap) * (r + 12 * u)); g.strokeStyle = "#e8e9ec"; g.lineWidth = 6 * u; g.stroke();
     let t = String(k.text), size = 44 * u;
-    g.font = "700 " + Math.round(size) + "px system-ui";
-    while (g.measureText(t).width > r * 1.4 && size > 18 * u) { size -= 2 * u; g.font = "700 " + Math.round(size) + "px system-ui"; }
+    font(size, 700);
+    while (g.measureText(t).width > r * 1.4 && size > 18 * u) { size -= 2 * u; font(size, 700); }
     text(t, cx, cy + 4 * u, size, "#e8e9ec", 700, "center");
   }
   text(k.n + "  " + k.label, cx, cy + r + 46 * u, 32 * u, k.turning ? accent : "#a3a8b3", 700, "center");
   if (k.lfo) text("LFO " + k.lfo.join("+"), cx, cy - r - 30 * u, 24 * u, "#b38cff", 800, "center");
 }
 
+function barLines(x0, x1, cy, h, frac, mod, accent, u) {
+  // the console's setting picture: thin vertical lines, tallest at the value (and an LFO's, if one moves it)
+  const n = 41, pk = frac * (n - 1), pm = mod === undefined ? null : mod * (n - 1), lw = Math.max(2, 4.8 * u);
+  for (let k = 0; k < n; k++) {
+    const x = x0 + k * (x1 - x0) / (n - 1);
+    const hh = Math.max(8 * u, h * 0.92 * Math.exp(-Math.abs(k - pk) / 2.4));
+    g.fillStyle = k === Math.round(pk) ? accent : "#3a3f48";
+    rr(x - lw / 2, cy - hh / 2, lw, hh, lw / 2); g.fill();
+    if (pm !== null) {
+      const hm = h * 0.7 * Math.exp(-Math.abs(k - pm) / 1.6);
+      if (hm > 12 * u) { g.globalAlpha = 0.9; g.fillStyle = "#b38cff"; rr(x - lw / 2, cy - hm / 2, lw, hm, lw / 2); g.fill(); g.globalAlpha = 1; }
+    }
+  }
+}
+
 function drawSound(u, pad, y0, y1, D) {
   const accent = D.synth ? "#4fb3ff" : "#f2b33d";
-  text(D.title, pad, y0 + 30 * u, 50 * u, accent, 800);
-  g.font = "800 " + Math.round(50 * u) + "px system-ui"; let x = pad + g.measureText(D.title).width + 30 * u;
-  if (D.voice) { text(D.voice, x, y0 + 32 * u, 36 * u, "#e8e9ec", 700); g.font = "700 " + Math.round(36 * u) + "px system-ui"; x += g.measureText(D.voice).width + 30 * u; }
-  if (D.octave) text("OCT " + (D.octave > 0 ? "+" : "") + D.octave, W - pad, y0 + 32 * u, 32 * u, "#a3a8b3", 700, "right");
-  // the page tabs
-  let tx = pad, ty = y0 + 84 * u;
+  // the title: what it is, its name, the drum (big), and the page
+  const tY = y0 + 40 * u;
+  text("INSTRUMENT " + (D.slot || "") + " · " + (D.synth ? "SYNTH" : "DRUM MACHINE"), pad, tY, 30 * u, "#5c616c", 600, "left", null, 0.22);
+  text(D.title, pad, tY + 110 * u, 152 * u, accent, 800, "left", null, 0.01);
+  if (D.voice) text(D.voice, pad + tw(D.title, 152 * u, 800, 0.01) + 36 * u, tY + 122 * u, 88 * u, "#eceef1", 500);
+  const pageName = D.pages[D.tab] || "";
+  text("PAGE " + (D.tab + 1) + " OF " + D.pages.length + (D.octave ? "   ·   OCT " + (D.octave > 0 ? "+" : "") + D.octave : ""),
+       W - pad, tY + 72 * u, 30 * u, "#5c616c", 600, "right", null, 0.22);
+  text(pageName, W - pad, tY + 128 * u, 80 * u, "#eceef1", 700, "right");
+  // the tabs
+  const tabY = tY + 230 * u;
+  let tx = pad;
   D.pages.forEach((name, i) => {
-    g.font = "700 " + Math.round(26 * u) + "px system-ui"; const w = g.measureText(name).width + 40 * u;
-    if (tx + w > W - pad) { tx = pad; ty += 58 * u; }
-    rr(tx, ty, w, 46 * u, 23 * u); g.fillStyle = i === D.tab ? accent : "#16181d"; g.fill();
-    text(name, tx + w / 2, ty + 23 * u, 26 * u, i === D.tab ? "#0b0c0e" : "#7c818c", 700, "center");
-    tx += w + 12 * u;
+    const w = tw(name, 34 * u, 600, 0.14);
+    text(name, tx, tabY, 34 * u, i === D.tab ? "#eceef1" : "#5c616c", 600, "left", null, 0.14);
+    if (i === D.tab) { g.fillStyle = accent; g.fillRect(tx, tabY + 34 * u, w, 6 * u); }
+    tx += w + 52 * u;
   });
-  const top = ty + 80 * u, leftW = (W - 2 * pad) * 0.30;
-  // the picture, and a drum machine's pads
+  g.fillStyle = "#1e2127"; g.fillRect(0, tabY + 40 * u, W, 2 * u);
+  // the 8 settings, as the knobs: 1-4 on top, 5-8 under them
+  const gy0 = tabY + 84 * u, gy1 = y1 - 140 * u, gap = 28 * u;
+  const cwid = (W - 2 * pad - 3 * gap) / 4, chei = (gy1 - gy0 - gap) / 2;
+  for (let i = 0; i < 8; i++) {
+    const k = D.knobs[i], c = i % 4, r = Math.floor(i / 4);
+    const x = pad + c * (cwid + gap), y = gy0 + r * (chei + gap);
+    rr(x, y, cwid, chei, 28 * u); g.fillStyle = k && k.turning ? "#17191e" : "#111317"; g.fill();
+    if (!k) { text((i + 1) + "  —", x + 36 * u, y + 64 * u, 38 * u, "#2f333a", 600, "left", null, 0.14); continue; }
+    if (k.turning) { g.save(); rr(x, y, cwid, chei, 28 * u); g.clip(); g.fillStyle = accent; g.fillRect(x, y, 6 * u, chei); g.restore(); }
+    text(String(k.n), x + 36 * u, y + 64 * u, 38 * u, "#5c616c", 600);
+    text(k.label, x + 36 * u + tw(String(k.n), 38 * u, 600) + 20 * u, y + 64 * u, 38 * u, "#9aa0ab", 600, "left", null, 0.14);
+    if (k.choice) {
+      let t = String(k.text), size = 116 * u;
+      while (tw(t, size, 700) > cwid - 72 * u && size > 40 * u) size -= 4 * u;
+      text(t, x + 36 * u, y + chei * 0.52, size, k.turning ? accent : "#eceef1", 700);
+      const n = Math.max(1, k.options || 1), pw = (cwid - 72 * u - (n - 1) * 12 * u) / n;
+      if (k.options > 1 && pw > 6 * u) for (let j = 0; j < n; j++) {
+        rr(x + 36 * u + j * (pw + 12 * u), y + chei - 56 * u, pw, 20 * u, 6 * u);
+        g.fillStyle = j === k.at ? accent : "#262a31"; g.fill();
+      }
+    } else {
+      let t = String(k.text), size = 108 * u;
+      while (tw(t, size, 700) > cwid * 0.55 && size > 40 * u) size -= 4 * u;
+      text(t, x + cwid - 36 * u, y + 80 * u, size, k.turning ? accent : "#eceef1", 700, "right");
+      if (k.lfo) text("LFO " + k.lfo.join("+"), x + cwid - 36 * u, y + 158 * u, 26 * u, "#b38cff", 700, "right", null, 0.18);
+      const by0 = y + 180 * u, by1 = y + chei - 30 * u;
+      barLines(x + 44 * u, x + cwid - 44 * u, (by0 + by1) / 2, by1 - by0, k.frac, k.mod, accent, u);
+    }
+  }
+  // the bottom: a small picture, a drum machine's pads, the last message
+  const fy = H - 250 * u + 10 * u, sh = 250 * u - 30 * u;
+  let bx = pad;
   const img = instImage(D.id);
-  let py = top;
   if (img) {
-    const iw = leftW, ih = iw / 2;
-    rr(pad, py, iw, ih, 18 * u); g.fillStyle = "#101216"; g.fill();
-    g.imageSmoothingEnabled = false; g.drawImage(img, pad + 12 * u, py + 6 * u, iw - 24 * u, ih - 12 * u);
-    py += ih + 30 * u;
+    const ih = sh * 0.68, iw = ih * 2;
+    rr(bx, fy + sh - ih, iw, ih, 20 * u); g.fillStyle = "#101216"; g.fill();
+    g.strokeStyle = "#1e2127"; g.lineWidth = 2 * u; g.stroke();
+    g.imageSmoothingEnabled = false; g.drawImage(img, bx + 8 * u, fy + sh - ih + 4 * u, iw - 16 * u, ih - 8 * u);
+    bx += iw + 44 * u;
   }
   if (D.pads && D.pads.length) {
-    const n = D.pads.length, cols = 4, rowsN = Math.ceil(n / cols);
-    const cw = leftW / cols, ch = Math.min(cw * 0.8, (y1 - py) / rowsN);
+    const cols = 4, rowsN = Math.ceil(D.pads.length / cols), pw = 192 * u, ph = Math.min(68 * u, (sh - (rowsN - 1) * 12 * u) / rowsN);
     D.pads.forEach((p, i) => {
-      const c = i % cols, r = rowsN - 1 - Math.floor(i / cols);       // bottom row first, as on the Move
-      const x = pad + c * cw + 6 * u, y = py + r * ch + 6 * u, w = cw - 12 * u, h = ch - 12 * u;
+      const c = i % cols, r = rowsN - 1 - Math.floor(i / cols);
+      const x = bx + c * (pw + 12 * u), y = fy + sh - rowsN * (ph + 12 * u) + 12 * u + r * (ph + 12 * u);
       const flash = Math.max(0, 1 - p.hit / 0.25);
-      rr(x, y, w, h, 16 * u); g.fillStyle = p.on ? "#2a2416" : "#15171c"; g.fill();
+      rr(x, y, pw, ph, 14 * u); g.fillStyle = "#15171c"; g.fill();
       if (flash > 0) { g.globalAlpha = flash; g.fillStyle = accent; g.fill(); g.globalAlpha = 1; }
       if (p.on) { g.strokeStyle = accent; g.lineWidth = 4 * u; g.stroke(); }
-      let t = p.name, size = 26 * u; g.font = "700 " + Math.round(size) + "px system-ui";
-      while (g.measureText(t).width > w - 16 * u && size > 14 * u) { size -= 1 * u; g.font = "700 " + Math.round(size) + "px system-ui"; }
-      text(t, x + w / 2, y + h / 2, size, flash > 0.3 ? "#0b0c0e" : p.on ? "#e8e9ec" : "#7c818c", 700, "center");
+      let t = p.name, size = 28 * u;
+      while (tw(t, size, 600, 0.08) > pw - 20 * u && size > 14 * u) size -= 1 * u;
+      text(t, x + pw / 2, y + ph / 2 + 1 * u, size, flash > 0.3 ? "#0b0c0e" : p.on ? "#eceef1" : "#5c616c", 600, "center", null, 0.08);
     });
+    bx += cols * (pw + 12 * u) + 32 * u;
   }
-  // the 8 knobs: 1-4 on top, 5-8 under them (as on the Move)
-  const X0 = pad + leftW + 60 * u, X1 = W - pad, cellW = (X1 - X0) / 4, cellH = (y1 - top) / 2;
-  const r = Math.min(cellW * 0.33, cellH * 0.30);
-  D.knobs.forEach((k, i) => {
-    const c = i % 4, row = Math.floor(i / 4);
-    dial(X0 + c * cellW + cellW / 2, top + row * cellH + cellH * 0.45, r, k, u, accent);
-  });
+  if (S.message) text(S.message.slice(0, 60), bx, fy + sh - 34 * u, 40 * u, "#9aa0ab", 500, "left", null, 0.04);
 }
 
 // ------------------------------------------------------------------ the sequencer
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 function seqHeader(u, pad, y, title, sub, accent) {
   text(title, pad, y + 30 * u, 46 * u, accent, 800);
-  g.font = "800 " + Math.round(46 * u) + "px system-ui"; const w = g.measureText(title).width;
+  font(46 * u, 800); const w = g.measureText(title).width;
   text(sub, pad + w + 30 * u, y + 32 * u, 32 * u, "#a3a8b3", 600);
-  const L = S.seq, pat = "PATTERN " + L.pattern + (L.queued ? "  →  " + L.queued : "");
-  text(pat, W - pad, y + 32 * u, 36 * u, L.queued ? "#f2b33d" : "#e8e9ec", 700, "right");
-  if (L.rec) { g.font = "700 " + Math.round(36 * u) + "px system-ui"; const pw = g.measureText(pat).width;
+  const L = S.seq, pat = L.queued ? "NEXT: PATTERN " + L.queued : "";     // (the top line has the pattern)
+  if (pat) text(pat, W - pad, y + 32 * u, 36 * u, "#f2b33d", 700, "right");
+  if (L.rec) { font(36 * u, 700); const pw = g.measureText(pat).width;
     text("● REC", W - pad - pw - 40 * u, y + 32 * u, 32 * u, "#ff5a4e", 800, "right"); }
 }
 

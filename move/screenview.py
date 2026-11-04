@@ -190,8 +190,16 @@ def sound_data(T):
     for i, p in enumerate(params):
         kind = d.kind(p)
         k = {"n": i + 1, "label": d.label(p), "text": d.value_text(p), "choice": kind in CHOICE_KINDS,
+             "options": 0, "at": 0,
              "frac": round(max(0.0, min(1.0, d.fraction(p))), 4),
              "turning": now - T.drumpage.edited.get(i + 1, 0.0) < 1.0}
+        if k["choice"]:
+            try:
+                top = int(lfo.top(d, p))
+                if 1 <= top < 24:
+                    k["options"], k["at"] = top + 1, int(d.get_param(p))
+            except Exception:                            # noqa: BLE001
+                pass
         for j, l in enumerate(lfos):
             if l.get("dest") == p:
                 k.setdefault("lfo", []).append(j + 1)
@@ -202,7 +210,7 @@ def sound_data(T):
                     except Exception:                    # noqa: BLE001
                         pass
         knobs.append(k)
-    out = {"title": title, "id": mid, "synth": synth, "pages": [n for n, _ in pages], "tab": tab,
+    out = {"title": title, "id": mid, "synth": synth, "slot": e.slot + 1, "pages": [n for n, _ in pages], "tab": tab,
            "knobs": knobs, "octave": getattr(T, "octave", 0)}
     if not synth:
         names = list(getattr(d, "lane_names", None) or [])
@@ -374,6 +382,12 @@ class _Handler(BaseHTTPRequestHandler):
                 global _asked
                 _asked = time.monotonic()
                 self._send(json.dumps(state(), separators=(",", ":")).encode(), "application/json")
+            elif path.startswith("/fonts/"):
+                name = os.path.basename(path)
+                if name.endswith(".ttf"):
+                    self._send(open(os.path.join(HERE, "fonts", name), "rb").read(), "font/ttf", cache=True)
+                else:
+                    self.send_error(404)
             elif path.startswith("/img/"):
                 self._send(image(path.split("/")[2]), "text/plain", cache=True)
             elif path.startswith("/seq/"):

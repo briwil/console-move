@@ -175,11 +175,11 @@ def one_inst(mid):
     return 0
 
 
-def sweep(mid, key):
+def sweep(mid, key, mode=""):
     """fxprobe.py sweep noisemaker voices: what the module says about one setting, then every value of it in
     turn while notes play (in a child process: a crash shows the value it was on)."""
     if os.environ.get("FXPROBE_CHILD") != "1":
-        r = subprocess.run([sys.executable, os.path.abspath(__file__), "sweep", mid, key],
+        r = subprocess.run([sys.executable, os.path.abspath(__file__), "sweep", mid, key] + ([mode] if mode else []),
                            env=dict(os.environ, FXPROBE_CHILD="1"), capture_output=True, text=True, timeout=300)
         out = (r.stdout + r.stderr).strip()
         print(out)
@@ -206,15 +206,31 @@ def sweep(mid, key):
             values.append(round(v, 4))
             v += step
     out = np.zeros((128, 2), np.float32)
-    for v in values:
-        print("value %s ..." % v, end=" ", flush=True)
-        inst.set(key, v)
-        for b in range(60):
-            if b % 6 == 0:
-                inst.midi(0x90, 48 + b % 24, 100)
-            if b % 6 == 3:
-                inst.midi(0x80, 48 + (b - 3) % 24, 0)
-            inst.render(out)
+    # mode "held": notes still sounding as it changes (as when you turn the knob while playing);
+    # "quiet": the same, but every note let go just before (what Console could do for this setting)
+    print("(mode: %s)" % (mode or "notes let go between"), flush=True)
+    for rnd in range(3 if mode else 1):
+        for v in (values if rnd % 2 == 0 else values[::-1]):
+            print("value %s ..." % v, end=" ", flush=True)
+            if mode:
+                for n in range(48, 54):
+                    inst.midi(0x90, n, 100)                  # a chord held
+                inst.render(out)
+            if mode == "quiet":
+                inst.midi(0xB0, 123, 0)
+                for n in range(128):
+                    inst.midi(0x80, n, 0)
+            inst.set(key, v)
+            for b in range(60):
+                if b % 6 == 0:
+                    inst.midi(0x90, 48 + b % 24, 100)
+                if b % 6 == 3 and not mode:
+                    inst.midi(0x80, 48 + (b - 3) % 24, 0)
+                inst.render(out)
+            if mode:
+                for n in range(128):
+                    if n % 3 == 0:
+                        inst.midi(0x80, n, 0)
         print("ok (it says %r)" % inst.get(key), flush=True)
 
 
@@ -231,7 +247,7 @@ def main():
     if len(sys.argv) > 2 and sys.argv[1] == "--inst":
         sys.exit(one_inst(sys.argv[2]))
     if len(sys.argv) > 3 and sys.argv[1] == "sweep":
-        return sweep(sys.argv[2], sys.argv[3])
+        return sweep(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "")
     insts = len(sys.argv) > 1 and sys.argv[1] == "instruments"
     if insts:
         import drums

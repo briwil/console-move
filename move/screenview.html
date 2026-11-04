@@ -31,6 +31,7 @@
 "use strict";
 const cv = document.getElementById("c"), g = cv.getContext("2d");
 const COLORS = ["#f2b33d", "#4fb3ff", "#ff6b9a", "#49d17d", "#b38cff", "#ff9a3c", "#36d6c8", "#e6e36a"];
+let SEQ = null, SEQ_ID = "", seqWant = "";
 let S = null, got = 0, waves = {}, want = {}, fails = 0, dpr = 1, W = 0, H = 0, screenImg = null, screenKey = "";
 
 function resize() {
@@ -55,6 +56,7 @@ async function poll() {
     S = await r.json(); got = performance.now(); fails = 0;
     document.getElementById("offline").style.display = "none";
     for (const t of S.tracks) for (const id of t.waves) if (!waves[id] && !want[id]) loadWave(id);
+    if (S.page === "seq" && S.seq_id && S.seq_id !== SEQ_ID && seqWant !== S.seq_id) loadSeq(S.seq_id);
   } catch (e) {
     if (++fails > 8) document.getElementById("offline").style.display = "flex";
   }
@@ -70,6 +72,11 @@ async function loadWave(id) {
     waves[id] = buf;
   } catch (e) {}
   delete want[id];
+}
+async function loadSeq(id) {
+  seqWant = id;
+  try { const r = await fetch("/seq/" + id); if (r.ok) { SEQ = await r.json(); SEQ_ID = id; } } catch (e) {}
+  seqWant = "";
 }
 poll();
 
@@ -113,6 +120,10 @@ function draw() {
   if (S.song_mode) badge("SONG", true, "#b38cff");
   text(S.song || "NEW PROJECT", W - pad, pad + 40 * u, 38 * u, S.song ? "#e8e9ec" : "#5c616c", 600, "right");
 
+  const footH = 250 * u;
+  if (S.page === "seq" && SEQ && S.seq) {
+    drawSeq(u, pad, topH + 6 * u, H - footH - 16 * u);
+  } else {
   // ---------------------------------------------------------------- the whole tape, small
   const ovY = topH + 6 * u, ovH = 64 * u, gutter = 300 * u, X0 = pad + gutter, X1 = W - pad;
   const span = (S.zoom || 4) * S.bar, ppb = (X1 - X0) / span, mid = X0 + (X1 - X0) / 2;
@@ -133,7 +144,7 @@ function draw() {
   text("TAPE", pad + 4 * u, ovY + ovH / 2, 26 * u, "#5c616c", 700);
 
   // ---------------------------------------------------------------- the 8 tracks
-  const footH = 250 * u, tY = ovY + ovH + 22 * u, tH = H - footH - tY - 10 * u, rowH = tH / 8;
+  const tY = ovY + ovH + 22 * u, tH = H - footH - tY - 10 * u, rowH = tH / 8;
   const rulerH = 40 * u;
   // bar numbers and grid
   g.save(); g.beginPath(); g.rect(X0, tY - 4 * u, X1 - X0, tH + 8 * u); g.clip();
@@ -208,6 +219,7 @@ function draw() {
   g.fillRect(mid - 2 * u, tY, 4 * u, tH);
   g.beginPath(); g.moveTo(mid - 14 * u, tY); g.lineTo(mid + 14 * u, tY); g.lineTo(mid, tY + 18 * u); g.fill();
 
+  }
   // ---------------------------------------------------------------- the bottom: the Move's own screen, the message
   const fy = H - footH + 10 * u, sh = footH - 30 * u, sw = sh * 2;
   rr(W - pad - sw - 16 * u, fy - 8 * u, sw + 16 * u, sh + 16 * u, 14 * u); g.fillStyle = "#131519"; g.fill();
@@ -225,7 +237,7 @@ function draw() {
     g.imageSmoothingEnabled = false;
     if (screenImg) g.drawImage(screenImg, W - pad - sw - 8 * u, fy, sw, sh);
   }
-  const sel = S.tracks.find(t => t.selected);
+  const sel = S.page === "seq" ? null : S.tracks.find(t => t.selected);     // (the sequencer: its own header says it)
   if (sel) {
     const pan = Math.abs(sel.pan) < 0.05 ? "C" : (sel.pan < 0 ? "L" : "R") + Math.round(Math.abs(sel.pan) * 100);
     text("TRACK " + sel.n, pad, fy + 34 * u, 44 * u, COLORS[sel.n - 1], 800);
@@ -239,6 +251,113 @@ function draw() {
   }
 }
 requestAnimationFrame(draw);
+
+// ------------------------------------------------------------------ the sequencer
+const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+function seqHeader(u, pad, y, title, sub, accent) {
+  text(title, pad, y + 30 * u, 46 * u, accent, 800);
+  g.font = "800 " + Math.round(46 * u) + "px system-ui"; const w = g.measureText(title).width;
+  text(sub, pad + w + 30 * u, y + 32 * u, 32 * u, "#a3a8b3", 600);
+  const L = S.seq, pat = "PATTERN " + L.pattern + (L.queued ? "  →  " + L.queued : "");
+  text(pat, W - pad, y + 32 * u, 36 * u, L.queued ? "#f2b33d" : "#e8e9ec", 700, "right");
+  if (L.rec) { g.font = "700 " + Math.round(36 * u) + "px system-ui"; const pw = g.measureText(pat).width;
+    text("● REC", W - pad - pw - 40 * u, y + 32 * u, 32 * u, "#ff5a4e", 800, "right"); }
+}
+
+function drawSeq(u, pad, y0, y1) {
+  const L = S.seq;
+  if (SEQ.kind === "drums") drawDrums(u, pad, y0, y1, L); else drawNotes(u, pad, y0, y1, L);
+}
+
+function drawDrums(u, pad, y0, y1, L) {
+  const lanes = SEQ.lanes, sel = Math.min(L.lane || 0, lanes.length - 1);
+  seqHeader(u, pad, y0, SEQ.title, lanes[sel] ? lanes[sel].name : "", "#f2b33d");
+  const top = y0 + 80 * u, gutter = 300 * u, rightW = 150 * u, X0 = pad + gutter, X1 = W - pad - rightW;
+  const cols = Math.max(16, ...lanes.map(l => l.length));
+  const cw = (X1 - X0) / cols, rh = Math.min(120 * u, (y1 - top) / lanes.length);
+  // step numbers along the top
+  for (let i = 0; i < cols; i++) if (i % 4 === 0) text(String(i + 1), X0 + i * cw + 6 * u, top - 14 * u, 22 * u, "#5c616c", 600, "left", MONO);
+  lanes.forEach((ln, li) => {
+    const y = top + li * rh, h = rh - 8 * u, col = COLORS[li % COLORS.length], isSel = li === sel;
+    rr(pad, y, gutter - 22 * u, h, 14 * u); g.fillStyle = isSel ? "#1d2027" : "#131519"; g.fill();
+    if (isSel) { g.strokeStyle = col; g.lineWidth = 3 * u; g.stroke(); }
+    text(ln.name.slice(0, 14), pad + 20 * u, y + h / 2, Math.min(32 * u, h * 0.42), isSel ? "#e8e9ec" : "#a3a8b3", 700);
+    text(ln.rate + "  " + ln.length + (ln.hits ? "  E" + ln.hits : ""), X1 + 18 * u, y + h / 2, 24 * u, "#5c616c", 600, "left", MONO);
+    // the 16 the buttons show, for the picked lane
+    if (isSel) { const a = X0 + L.first * cw, w = Math.min(16, ln.length - L.first) * cw;
+      g.fillStyle = "rgba(255,255,255,.05)"; g.fillRect(a, y - 3 * u, w, h + 6 * u); }
+    const at = L.at ? L.at[li] : null;
+    for (let i = 0; i < ln.length; i++) {
+      const s = ln.steps[i], x = X0 + i * cw, gap = Math.max(2 * u, cw * 0.1);
+      const bx = x + gap / 2, bw = cw - gap, by = y, bh = h;
+      if (ln.group && i % ln.group === 0 && i) { g.fillStyle = "#2b2f37"; g.fillRect(x - 1 * u, y - 4 * u, 2 * u, h + 8 * u); }
+      rr(bx, by, bw, bh, Math.min(10 * u, bw / 4));
+      if (s[0]) {
+        const v = s[1] ? s[1] / 127 : 0.75;
+        g.globalAlpha = 0.35 + 0.65 * v; g.fillStyle = col; g.fill(); g.globalAlpha = 1;
+        if (!s[1]) text("?", bx + bw / 2, by + bh / 2, Math.min(bh, bw) * 0.5, "#0b0c0e", 800, "center");
+        // velocity as a bar inside, ratchets as dots, chance and locks as marks
+        if (s[3] !== 1) { const n = s[3] || 0, dots = n ? n : 3;
+          for (let k = 0; k < dots; k++) { g.fillStyle = "#0b0c0e"; g.beginPath();
+            g.arc(bx + bw * (k + 1) / (dots + 1), by + bh - 12 * u, Math.min(5 * u, bw / (dots * 3)), 0, 7); g.fill(); }
+          if (!n) text("?", bx + bw / 2, by + bh - 30 * u, 18 * u, "#0b0c0e", 800, "center"); }
+      } else { g.fillStyle = "#15171c"; g.fill(); }
+      if (s[2]) { g.fillStyle = s[0] ? "#0b0c0e" : "#5c616c"; g.beginPath(); g.moveTo(bx + bw, by); g.lineTo(bx + bw - Math.min(22 * u, bw / 2), by);
+        g.lineTo(bx + bw, by + Math.min(22 * u, bw / 2)); g.fill();
+        if (bw > 60 * u) text(SEQ.chances[s[2]], bx + 8 * u, by + 16 * u, 18 * u, s[0] ? "#0b0c0e" : "#7c818c", 800); }
+      if (s[4] || s[5]) { g.fillStyle = s[0] ? "#0b0c0e" : col; g.beginPath(); const cx = bx + 12 * u, cy = by + bh - 12 * u, r = Math.min(7 * u, bw / 5);
+        g.moveTo(cx, cy - r); g.lineTo(cx + r, cy); g.lineTo(cx, cy + r); g.lineTo(cx - r, cy); g.fill(); }
+      if (isSel && (L.selected || []).includes(i)) { rr(bx - 3 * u, by - 3 * u, bw + 6 * u, bh + 6 * u, 12 * u); g.strokeStyle = "#e8e9ec"; g.lineWidth = 3 * u; g.stroke(); }
+      if (at === i) { rr(bx - 2 * u, by - 2 * u, bw + 4 * u, bh + 4 * u, 12 * u); g.strokeStyle = "#ffffff"; g.lineWidth = 4 * u; g.stroke(); }
+    }
+  });
+  text("●  velocity = brightness      ◆  locks / step settings      ◤  chance      • • •  ratchet", pad, y1 - 4 * u, 22 * u, "#5c616c", 500);
+}
+
+function drawNotes(u, pad, y0, y1, L) {
+  seqHeader(u, pad, y0, SEQ.title, SEQ.root + " " + SEQ.scale + "   " + SEQ.rate + "   " + SEQ.length + " STEPS" + (SEQ.per_note ? "   PER NOTE" : ""), "#4fb3ff");
+  const notes = SEQ.notes, shown = L.shown || [];
+  let lo = Math.min(...shown, ...notes.map(n => n[1])), hi = Math.max(...shown, ...notes.map(n => n[1]));
+  if (!isFinite(lo)) { lo = 48; hi = 72; }
+  lo = Math.max(0, lo - 2); hi = Math.min(127, hi + 2);
+  while (hi - lo < 24) { if (lo > 0) lo--; if (hi - lo < 24 && hi < 127) hi++; if (lo === 0 && hi === 127) break; }
+  const rows = hi - lo + 1, top = y0 + 80 * u, keysW = 160 * u, X0 = pad + keysW, X1 = W - pad;
+  const cols = Math.max(16, SEQ.length), cw = (X1 - X0) / cols, rh = (y1 - top) / rows;
+  const inScale = n => SEQ.degrees.includes(n % 12), black = n => [1, 3, 6, 8, 10].includes(n % 12);
+  const sMin = Math.min(...shown), sMax = Math.max(...shown);
+  for (let n = lo; n <= hi; n++) {
+    const y = top + (hi - n) * rh;
+    g.fillStyle = inScale(n) ? (n >= sMin && n <= sMax ? "#171a20" : "#121418") : "#0d0e11"; g.fillRect(X0, y, X1 - X0, rh - 1 * u);
+    g.fillStyle = black(n) ? "#1f2228" : "#d6d8dc"; g.fillRect(pad, y, keysW - 50 * u, rh - 1 * u);
+    if (L.lane === n) { g.fillStyle = "#4fb3ff"; g.fillRect(pad + keysW - 46 * u, y, 8 * u, rh - 1 * u); }
+    if (n % 12 === 0 || rh > 34 * u) text(NAMES[n % 12] + (Math.floor(n / 12) - 1), pad + keysW - 56 * u, y + rh / 2, Math.min(24 * u, rh * 0.7),
+      black(n) ? "#a3a8b3" : "#0b0c0e", 700, "right");
+    if (shown.includes(n)) { g.fillStyle = "#4fb3ff"; g.fillRect(X0 - 8 * u, y + 2 * u, 5 * u, rh - 5 * u); }
+  }
+  // beats
+  const spb = SEQ.spb || 4;
+  for (let i = 0; i <= cols; i++) {
+    const x = X0 + i * cw, beat = i % spb === 0, bar = i % Math.round(spb * (SEQ.bar_beats || 4)) === 0;
+    g.fillStyle = bar ? "#3a3f48" : beat ? "#262a31" : "#16181d"; g.fillRect(x, top, bar ? 2 * u : 1 * u, y1 - top);
+    if (bar && i < cols) text(String(i / Math.round(spb * (SEQ.bar_beats || 4)) + 1), x + 6 * u, top - 14 * u, 22 * u, "#5c616c", 600, "left", MONO);
+  }
+  g.fillStyle = "rgba(255,255,255,.04)"; g.fillRect(X0 + L.first * cw, top, Math.min(16, SEQ.length - L.first) * cw, y1 - top);
+  if (SEQ.length < cols) { g.fillStyle = "rgba(0,0,0,.5)"; g.fillRect(X0 + SEQ.length * cw, top, (cols - SEQ.length) * cw, y1 - top); }
+  for (const [step, note, len, vel, chance, ratchet, locks, comp] of notes) {
+    if (note < lo || note > hi) continue;
+    const x = X0 + step * cw + 2 * u, y = top + (hi - note) * rh + 2 * u, w = Math.max(6 * u, len * cw - 4 * u), h = Math.max(4 * u, rh - 5 * u);
+    rr(x, y, w, h, Math.min(8 * u, h / 3));
+    g.globalAlpha = 0.4 + 0.6 * (vel ? vel / 127 : 0.75); g.fillStyle = L.lane === note || L.lane === null || L.lane === undefined ? "#4fb3ff" : "#4fb3ff66"; g.fill(); g.globalAlpha = 1;
+    if ((L.selected || []).includes(step) || (L.down || []).includes(step)) { g.strokeStyle = "#e8e9ec"; g.lineWidth = 3 * u; g.stroke(); }
+    if (h > 18 * u && w > 30 * u) {
+      let mark = (chance ? "◤" : "") + (ratchet !== 1 ? "×" + (ratchet || "?") : "") + (locks || comp ? "◆" : "");
+      if (mark) text(mark, x + 6 * u, y + h / 2, Math.min(20 * u, h * 0.7), "#0b0c0e", 800);
+    }
+  }
+  if (L.at !== null && L.at !== undefined) {
+    const x = X0 + (L.at + 0.5) * cw; g.fillStyle = "#e8e9ec"; g.fillRect(x - 2 * u, top, 4 * u, y1 - top);
+  }
+}
 </script>
 </body>
 </html>

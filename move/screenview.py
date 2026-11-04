@@ -22,14 +22,15 @@ PORT = int(os.environ.get("CONSOLE_SCREEN_PORT", "8080"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 _T = None                 # console.Transport
+_M = None                 # the project menu (a menu open: the tape view)
 _frame = None             # the Move's own screen, the latest one drawn (screen.Frame)
 _server = None
 
 
-def start(T):
+def start(T, menu=None):
     """Called by app.py once Console is running."""
-    global _T, _server
-    _T = T
+    global _T, _M, _server
+    _T, _M = T, menu
     try:
         _server = ThreadingHTTPServer(("", PORT), _Handler)
     except OSError as e:
@@ -105,7 +106,20 @@ def state():
             "waves": [_wave_id(c) for c in chans],
         })
     song = getattr(T, "song", None)
+    page = _page(T)
+    seq_id, seq_live = "", None
+    if page == "seq":
+        try:
+            static, seq_live = seq_data(T)
+            body = json.dumps(static, separators=(",", ":")).encode()
+            seq_id = "%08x" % zlib.crc32(body)
+            _seq_cache[seq_id] = body
+            while len(_seq_cache) > 4:
+                _seq_cache.pop(next(iter(_seq_cache)))
+        except Exception as ex:                          # noqa: BLE001
+            page, seq_live = "tape", {"error": str(ex)[:80]}
     out = {
+        "page": page, "seq_id": seq_id, "seq": seq_live,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),
@@ -123,6 +137,78 @@ def state():
 
 
 _wave_cache = {}          # channel -> (crc, bytes)
+_seq_cache = {}           # tag -> the sequencer's pattern as JSON (the page asks for it when the tag changes)
+
+
+def _page(T):
+    """Which view the big screen shows: the sequencer when the Move is on it, else the tape."""
+    m = _M
+    if m is not None and (m.open or getattr(getattr(m, "kits", None), "open", False)):
+        return "tape"
+    if getattr(T, "fx_page", None):
+        return "tape"
+    if getattr(T, "seq_page", False) and T.engine and T.engine.drums and T.engine.slot is not None:
+        return "seq"
+    return "tape"
+
+
+def seq_data(T):
+    """The shown instrument's pattern (what doesn't change while it plays), and what does (positions, the
+    lane / steps picked)."""
+    import sequencer
+    e = T.engine
+    seq = e.seq
+    mid = e.slots[e.slot]
+    try:
+        import instpage
+        title = dict(instpage.machines()).get(mid) or mid
+    except Exception:                                    # noqa: BLE001
+        title = mid
+    playing = bool(e.playing)
+    fpb = e.frames_per_beat()
+    live = {"pattern": seq.current + 1, "queued": (seq.queued + 1) if seq.queued is not None else None,
+            "rec": bool(getattr(T, "live_rec", False))}
+    if T.synth_shown():
+        import notes
+        ms = T.msyn
+        pat = seq.pattern
+        nl = []
+        for step, d in sorted(pat.notes.items()):
+            for note, n in sorted(d.items()):
+                nl.append([step, note, n.length, n.vel, n.chance, n.ratchet, len(n.locks), len(n.comp)])
+        shown = seq.shown_notes()
+        static = {"kind": "notes", "title": title, "length": pat.length,
+                  "rate": sequencer.RATES[pat.rate][0], "notes": nl,
+                  "lane_len": {str(k): v for k, v in pat.lane_len.items()},
+                  "root": notes.NAMES[seq.root], "scale": notes.SCALES[seq.scale][0],
+                  "degrees": [(seq.root + d) % 12 for d in seq.degrees()],
+                  "per_note": bool(getattr(seq, "move_type", 0)), "bar_beats": seq.bar_beats,
+                  "spb": pat.steps_per_beat()}
+        live.update({"shown": shown, "lane": ms.lane, "first": ms.first(), "page_len": ms.length(),
+                     "down": sorted(ms.down), "selected": sorted(ms.selected),
+                     "at": ms.playing_step() if playing else None})
+        return static, live
+    ms = T.mseq
+    d = e.drums
+    n = max(1, min(sequencer.MAX_LANES, getattr(d, "lanes", 8)))
+    names = list(getattr(d, "lane_names", None) or [])
+    lanes = []
+    for li in range(n):
+        ln = seq.pattern.lanes[li]
+        steps = [[1 if st.on else 0, st.vel, st.chance, st.ratchet, len(st.locks), len(st.comp)]
+                 for st in ln.steps[:ln.length]]
+        lanes.append({"name": names[li] if li < len(names) else "LANE %d" % (li + 1), "length": ln.length,
+                      "rate": sequencer.RATES[ln.rate][0], "spb": ln.steps_per_beat(), "hits": ln.hits,
+                      "group": sequencer.group_steps(ln.steps_per_beat(), tuple(getattr(e, "time_sig", (4, 4)))),
+                      "steps": steps})
+    static = {"kind": "drums", "title": title, "lanes": lanes, "chances": sequencer.CHANCES}
+    try:
+        at = seq.position(e._heard_frame(), fpb) if playing else None
+    except Exception:                                    # noqa: BLE001
+        at = None
+    live.update({"lane": T.seqp.lane, "first": ms.first(), "held": ms.held, "selected": list(ms.selected),
+                 "at": at})
+    return static, live
 
 
 def _wave_id(c):
@@ -181,6 +267,12 @@ class _Handler(BaseHTTPRequestHandler):
                 global _asked
                 _asked = time.monotonic()
                 self._send(json.dumps(state(), separators=(",", ":")).encode(), "application/json")
+            elif path.startswith("/seq/"):
+                body = _seq_cache.get(path.split("/")[2])
+                if body is None:
+                    self.send_error(404)
+                else:
+                    self._send(body, "application/json", cache=True)
             elif path.startswith("/wave/"):
                 c = int(path.split("/")[2].split(":")[0])
                 self._send(wave(c), "application/octet-stream", cache=True)    # (its URL has the tag in it)

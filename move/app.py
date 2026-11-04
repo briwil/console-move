@@ -466,7 +466,7 @@ def main():
     T.key("DRUMS")                                   # start on left button 1: the instruments
     try:
         import screenview
-        screenview.start(T)                          # the big screen: http://move.local:8080
+        screenview.start(T, m)                       # the big screen: http://move.local:8080
     except Exception as ex:                          # noqa: BLE001
         print("Big screen:", ex)
         screenview = None

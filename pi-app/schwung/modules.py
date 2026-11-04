@@ -215,6 +215,15 @@ class Module:
                             q["max"] = max(0, (n or 1) - 1)
                         if p["key"] not in {c.get("key") for c in chain}:
                             chain.append(q)
+        # a preset / kit list the module says the length of (OB-Xd: 0-9999 in chain_params, but 128 real presets)
+        for lvl in list((ui.get("levels") or {}).values()) + list(((caps.get("ui_hierarchy") or {}).get("levels") or {}).values()):
+            lp, cp = lvl.get("list_param"), lvl.get("count_param")
+            n = _number(s.get(cp)) if cp else None
+            if lp and n and n >= 1:
+                for c in chain:
+                    if c.get("key") == lp and c.get("type", "float") in ("int", "float"):
+                        c["min"], c["max"], c["step"] = 0, int(n) - 1, 1
+                        c["type"] = "int"
         prefixes = self.spec.get("voice_prefixes")
         self.params = []                              # {key, label, kind, options, lo, hi, steps, voice}
         voices = set()

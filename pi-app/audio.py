@@ -2287,9 +2287,12 @@ class Engine:
                     a0 = max(0, a - GUARD)
                     if insert:
                         entries.append((c, a0, self.tracks[c][a0:a].copy()))
-                        entries.append((c, a, self.tracks[c][a:].copy()))
-                        tail = self.tracks[c][a:self.frames - n].copy()
-                        self.tracks[c][a + n:] = tail
+                        # (only as far as the track's audio goes: copying the rest of the tape, all silence,
+                        # took hundreds of MB on the Move)
+                        used = max(a, self._extent(self.tracks[c], 0))
+                        entries.append((c, a, self.tracks[c][a:min(self.frames, used + n)].copy()))
+                        tail = self.tracks[c][a:max(a, min(used, self.frames - n))].copy()
+                        self.tracks[c][a + n:a + n + len(tail)] = tail
                         self.tracks[c][a:a + n] = x[:n]
                         moved = []
                         for rg in self.regions[c]:
@@ -2304,7 +2307,7 @@ class Engine:
                                                  for rg in moved if rg[0] < self.frames)
                         self._seam(c, a)
                         self._seam(c, a + n)
-                        self._changed(c, a0, self.frames)
+                        self._changed(c, a0, min(self.frames, used + n + GUARD))
                     else:
                         b1 = min(self.frames, a + n + GUARD)
                         entries.append((c, a0, self.tracks[c][a0:b1].copy()))

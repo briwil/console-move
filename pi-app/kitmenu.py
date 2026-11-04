@@ -390,9 +390,12 @@ class KitMenu(menu.Menu):
             s.set("name_text", t="PATTERN %d?" % (self.seq.current + 1))
             hint = "IT HAS STEPS: PASTING REPLACES THEM     PLAY: PASTE     FILE: BACK"
         elif self.mode == "clear_all":
-            on = sum(st.on for ln in self.seq.pattern.lanes for st in ln.steps)
+            if isinstance(self.seq, notes.NoteSequencer):                   # a synth: its notes
+                on = sum(len(step) for step in self.seq.pattern.notes.values())
+            else:
+                on = sum(st.on for ln in self.seq.pattern.lanes for st in ln.steps)
             s.set("prompt", t="CLEAR PATTERN %d?" % (self.seq.current + 1), y=self.prompt_y)
-            s.set("name_text", t="%d STEP%s ON" % (on, "" if on == 1 else "S"))
+            s.set("name_text", t="%d %s ON" % (on, ("NOTE" if on == 1 else "NOTES") if isinstance(self.seq, notes.NoteSequencer) else ("STEP" if on == 1 else "STEPS")))
             hint = "PLAY: CLEAR (STEPS, LOCKS, LENGTHS AND RATES, LIKE A NEW PATTERN)     FILE: BACK"
         elif self.mode == "clear":
             locks, steps = self.lock_count()

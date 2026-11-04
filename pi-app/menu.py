@@ -33,7 +33,7 @@ ROWS = 7                                     # setting rows on screen at once (t
 PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
 MAX_PASSWORD = 63
 LABELS = {"DRUMS": "DRUM MACHINE", "WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
-          "UPDATE": "SOFTWARE UPDATE"}
+          "UPDATE": "SOFTWARE UPDATE", "SCREEN": "BIG SCREEN"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
 
@@ -97,6 +97,9 @@ class Menu:
             elif name[0] == "CHAR":
                 self.char(name[1])
             self.refresh()
+            return
+        if self.mode == "qr":                        # the big screen's QR code: any button, back to the settings
+            self.mode = "settings"
             return
         if self.mode == "load":
             self.load_key(name)
@@ -205,6 +208,8 @@ class Menu:
         elif name in CONFIRM:
             if SETTINGS[self.row] == "UPDATE":
                 self.update_action()
+            elif SETTINGS[self.row] == "SCREEN":
+                self.mode = "qr"                           # (the Move: its address as a QR code, pages.qr_page)
             elif SETTINGS[self.row] == "WIFI":
                 self.mode, self.msg, self.confirm, self.pick = "wifi", "", None, 0
                 self.wifi.scan()
@@ -217,7 +222,7 @@ class Menu:
                 self.mode, self.msg = "list", ""
 
     def change(self, delta, fine=False):
-        if SETTINGS[self.row] in ("UPDATE", "WIFI"):
+        if SETTINGS[self.row] in ("UPDATE", "WIFI", "SCREEN"):
             self.say("PRESS PLAY")
             return
         e = self.engine
@@ -320,6 +325,8 @@ class Menu:
             return self.output_text()
         if what == "UPDATE":
             return self.update_text()
+        if what == "SCREEN":
+            return "QR CODE  ·  PUSH: SHOW IT, SCAN IT WITH YOUR PHONE"
         if what == "WIFI":
             ssid = wifi.current()
             return "%s  \u00b7  PLAY FOR NETWORKS" % (ssid if ssid else "NOT CONNECTED")

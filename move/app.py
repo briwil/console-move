@@ -430,6 +430,8 @@ def main():
     if e:
         import linksync
         T.link = linksync.LinkSync(e)                    # Ableton Link (MENU > SETTINGS > MIDI SYNC > LINK)
+    if "SCREEN" not in menu_mod.SETTINGS:
+        menu_mod.SETTINGS.append("SCREEN")           # MENU > SETTINGS > BIG SCREEN: its address as a QR code
     m = menu_mod.Menu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits = kitmenu.KitMenu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits.main = m

@@ -53,6 +53,22 @@ def _serve():
 _asked = 0.0              # when a page last asked (no page open: nothing is copied)
 
 
+def address():
+    """The big screen's address on the network the Move is on now ("" with no network)."""
+    import socket
+    ip = ""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))                 # (nothing is sent: it only picks the way out)
+        ip = s.getsockname()[0]
+        s.close()
+    except OSError:
+        pass
+    if not ip or ip.startswith("127."):
+        return ""
+    return "http://%s:%d" % (ip, PORT)
+
+
 def frame(f):
     """app.py: the Move's screen as just drawn (for the small copy of it on the page)."""
     global _frame

@@ -21,6 +21,8 @@ def draw(f, T, menu=None):
     try:
         if menu is not None and menu.open and getattr(menu, "mode", "") == "name":
             name_page(f, menu)
+        elif menu is not None and menu.open and getattr(menu, "mode", "") == "qr":
+            qr_page(f)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "settings":
             settings_page(f, menu)
         elif menu is not None and menu.open and getattr(menu, "mode", "") == "load":
@@ -906,11 +908,13 @@ def settings_page(f, menu):
     """The settings, one row each: the row you're on is a white bar. Push the wheel: the value goes black inside a
     white box and the wheel changes it; push again: back to the rows."""
     import menu as menu_mod
-    names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO"}
+    names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO",
+             "SCREEN": "BIG SCREEN"}
     header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
     rows = menu_mod.SETTINGS
+    pitch = 9 if len(rows) <= 5 else 8                 # (six rows: a little closer together)
     for i, what in enumerate(rows):
-        y = 12 + i * 9
+        y = 12 + i * 9 if pitch == 9 else 11 + i * 8
         full = str(menu.setting_text(what) or "")
         short = full.split("  ")[0].split(": ")[0].upper()[:14]
         label = names.get(what, menu_mod.LABELS.get(what, what))
@@ -929,7 +933,44 @@ def settings_page(f, menu):
                 f.right(W - 3, y, short)
     full = str(menu.setting_text(rows[menu.row]) or "")
     msg = str(getattr(menu, "msg", "") or "") or (menu.update_message() if rows[menu.row] == "UPDATE" else "") or full
-    f.small(1, 58, msg.upper()[:31])
+    f.small(1, 58 if pitch == 9 else 59, msg.upper()[:31])
+
+
+def qr_page(f):
+    """MENU > SETTINGS > BIG SCREEN: the big screen's address as a QR code (the phone's camera opens it), and
+    written out. Any button: back."""
+    import screenview
+    url = screenview.address()
+    if not url:
+        f.centre(64, 20, "NO NETWORK")
+        f.centre(64, 34, "JOIN WI-FI OR A HOTSPOT", small=True)
+        return
+    try:
+        import qr
+        m = qr.matrix(url)
+    except Exception:                                 # noqa: BLE001
+        m = None
+    if m:
+        n = len(m)
+        s = 2 if n * 2 + 8 <= H else 1
+        side = n * s + 4 * s                          # (a light edge of 2 modules round it)
+        f.rect(0, (H - side) // 2, side, side, 1)
+        y0 = (H - side) // 2 + 2 * s
+        for r, row in enumerate(m):
+            for c, v in enumerate(row):
+                if v:
+                    f.rect(2 * s + c * s, y0 + r * s, s, s, 0)
+        x = side + 4
+    else:
+        x = 2
+    host = url.split("//", 1)[-1]
+    ip, _, port = host.partition(":")
+    f.text(x, 2, "BIG")
+    f.text(x, 11, "SCREEN")
+    f.small(x, 26, "SCAN WITH")
+    f.small(x, 33, "THE CAMERA")
+    f.small(x, 46, ip[:16])
+    f.small(x, 53, ":" + port if port else "")
 
 
 def name_page(f, menu, prompt=None):

@@ -589,7 +589,8 @@ class Stress:
             first, last = self.baselines[0][1], self.baselines[-1][1]
             self.say("  empty project's memory, every 8 minutes: " +
                      ", ".join("%.0f" % _mb(kb) for _, kb in self.baselines) + " MB")
-            if _mb(last - first) > 30 and _mb(self.baselines[-2][1] - first) > 15:
+            prev = self.baselines[-2][1] if len(self.baselines) > 2 else last
+            if _mb(last - first) > 30 and _mb(prev - first) > 15:
                 self.say("  MEMORY KEEPS GROWING: a likely leak (send this report)")
                 if RANDOM_ONLY:
                     self.say("  (an instrument stays in memory once it's been used, so some growth is expected "

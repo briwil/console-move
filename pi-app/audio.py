@@ -1023,7 +1023,7 @@ class Engine:
         with self.lock:
             self.playing = self.recording = self.rec_ready = False
             for x in self.tracks[:TRACKS]:
-                x[:] = 0
+                self._clear(x)
             self.tracks[RIGHT:] = [None] * TRACKS
             self.stereo = set()
             self.inputs = default_inputs()
@@ -1326,7 +1326,7 @@ class Engine:
             self.stereo.add(p)
             self.tracks[p + RIGHT] = self._copy_used(self.tracks[p + 1])
             self.regions[p + RIGHT] = self.regions[p + 1]
-            self.tracks[p + 1][:] = 0
+            self._clear(self.tracks[p + 1])
             self.regions[p + 1] = []
             self.levels[p + 1][:] = 0
             self._update_levels(p + RIGHT, 0, self.frames, reset=True)
@@ -1407,9 +1407,10 @@ class Engine:
         return bool(todo)
 
     @staticmethod
-    def _extent(x):
+    def _extent(x, floor=1e-6):
         """Where the audio ends: frames (any channel, for a 2-channel array). Looked for from the end a piece
-        at a time: a whole-tape np.abs() took as much memory again as the track (a lot, on the Move)."""
+        at a time: a whole-tape np.abs() took as much memory again as the track (a lot, on the Move).
+        floor=0: where anything at all ends (for clearing)."""
         if x is None:
             return 0
         end, piece = len(x), 1 << 16
@@ -1418,11 +1419,16 @@ class Engine:
             a = np.abs(x[start:end])
             if a.ndim == 2:
                 a = a.max(axis=1)
-            nz = np.flatnonzero(a > 1e-6)
+            nz = np.flatnonzero(a > floor)
             if len(nz):
                 return start + int(nz[-1]) + 1
             end = start
         return 0
+
+    def _clear(self, x):
+        """Silence a track in place, writing only where something is (writing zeros over the whole tape made
+        the Move keep memory for all of it: 400 MB for a NEW project)."""
+        x[:self._extent(x, 0)] = 0
 
     def _copy_used(self, x):
         """A copy of a track that only takes memory for its audio (a full copy of the empty part filled the

@@ -211,7 +211,7 @@ class MoveLFO:
         if self.pads_on_page():
             return [0] * 16
         if self.arp_on_page():
-            return [{0: 20, 1: 45, 2: 120}[x] for x in self.cfg()["rhythm"]]
+            return [{0: 0, 1: 120, 2: 127}[x] for x in self.cfg()["rhythm"]]
         if self.insert_pos() is not None:
             return [0] * 16
         steps = self.lfos()[self.tab].get("steps", {})

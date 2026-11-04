@@ -352,7 +352,7 @@ story += [
          "(OFF: just your rhythm). A rest in either is a rest; an accent in either is an accent."),
         ("ARP 2 (Right)", "Knob 1 GLIDE: portamento between the notes (the synth has to answer CC 65 / CC 5). "
          "Knob 2 BEND: each note starts bent up (+) or down (-) and slides to its pitch (pitch bend)."),
-        ("Step buttons", "The 16-step rhythm: tap a step to go note (blue), accent (white, louder), rest (dim). "
+        ("Step buttons", "The 16-step rhythm: tap a step to go note (white), accent (red, louder), rest (off). "
          "It follows the song's clock while it plays."),
     ]),
     p("FX", H2),

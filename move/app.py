@@ -404,6 +404,10 @@ def main():
     screen = ui.Screen.load(os.path.join(APP, "layouts", "main.ui"))
     T = console.Transport(screen, e)
     T.inst_sends = True                              # the FX page: knob 4 is the picked instrument's send
+    try:
+        T.insfx_boot()                               # the song's insert effects, running straight away (the core came up
+    except Exception as ex:                          # noqa: BLE001     before this hook existed, so it couldn't do it)
+        print("insert effects:", ex)
     if e:
         import linksync
         T.link = linksync.LinkSync(e)                    # Ableton Link (MENU > SETTINGS > MIDI SYNC > LINK)

@@ -242,6 +242,8 @@ class Transport:
         self.inst_page = False                    # the MIDI key from the tape: the INSTRUMENTS page
         self.instp = instpage.InstPage(self)
         self.engine.insert_boot = self.insfx_boot
+        self.engine.insert_apply = self.insfx_apply
+        self._insfx_song = None                  # the opened song's insert effects, kept until the sound core is up
         screen.after["playhead"] = self.draw_page
         self._playing = False
         self._recording = False
@@ -794,9 +796,31 @@ class Transport:
             ins.core = core
         return ins
 
+    def insfx_apply(self, data):
+        """A song was opened: its insert effects replace the current ones (a slot the song has none for: none)."""
+        if not isinstance(data, dict):
+            return
+        if getattr(self.engine, "core", None) is None:           # the core isn't up yet: insfx_boot does it
+            self._insfx_song = data
+            return
+        self._insfx_song = None
+        for slot in range(8):
+            for pos in (0, 1):
+                saved = (data.get(str(slot)) or {}).get(str(pos))
+                have = getattr(self, "_insfx", None) and self._insfx.get((slot, pos))
+                if saved and saved.get("fx"):
+                    self.insfx(slot, pos).from_json(saved)
+                elif have is not None and have.h:
+                    have.choose(0)
+        self._insfx_save()
+
     def insfx_boot(self):
         """The core is up: bring back every instrument's saved insert effects."""
         self.insfx(0, 0)
+        data = self._insfx_song if self._insfx_song is not None else getattr(self.engine, "song_inserts", None)
+        if data is not None:
+            self.insfx_apply(data)
+            return
         for k, v in list(self._insfx_saved.items()):
             for pos in (("0", "1") if "fx" not in v else ("0",)):
                 try:
@@ -815,6 +839,10 @@ class Transport:
                 out.setdefault(str(k), {})[str(pos)] = v.to_json()
             json.dump({"slots": out}, open(self._insfx_path(), "w"))
         except OSError:
+            pass
+        try:
+            self.engine.seq_changed()                              # the song keeps its insert effects: save it
+        except Exception:                                          # noqa: BLE001
             pass
 
     def fx_knob(self, number, delta):
@@ -1338,6 +1366,7 @@ class Transport:
             return
         if number == 1:
             on = delta > 0
+            self.input_popup = (time.monotonic() + 2.5, t, -1)            # MONO / STEREO, big on the screen
             if e.set_stereo(t, on):
                 self.say("TRACK %d: %s%s" % (n, "STEREO" if on else "MONO",
                                              "  (BOTH SIDES MIXED TOGETHER; SHIFT+CUT UNDOES)" if not on and e.track_end(t)

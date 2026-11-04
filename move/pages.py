@@ -295,6 +295,12 @@ def input_popup(f, T):
     _until, t, side = T.input_popup
     src = e.source(t)
     stereo = t in e.stereo
+    if side < 0:                                           # knob 1: mono or stereo
+        header(f, "TRACK %d" % (t + 1))
+        f.big((W - (6 if stereo else 4) * 12 + 2) // 2, 20, "STEREO" if stereo else "MONO")
+        f.centre(W // 2, 44, "LEFT AND RIGHT INPUTS" if stereo else "ONE INPUT")
+        f.small(1, 58, "TURN KNOB 1 TO CHANGE")
+        return
     c = src[side] if isinstance(src, tuple) and side < len(src) else src
     who, what = input_parts(e, c)
     header(f, "TRACK %d  %s" % (t + 1, ("LEFT IN" if side == 0 else "RIGHT IN") if stereo else "INPUT"))

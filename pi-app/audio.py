@@ -1282,6 +1282,13 @@ class Engine:
             self.slot = want
         if meta.get("rec_mode") in ("replace", "overdub"):
             self.rec_mode = meta["rec_mode"]
+        self.song_inserts = meta.get("inserts")                       # (kept for the Move's start-up, before its core is up)
+        apply = getattr(self, "insert_apply", None)
+        if apply and meta.get("inserts") is not None:             # the song's insert effects (the Move)
+            try:
+                apply(meta["inserts"])
+            except Exception as ex:                               # noqa: BLE001
+                print("insert effects:", ex)
         self._meta_regions = meta.get("regions")
         self._meta_splices = meta.get("splices")       # from version 0.6-0.7, turned into boxes below
         if meta.get("loop"):
@@ -1351,6 +1358,15 @@ class Engine:
             meta["drum_seq"] = self.seq.to_json()
             current = self.drums.machine if self.drums else "lxr"
             meta["drum_seqs"] = {m: s.to_json() for m, s in self.seqs.items() if m != current}
+            ins = getattr(self, "insert_fx", None)
+            if ins:
+                try:                                                  # each instrument's two insert effects, with the song
+                    out = {}
+                    for (k, pos), v in ins.items():
+                        out.setdefault(str(k), {})[str(pos)] = v.to_json()
+                    meta["inserts"] = out
+                except Exception as ex:                               # noqa: BLE001
+                    print("insert effects:", ex)
             meta["slots"] = list(self.slots)
             meta["slot"] = self.slot
             meta["slot_mutes"] = sorted(self.slot_mutes)

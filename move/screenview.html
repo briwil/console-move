@@ -208,8 +208,10 @@ function drawTape(u, pad, y0, y1, P) {
   const sel = S.tracks.find(t => t.selected) || S.tracks[0];
   const pan = Math.abs(sel.pan) < 0.05 ? "C" : (sel.pan < 0 ? "L" : "R") + Math.round(Math.abs(sel.pan) * 100);
   const zoom = (S.zoom || 4) + (S.zoom === 1 ? " BAR" : " BARS");
-  let y = titleBlock(u, pad, y0, "TAPE · TRACK " + sel.n + " SELECTED", "TRACK " + sel.n, COLORS[sel.n - 1],
-                     sel.input, "ZOOM", zoom);
+  // on an instrument page (the instrument list, say) this is not about a track: say which instrument
+  let y = S.inst ? titleBlock(u, pad, y0, "INSTRUMENTS · SLOT " + S.inst, "INST " + S.inst, ACC, "", "ZOOM", zoom)
+                 : titleBlock(u, pad, y0, "TAPE · TRACK " + sel.n + " SELECTED", "TRACK " + sel.n, COLORS[sel.n - 1],
+                              sel.input, "ZOOM", zoom);
   const gutter = 272 * u, X0 = pad + gutter + 28 * u, X1 = W - pad;
   const span = (S.zoom || 4) * S.bar, ppb = (X1 - X0) / span, mid = X0 + (X1 - X0) / 2;
   const viewA = P - span / 2, viewB = P + span / 2, total = Math.max(S.length, 8);
@@ -302,6 +304,7 @@ function drawTape(u, pad, y0, y1, P) {
   }
   g.fillStyle = S.recording ? "#ff5a4e" : "#ffffff";
   g.fillRect(mid - 3 * u, rY + 20 * u, 6 * u, y1 - rY - 20 * u);
+  if (S.inst) return "";                          // (track details don't belong on an instrument page)
   return "VOL " + Math.round(sel.vol * 100) + " · PAN " + pan + (sel.stereo ? " · STEREO" : "") + (sel.armed ? " · ARMED" : "") +
          " · IN " + sel.input;
 }

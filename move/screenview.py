@@ -140,8 +140,14 @@ def state():
             sound = sound_data(T)
         except Exception as ex:                          # noqa: BLE001
             page, sound = "tape", {"error": str(ex)[:80]}
+    inst = 0                                             # on an instrument page the tape view falls back to: which one
+    if page == "tape":
+        if getattr(T, "inst_page", False):
+            inst = T.instp.row + 1
+        elif (getattr(T, "drum_page", False) or getattr(T, "seq_page", False)) and e.slot is not None:
+            inst = e.slot + 1
     out = {
-        "page": page, "seq_id": seq_id, "seq": seq_live, "sound": sound,
+        "page": page, "inst": inst, "seq_id": seq_id, "seq": seq_live, "sound": sound,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),

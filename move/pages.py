@@ -909,7 +909,7 @@ def settings_page(f, menu):
     white box and the wheel changes it; push again: back to the rows."""
     import menu as menu_mod
     names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO",
-             "SCREEN": "BIG SCREEN"}
+             "SCREEN": "EXTERNAL SCREEN"}
     header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
     rows = menu_mod.SETTINGS
     pitch = 9 if len(rows) <= 5 else 8                 # (six rows: a little closer together)
@@ -937,7 +937,7 @@ def settings_page(f, menu):
 
 
 def qr_page(f):
-    """MENU > SETTINGS > BIG SCREEN: the big screen's address as a QR code (the phone's camera opens it), and
+    """MENU > SETTINGS > EXTERNAL SCREEN: the page's address as a QR code (the phone's camera opens it), and
     written out. Any button: back."""
     import screenview
     url = screenview.address()
@@ -965,10 +965,9 @@ def qr_page(f):
         x = 2
     host = url.split("//", 1)[-1]
     ip, _, port = host.partition(":")
-    f.text(x, 2, "BIG")
+    f.text(x, 2, "EXTERNAL")
     f.text(x, 11, "SCREEN")
-    f.small(x, 26, "SCAN WITH")
-    f.small(x, 33, "THE CAMERA")
+    f.text(x, 28, "SCAN")
     f.small(x, 46, ip[:16])
     f.small(x, 53, ":" + port if port else "")
 

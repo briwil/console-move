@@ -33,7 +33,7 @@ ROWS = 7                                     # setting rows on screen at once (t
 PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
 MAX_PASSWORD = 63
 LABELS = {"DRUMS": "DRUM MACHINE", "WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
-          "UPDATE": "SOFTWARE UPDATE", "SCREEN": "BIG SCREEN"}
+          "UPDATE": "SOFTWARE UPDATE", "SCREEN": "EXTERNAL SCREEN"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
 
@@ -326,7 +326,7 @@ class Menu:
         if what == "UPDATE":
             return self.update_text()
         if what == "SCREEN":
-            return "QR CODE  ·  PUSH: SHOW IT, SCAN IT WITH YOUR PHONE"
+            return "  PUSH: SHOW ITS QR CODE"
         if what == "WIFI":
             ssid = wifi.current()
             return "%s  \u00b7  PLAY FOR NETWORKS" % (ssid if ssid else "NOT CONNECTED")

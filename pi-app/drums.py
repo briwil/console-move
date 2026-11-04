@@ -896,6 +896,7 @@ class Drums:
         instrument slot plays its own). None if it isn't there (not built or not working)."""
         ms = self._machines
         if machine not in ms:
+            print("instrument: starting %s" % machine, flush=True)   # (in the crash log, if starting it crashes)
             try:
                 if schwung_modules and machine in schwung_modules.catalog.BY_ID:
                     ms[machine] = schwung_modules.make(machine)       # a Schwung module (schwung/)

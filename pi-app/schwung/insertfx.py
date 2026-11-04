@@ -9,6 +9,7 @@ effect in it, and nothing is added to the tape afterwards.
 import ctypes
 import json
 import os
+import time
 
 import catalog
 import modules
@@ -88,6 +89,8 @@ class Insert:
             self.error = "THE MODULE HOST ISN'T BUILT"
             self.index = 0
             return
+        print("insert effect: starting %s (instrument %d, insert %d)" % (f["id"], self.slot + 1, self.pos + 1),
+              flush=True)                                  # (in the crash log, if starting it crashes)
         h = lib.sh_fx_open(os.path.join(folder, f["dsp"]).encode(), folder.encode(), b"")
         if not h:
             self.error = lib.sh_error().decode(errors="replace")[:60] or "COULDN'T START"
@@ -118,6 +121,11 @@ class Insert:
     def unload(self):
         if self.core is not None:
             self.core.set_slot_insert(self.slot, self.pos, 0, 0)
+            if self.h:
+                # the sound core may be in the middle of running it right now: wait until it's let go before
+                # closing it (closing it under the core's feet corrupted memory and crashed later)
+                c = self.core
+                time.sleep(max(0.01, 3.0 * getattr(c, "block", 128) / max(1, getattr(c, "rate", 44100))))
         if self.h and self.lib:
             self.lib.sh_fx_close(self.h)
         self.h, self.params, self.values = None, [], {}

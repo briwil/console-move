@@ -144,6 +144,11 @@ class MoveBoard:
             if T.mlfo.active():
                 k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
                 return
+            if (n - 1 == ARP_ICON and not self.shift and T.drum_page and T.synth_shown()
+                    and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
+                if val:
+                    k.put("ARP_JUMP")                          # the ARP icon: the synth's arp page
+                return
             if not val:
                 return
             if n <= 8:
@@ -264,9 +269,10 @@ class Lights:
             self.core.send_midi(bytes((0x9F, num, v)))
 
     def icons(self, which):
-        """The icons under the step buttons (controller numbers 16-31): which = a set of 0-15, lit white."""
+        """The icons under the step buttons (controller numbers 16-31): which = a set of 0-15 lit white, or a dict
+        {0-15: colour}."""
         for k in range(16):
-            v = 120 if k in which else 0
+            v = which.get(k, 0) if isinstance(which, dict) else 120 if k in which else 0
             if self.sent.get(("icon", k)) != v:
                 self.sent[("icon", k)] = v
                 self.core.send_midi(bytes((0xBF, 16 + k, v)))
@@ -328,10 +334,17 @@ class Lights:
                         out[p] = WHITE if k % 12 == 0 else NOTE_COLOURS[k]
         for p in range(32):
             self.note(68 + p, out[p])
+        # the icons under the step buttons: on a synth's sound page, the ARP icon (step 3): bright when the arp is on
+        icons = {}
+        if T.drum_page and not T.seq_page and T.synth_shown() and not (T.fx_page or T.inst_page or T.song_page):
+            on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
+            icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
+        self.icons(icons)
 
 
 # ---------------------------------------------------------------- the app
 
+ARP_ICON = 2                      # the branching-nodes icon, under step button 3 (see MOVE-NOTES.md)
 PIDFILE = "/data/UserData/console/app.pid"
 ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
 
@@ -663,6 +676,9 @@ def handle(name, T, m, e):
             ms.step(name[1], name[2], name[3])
         elif T.msyn.active():
             T.msyn.step(name[1], name[2], name[3])
+        return
+    if name == "ARP_JUMP":
+        T.mlfo.goto_arp()
         return
     if isinstance(name, tuple) and name[0] == "LFOSTEP":
         if T.mlfo.active():

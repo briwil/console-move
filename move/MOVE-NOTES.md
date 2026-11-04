@@ -138,3 +138,15 @@ Needs the new libconsolecore.so + libschwunghost.so (GitHub build, then update).
 - **Ableton Link:** MENU > SETTINGS > MIDI SYNC > LINK. Tempo is shared while stopped (a running tape keeps its tempo), PLAY/STOP are shared and start on the next bar. Needs the new libs (Link is built in the cloud like the rest).
 - **Synth step settings = the drums' set:** PULSE, HOLD, JUMP (PER NOTE type only: each pitch is its own row), RANDOM / RAMP UP / RAMP DOWN pitch and NUDGE (both types; in UNIFIED a chord moves together). The type (lane page, knob 3) can be switched any time; nothing is lost.
 - **Length lights:** turning a LENGTH knob (drum lane, synth pattern, or a PER NOTE lane) lights that many step buttons purple for about a second.
+
+## Step icons (which is under which step button)
+1 folded square, 2 hexagon, 3 branching nodes (ARP), 4 arch, 5 clock, 6 two dots, 7 wavy lines, 8 grid box, 9 note with a flag,
+10 note with lines, 11 circle with waves, 12 staggered lines, 13 sparkle, 14 plus with a square, 15 copy, 16 bars with a box.
+Hexagon (2) is meant for quick settings (not built yet).
+
+## Arpeggiator (synths)
+`pi-app/arp.py`; settings in the synth sequencer's `arp_cfg` (saved with the instrument). It sits between the notes and the
+synth: the pads you hold (live) and the sequencer's chords become runs of single notes (core/instruments.py, `Slot`). Pads
+are recorded as played (not the arp's notes). Page: the last sound page of a synth (Right past INSERT 2), or the icon (step 3)
+on the settings pages. Knobs 1-8: ON, MODE, OCT, RATE, GATE, HOLD, GLIDE, BEND; step buttons: the 16-step rhythm (tap:
+note, accent, rest). GLIDE sends CC 65 / CC 5 (the synth must answer them); BEND is pitch bend (the synth's own range).

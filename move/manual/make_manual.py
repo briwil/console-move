@@ -330,6 +330,24 @@ story += [
         ("Drums, by hand", "Hold a step button and press a right-half pad: the step turns on with that pitch."),
     ]),
 
+    p("Arpeggiator (synths)", H2),
+    p("A synth's last sound page is ARP (Right past INSERT 2), or press the branching-nodes icon under step button 3 on "
+      "its settings pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "
+      "the chords in the sequencer, into a run of single notes. What you record from the pads is the notes you played, "
+      "not the arp's. A rest in the rhythm does not use up a note: the run carries on at the next one.", BODY),
+    table([
+        ("Knob 1  ON", "Arp on / off."),
+        ("Knob 2  MODE", "UP, DOWN, UP-DOWN, DOWN-UP, RANDOM, AS PLAYED, CHORD (every step plays all the notes)."),
+        ("Knob 3  OCT", "1-4 octaves."),
+        ("Knob 4  RATE", "The ten rates, slowest to fastest. A sequenced chord arpeggiates for as long as it lasts, "
+         "so give it a longer length, or a faster rate, to hear more than one note."),
+        ("Knob 5  GATE", "How long each note lasts, 10-200 % of a step (over 100 they overlap)."),
+        ("Knob 6  HOLD", "The notes keep going after you let go; new notes replace them."),
+        ("Knob 7  GLIDE", "Portamento between the notes (the synth has to answer CC 65 / CC 5)."),
+        ("Knob 8  BEND", "Each note starts bent up (+) or down (-) and slides to its pitch (pitch bend)."),
+        ("Step buttons", "The 16-step rhythm: tap a step to go note (blue), accent (white, louder), rest (dim). "
+         "It follows the song's clock while it plays."),
+    ]),
     p("FX", H2),
     p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([

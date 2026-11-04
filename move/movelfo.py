@@ -1,7 +1,9 @@
 """The LFO pages on the Move: after the last settings page of an instrument (Right past it), LFO 1, LFO 2, INSERT 1 and INSERT 2.
 Step buttons: tap = that step of the LFO rests, hold + knob 2/4 = its own WAVE/DEPTH. Knobs 1-6: DEST, WAVE, SPEED, DEPTH, PHASE, MODE (see pi-app/lfo.py). Each pattern has its own."""
+import arp
 import knobgate
 import lfo
+import sequencer
 
 LABELS = ["DEST", "WAVE", "SPEED", "DEPTH", "PHASE", "MODE"]
 CHOICE = {0, 1, 2, 5}                         # knobs that pick from a list: several clicks each
@@ -19,13 +21,83 @@ class MoveLFO:
             self.tab = None
         return self.tab is not None and bool(T.drum_page and not T.seq_page and T.engine and T.engine.drums)
 
+    def _inserts(self):
+        return 2 if self.T.insert_fx_available() else 0
+
+    def has_arp(self):
+        """A synth has an arpeggiator page, the last one."""
+        return bool(self.T.synth_shown())
+
+    def arp_tab(self):
+        return lfo.COUNT + self._inserts() if self.has_arp() else None
+
     def last(self):
-        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2."""
-        return lfo.COUNT + (1 if self.T.insert_fx_available() else 0)
+        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's ARP."""
+        return lfo.COUNT + self._inserts() - 1 + (1 if self.has_arp() else 0)
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
-        return self.tab - lfo.COUNT if self.tab is not None and self.tab >= lfo.COUNT else None
+        if self.tab is not None and lfo.COUNT <= self.tab < lfo.COUNT + self._inserts():
+            return self.tab - lfo.COUNT
+        return None
+
+    def arp_on_page(self):
+        """True on the ARP page."""
+        return self.tab is not None and self.tab == self.arp_tab()
+
+    def goto_arp(self):
+        """The ARP icon (step button 3 on a synth's sound page): straight to the arp page."""
+        if self.has_arp():
+            self.tab = self.arp_tab()
+            self.T.say("ARP", 2)
+
+    def cfg(self):
+        return self.T.engine.seq.arp_cfg
+
+    def arp_values(self):
+        c = self.cfg()
+        return [("ON", "ON" if c["on"] else "OFF"), ("MODE", arp.MODES[c["mode"]]), ("OCT", str(c["oct"])),
+                ("RATE", sequencer.RATES[c["rate"]][0]), ("GATE", "%d%%" % c["gate"]),
+                ("HOLD", "ON" if c["hold"] else "OFF"), ("GLIDE", "%d%%" % c["glide"] if c["glide"] else "OFF"),
+                ("BEND", "%+d%%" % c["bend"] if c["bend"] else "OFF")]
+
+    def arp_knob(self, number, delta, shift):
+        c = self.cfg()
+        k = number - 1
+        if k in (0, 1, 2, 3, 5):                     # a list or a switch: several clicks a choice
+            way = knobgate.gate(("arp", k), delta, shift)
+            if not way:
+                return
+            one = 1 if way > 0 else -1
+            if k == 0:
+                c["on"] = 1 if one > 0 else 0
+            elif k == 1:
+                c["mode"] = max(0, min(len(arp.MODES) - 1, c["mode"] + one))
+            elif k == 2:
+                c["oct"] = max(1, min(4, c["oct"] + one))
+            elif k == 3:
+                c["rate"] = sequencer.next_rate(c["rate"], one)
+            else:
+                c["hold"] = 1 if one > 0 else 0
+        elif k == 4:
+            c["gate"] = max(10, min(200, c["gate"] + 5 * delta))
+        elif k == 6:
+            c["glide"] = max(0, min(100, c["glide"] + 5 * delta))
+        elif k == 7:
+            c["bend"] = max(-100, min(100, c["bend"] + 5 * delta))
+        else:
+            return
+        self.T.engine.seq_changed()
+        self.T.say("ARP  %s  %s" % self.arp_values()[k], 2)
+
+    def arp_step(self, n, down):
+        """A step button on the ARP page: tap it to go note -> accent -> rest -> note."""
+        if down:
+            return
+        c = self.cfg()
+        c["rhythm"][n - 1] = {1: 2, 2: 0, 0: 1}[c["rhythm"][n - 1]]
+        self.T.engine.seq_changed()
+        self.T.say("ARP STEP %d: %s" % (n, ("REST", "NOTE", "ACCENT")[c["rhythm"][n - 1]]), 2)
 
     def arrows(self, way, last_tab):
         """Left / Right on a sound page. Returns True if it moved between the LFO pages / off the settings."""
@@ -42,6 +114,9 @@ class MoveLFO:
         return True
 
     def step(self, n, down):
+        if self.arp_on_page():
+            self.arp_step(n, down)
+            return
         if self.insert_pos() is not None:
             return
         """A step button (1-16): a tap mutes / unmutes that step of the LFO; hold it and turn DEPTH (knob 4) or WAVE
@@ -64,6 +139,8 @@ class MoveLFO:
             self.T.say("LFO %d STEP %d %s" % (self.tab + 1, n, "RESTS" if st.get("mute") else "PLAYS"), 2)
 
     def step_lights(self):
+        if self.arp_on_page():
+            return [{0: 20, 1: 45, 2: 120}[x] for x in self.cfg()["rhythm"]]
         if self.insert_pos() is not None:
             return [0] * 16
         steps = self.lfos()[self.tab].get("steps", {})
@@ -92,6 +169,8 @@ class MoveLFO:
                 ("DEPTH", "%+d%%" % l["depth"]), ("PHASE", "%d%%" % l["phase"]), ("MODE", lfo.MODES[l["mode"]])]
 
     def is_choice(self, n):
+        if self.arp_on_page():
+            return (n - 1) in (0, 1, 2, 3, 5)
         if self.insert_pos() is not None:
             return False
         if self.held:
@@ -99,6 +178,9 @@ class MoveLFO:
         return (n - 1) in CHOICE
 
     def knob(self, number, delta, shift):
+        if self.arp_on_page():
+            self.arp_knob(number, delta, shift)
+            return
         pos = self.insert_pos()
         if pos is not None:                           # an INSERT page: knobs 1-8 are the effect's first eight settings
             ins = self.T.insfx(None, pos)

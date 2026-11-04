@@ -453,9 +453,33 @@ def insert_page(f, T, pos):
     f.small(1, 59, (ins.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
 
 
+def arp_page(f, T):
+    """A synth's arpeggiator: knobs 1-8 are its settings, the 16 step buttons its rhythm (drawn along the bottom)."""
+    ml = T.mlfo
+    c = ml.cfg()
+    header(f, "ARP", "ON" if c["on"] else "OFF")
+    for i, (label, shown) in enumerate(ml.arp_values()):
+        col, row = divmod(i, 4)
+        x, y = col * 65, 12 + row * 8
+        f.small(x + 1, y, "%d %s" % (i + 1, label))
+        f.right(x + 62, y, str(shown)[:9], small=True)
+    for i, r in enumerate(c["rhythm"]):                   # rest: an outline, note: half full, accent: full
+        x = 2 + i * 8
+        f.rect(x, 47, 6, 6, 1)
+        f.rect(x + 1, 48, 4, 4, 0)
+        if r == 1:
+            f.rect(x + 1, 50, 4, 2, 1)
+        elif r == 2:
+            f.rect(x + 1, 48, 4, 4, 1)
+    f.small(1, 57, "STEPS: NOTE, ACCENT, REST")
+
+
 def lfo_page(f, T):
     ml = T.mlfo
     e = T.engine
+    if ml.arp_on_page():
+        arp_page(f, T)
+        return
     if ml.insert_pos() is not None:
         insert_page(f, T, ml.insert_pos())
         return

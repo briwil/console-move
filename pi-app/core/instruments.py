@@ -10,6 +10,7 @@ copy is one core source.
 """
 import time
 
+import arp as arplib
 import drums
 from core import Core  # noqa: F401  (for type hints in docs)
 
@@ -73,6 +74,8 @@ class Slot:
             h = sw_modules.host()
             self.seq = core.add_module(h.sh_render, h.sh_midi, m._seq.ptr)
             self.live = core.add_module(h.sh_render, h.sh_midi, m._live.ptr) if m._live is not m._seq else self.seq
+        self.arp = arplib.Arp()              # a synth's arpeggiator: the pads you hold (live source) ...
+        self.arp_seq = arplib.Arp()          # ... and the sequencer's chords (seq source); they share the settings
         self._refresh_after = None          # (core frame) a module re-reads its settings once the core has them
         self.fx = None
         if k is not None:
@@ -173,10 +176,19 @@ class Slot:
                     c.midi(self.live, 0x90, note, max(1, min(127, t[2])))
                     c.midi(self.live, 0x80, note, 0, at=at + NOTE_LEN)
                 elif what == "on":
-                    c.midi(self.live, 0x90, max(0, min(127, t[1])), max(1, min(127, t[2])))
+                    if self.arp.on:
+                        self.arp.press(int(t[1]), max(1, min(127, int(t[2]))))
+                    else:
+                        c.midi(self.live, 0x90, max(0, min(127, t[1])), max(1, min(127, t[2])))
                 elif what == "off":
-                    c.midi(self.live, 0x80, t[1], 0)
+                    if self.arp.on:
+                        self.arp.release(int(t[1]))
+                    else:
+                        c.midi(self.live, 0x80, t[1], 0)
                 elif what == "all_off":
+                    now = c.now()
+                    self.arp.stop(c.midi, self.live, now)
+                    self.arp_seq.stop(c.midi, self.seq, now)
                     for s in self.sources():
                         c.midi(s, 0xB0, 64, 0)                  # the sustain pedal up
                         c.midi(s, 0xB0, 123, 0)                 # all notes off (some synths ignore it)...
@@ -194,12 +206,28 @@ class Slot:
         if self._refresh_after is not None and self.core.now() >= self._refresh_after:
             self._refresh_after = None
             self.m._refresh()
+        if self.kind == "synth":
+            a = self.arp
+            if a.on:
+                a.tick(self.core.midi, self.live, self.core.now())
+            elif a.held or a.next_t is not None:             # switched off while it was going: let go
+                a.stop(self.core.midi, self.live, self.core.now())
+
+    def set_arp(self, cfg, fpb, origin):
+        """The synth's arp settings (a dict kept with its sequencer), the tempo, and where the sequencer's clock is."""
+        was_hold = self.arp.cfg.get("hold")
+        self.arp.cfg = self.arp_seq.cfg = cfg
+        self.arp.fpb = self.arp_seq.fpb = fpb
+        self.arp.origin = self.arp_seq.origin = origin
+        if was_hold and not cfg.get("hold"):
+            self.arp.unhold()
 
     # ---- the sequencer's steps, at their frames
     def play(self, events, base):
         """events: from the sequencer, [(offset, lane or note, velocity, locks)]; base: the core frame offset 0
         is at."""
         m, c = self.m, self.core
+        chords = []                                          # (at, [notes], velocity, gate) when the arp is on
         for offset, lane, vel, locks in events:
             at = int(base + offset)
             if self.kind == "lxr":
@@ -250,8 +278,17 @@ class Slot:
                     if isinstance(p, int) and 0 <= p < m.param_count:
                         m._apply(inst, p, v)
                 m._locked[0] = set(p for p in locks if isinstance(p, int) and 0 <= p < m.param_count)
-                c.midi(self.seq, 0x90, lane, max(1, min(127, vel)), at=at)
-                c.midi(self.seq, 0x80, lane, 0, at=at + gate)
+                if self.arp_seq.on:
+                    if chords and abs(chords[-1][0] - at) <= 64:
+                        chords[-1][1].append(lane)
+                        chords[-1][3] = max(chords[-1][3], gate)
+                    else:
+                        chords.append([at, [lane], max(1, min(127, vel)), gate])
+                else:
+                    c.midi(self.seq, 0x90, lane, max(1, min(127, vel)), at=at)
+                    c.midi(self.seq, 0x80, lane, 0, at=at + gate)
+        if chords:
+            self.arp_seq.expand(c.midi, self.seq, [tuple(g) for g in chords])
 
 
 class Scheduler:

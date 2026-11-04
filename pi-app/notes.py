@@ -21,6 +21,7 @@ import threading
 
 import random
 
+import arp
 import sequencer
 from sequencer import (next_rate, CHANCES, DEFAULT_VELOCITY, MAX_RATCHET, MAX_STEPS, PATTERNS, RATES, UNDO_STEPS, bar_steps,
                        chance_index, chance_passes)
@@ -121,6 +122,7 @@ class NoteSequencer:
         self._cyc = {}
         self.seed = random.randrange(1 << 30)
         self.undo_stack = []
+        self.arp_cfg = arp.default()     # the instrument's arpeggiator (all its patterns)
 
     @property
     def pattern(self):
@@ -438,12 +440,15 @@ class NoteSequencer:
                              "lanes": {str(k): v for k, v in p.lane_len.items()},
                              "lane_rates": {str(k): v for k, v in p.lane_rate.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
-                    "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats}
+                    "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats,
+                    "arp": dict(self.arp_cfg)}
 
     def from_json(self, data):
         with self.lock:
             self.patterns = [NotePattern(self.new_length()) for _ in range(PATTERNS)]
             self.current, self.queued, self.anchor = 0, None, 0.0
+            self.arp_cfg.clear()
+            self.arp_cfg.update(arp.clean(data.get("arp") if isinstance(data, dict) else None))
             if not isinstance(data, dict) or data.get("kind") != "notes":
                 return
             try:

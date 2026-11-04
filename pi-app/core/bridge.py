@@ -125,7 +125,11 @@ class CoreBridge:
         self._sync_arms()
         c.volume(e.phones_volume)
         self._transport()
-        for slot in [s for _mid, s in self.slots.values()]:
+        origin = self.sched.start_frame if self.sched.playing else None
+        for mid, slot in self.slots.values():
+            cfg = getattr(e.seqs.get(mid), "arp_cfg", None)
+            if cfg is not None and slot.kind == "synth":
+                slot.set_arp(cfg, e.frames_per_beat(), origin)
             slot.flush()
             slot.tick()
         self._auditions()

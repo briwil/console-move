@@ -90,7 +90,23 @@ MODULES = [
                 "src/dsp/plaits/dsp/physical_modelling/*.cc", "src/dsp/plaits/dsp/speech/*.cc",
                 "src/dsp/plaits/dsp/voice.cc", "src/dsp/plaits/resources.cc", "src/dsp/stmlib/dsp/atan.cc",
                 "src/dsp/stmlib/dsp/units.cc", "src/dsp/stmlib/utils/random.cc", "src/dsp/plaits_plugin.cpp",
-                "-o", "{out}", "-lm"]]},
+                "-o", "{out}", "-lm"]],
+     # the 6-op FM engines' pitch could run away (to 1e13 semitones) and this loop then never ended: Console froze
+     # (found by move/fxprobe.py instruments). Now an impossible pitch is held at the ends.
+     "patches": [["src/dsp/stmlib/dsp/units.h",
+                  "inline float SemitonesToRatioSafe(float semitones) {\n  float scale = 1.0f;\n",
+                  "inline float SemitonesToRatioSafe(float semitones) {\n  float scale = 1.0f;\n"
+                  "  if (!(semitones > -1200.0f)) semitones = -1200.0f;   /* (Console: also NaN) */\n"
+                  "  if (semitones > 1200.0f) semitones = 1200.0f;\n"],
+                 # ... and its patch could come out damaged, sending it to a missing algorithm (a crash):
+                 # held to the 32 there are
+                 ["src/dsp/plaits/dsp/fm/voice.h",
+                  "algorithms_->is_modulator(patch_->algorithm, i)",
+                  "algorithms_->is_modulator(patch_->algorithm & 31, i)"],
+                 ["src/dsp/plaits/dsp/fm/voice.h",
+                  "          algorithms_->render_call(patch_->algorithm, i);\n",
+                  "          algorithms_->render_call(patch_->algorithm & 31, i);\n"
+                  "      if (!call.render_fn || call.n <= 0) break;   /* (Console) */\n"]]},
     {"id": "essaim", "title": "ESSAIM", "kind": "synth", "license": "MIT",
      "repo": "filliformes/essaim-move", "commit": "22f63b7776b15400458656697aeae88527b9d910",
      "json": "src/module.json",
@@ -346,4 +362,5 @@ _add_fx_assets()
 
 def recipe_version(m):
     """A short tag of how a module is built, so changing its recipe here builds it again."""
-    return ":" + hashlib.sha1(json.dumps([m["build"], m["json"], m.get("files", [])]).encode()).hexdigest()[:8]
+    parts = [m["build"], m["json"], m.get("files", [])] + ([m["patches"]] if m.get("patches") else [])
+    return ":" + hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:8]

@@ -49,7 +49,8 @@ if __name__ == "__main__" and not os.environ.get("CONSOLE_MALLOC_CHECKED") and \
     # where it does it (not later, somewhere else)
     os.environ.update(CONSOLE_MALLOC_CHECKED="1", MALLOC_CHECK_="3")
     for _lib in ("/lib/libc_malloc_debug.so.0", "/usr/lib/libc_malloc_debug.so.0",
-                 "/lib/aarch64-linux-gnu/libc_malloc_debug.so.0"):
+                 "/lib/aarch64-linux-gnu/libc_malloc_debug.so.0",
+                 "/usr/lib/aarch64-linux-gnu/libc_malloc_debug.so.0", "/usr/lib/x86_64-linux-gnu/libc_malloc_debug.so.0"):
         if os.path.exists(_lib):
             os.environ["LD_PRELOAD"] = _lib
             break

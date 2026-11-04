@@ -159,6 +159,13 @@ def build(m):
     try:
         log("fetching %s..." % m["title"])
         d = fetch(m)
+        for rel, old, new in m.get("patches", []):        # Console's own fixes to the module's code (catalog.py)
+            path = os.path.join(d, rel)
+            text = open(path).read()
+            if new not in text:
+                if old not in text:
+                    raise RuntimeError("its code changed: a fix in catalog.py doesn't fit %s" % rel)
+                open(path, "w").write(text.replace(old, new, 1))
         out_dir = os.path.join(OUT, m["id"])
         os.makedirs(out_dir, exist_ok=True)
         tmp = os.path.join(out_dir, "dsp.so.tmp")

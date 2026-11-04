@@ -5,7 +5,7 @@ and close it a few more times; then two copies at once. Prints which ones crash,
     ssh -i ~/.ssh/move_key ableton@move.local "python3 /data/UserData/console/move/fxprobe.py"
 
 (Console can keep running: this doesn't use the sound.) Takes a few minutes. Just one: add its name, e.g.
-fxprobe.py structor
+fxprobe.py structor. The instruments: fxprobe.py instruments (or fxprobe.py instruments surge).
 """
 import os
 import random
@@ -95,6 +95,80 @@ def one(fx_id):
     run(b, 200)
     stage("closing the second")
     b.choose(0)
+    stage("after closing: the memory checked")
+    junk = [bytearray(n) for n in range(1, 40000, 37)]          # lots of allocating and freeing, so a damaged
+    del junk                                                     # heap shows itself here
+    import gc
+    gc.collect()
+    stage("done")
+    return 0
+
+
+def one_inst(mid):
+    """In the child process: an instrument started, played (notes / drum hits) while its settings move,
+    from the same thread and from another one at the same time."""
+    import threading
+    import drums
+
+    def stage(s):
+        print("stage: " + s, flush=True)
+    stage("starting")
+    d = drums.Drums("lxr")
+    m = d.get(mid)
+    if m is None:
+        print("couldn't start", flush=True)
+        return 3
+    try:
+        params = [p for _n, ps in m.pages(0) for p in ps]
+    except Exception:                                    # noqa: BLE001
+        params = []
+    synth = hasattr(m, "note_on")
+
+    def play(blocks, knobs=True):
+        for b in range(blocks):
+            if b % 8 == 0:
+                if synth:
+                    n = random.randrange(36, 84)
+                    m.note_on(n, random.randint(30, 127))
+                    if b % 16 == 0:
+                        m.note_off(n)
+                else:
+                    m.hit(random.randrange(max(1, getattr(m, "lanes", 8))), random.randint(30, 127))
+            m.render(BLOCK)
+            if knobs and params and b % 10 == 0:
+                twist()
+
+    def twist():
+        p = random.choice(params)
+        try:
+            m.set_param(p, m.stepped(p, m.get_param(p), random.choice((-40, -3, 3, 40))))
+        except Exception:                                # noqa: BLE001
+            pass
+    stage("playing, settings moving")
+    play(1500)
+    stage("playing while settings move from another thread (as in Console)")
+    go = [True]
+
+    def sound():
+        while go[0]:
+            play(1, knobs=False)
+    th = threading.Thread(target=sound)
+    th.start()
+    end = time.time() + 4
+    while time.time() < end and params:
+        twist()
+        time.sleep(0.0005)
+    go[0] = False
+    th.join()
+    if hasattr(m, "all_off"):
+        m.all_off()
+    play(100, knobs=False)
+    stage("after: the memory checked")
+    junk = [bytearray(n) for n in range(1, 40000, 37)]
+    del junk
+    import gc
+    gc.collect()
+    time.sleep(1)                                        # (its own threads, if it has any, keep going a moment)
     stage("done")
     return 0
 
@@ -109,17 +183,36 @@ def _signame(n):
 def main():
     if len(sys.argv) > 2 and sys.argv[1] == "--one":
         sys.exit(one(sys.argv[2]))
-    import catalog
-    ids = [f["id"] for f in catalog.FX]
-    if len(sys.argv) > 1:
-        ids = [i for i in ids if i in sys.argv[1:]]
+    if len(sys.argv) > 2 and sys.argv[1] == "--inst":
+        sys.exit(one_inst(sys.argv[2]))
+    insts = len(sys.argv) > 1 and sys.argv[1] == "instruments"
+    if insts:
+        import drums
+        ids = [mid for mid, _ in drums.available_machines()]
+        wanted = sys.argv[2:]
+    else:
+        import catalog
+        ids = [f["id"] for f in catalog.FX]
+        wanted = sys.argv[1:]
+    if wanted:
+        ids = [i for i in ids if i in wanted]
     bad = []
-    print("Trying %d insert effects, one at a time...\n" % len(ids), flush=True)
+    # the C library's memory checks on in each test: an effect that writes where it shouldn't is caught (a
+    # damaged heap often doesn't crash the effect that did it, only something later, somewhere else)
+    env = dict(os.environ, MALLOC_CHECK_="3", MALLOC_PERTURB_="165")
+    dbg = next((p for p in ("/lib/libc_malloc_debug.so.0", "/usr/lib/libc_malloc_debug.so.0",
+                            "/lib/aarch64-linux-gnu/libc_malloc_debug.so.0",
+                 "/usr/lib/aarch64-linux-gnu/libc_malloc_debug.so.0", "/usr/lib/x86_64-linux-gnu/libc_malloc_debug.so.0") if os.path.exists(p)), None)
+    if dbg:
+        env["LD_PRELOAD"] = dbg
+    print("Trying %d %s, one at a time (memory checks %s)...\n" %
+          (len(ids), "instruments" if insts else "insert effects", "on" if dbg else "partly on: no libc_malloc_debug here"),
+          flush=True)
     for fx in ids:
         t = time.time()
         try:
-            r = subprocess.run([sys.executable, os.path.abspath(__file__), "--one", fx],
-                               capture_output=True, text=True, timeout=90)
+            r = subprocess.run([sys.executable, os.path.abspath(__file__), "--inst" if insts else "--one", fx],
+                               capture_output=True, text=True, timeout=90, env=env)
             out = (r.stdout + r.stderr).strip().splitlines()
             code = r.returncode
         except subprocess.TimeoutExpired as ex:
@@ -128,7 +221,7 @@ def main():
             code = "hung"
         stages = [l[7:] for l in out if l.startswith("stage: ")]
         notes = [l for l in out if not l.startswith("stage: ") and l.strip()
-                 and not l.startswith("insert effect: starting")]
+                 and not l.startswith("insert effect: starting") and not l.startswith("instrument: starting")]
         where = stages[-1] if stages else "?"
         if code == 0:
             print("  ok       %-18s (%.1f s)%s" % (fx, time.time() - t,
@@ -142,7 +235,7 @@ def main():
             for n in notes[-6:]:
                 print("             " + n[:160])
             bad.append(fx)
-    print("\n%s" % ("Every effect that starts is fine on its own." if not bad else
+    print("\n%s" % ("Every one that starts is fine on its own." if not bad else
                     "Problem effects: " + ", ".join(bad)), flush=True)
 
 

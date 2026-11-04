@@ -833,6 +833,8 @@ class Transport:
         return os.path.join(store.data_dir(), "insert-fx.json")
 
     def _insfx_save(self):
+        if getattr(self, "_insfx", None) is None:              # no insert effects made yet: nothing to save
+            return
         try:
             out = {}
             for (k, pos), v in self._insfx.items():
@@ -1184,8 +1186,8 @@ class Transport:
         except Exception as ex:                      # noqa: BLE001
             print("insert effects:", ex)
         self.tape.pos = 0.0
-        self.s.set("song", t=name)
-        self.say("NEW PROJECT: %s" % name.upper(), 5)
+        self.s.set("song", t=name or "NEW PROJECT")
+        self.say("NEW PROJECT: %s" % name.upper() if name else "NEW PROJECT  (SAVE PROJECT NAMES IT)", 5)
 
     def open_song(self, name):
         self.focus.track = None

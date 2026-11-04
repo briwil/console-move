@@ -436,11 +436,9 @@ class Menu:
                 self.confirm_new = True
                 self.say("THIS SONG ISN'T SAVED. NEW AGAIN THROWS IT AWAY, OR SAVE IT FIRST")
                 return
-            self.mode = "name"
-            self.naming = "new"
-            self.name = list(e.next_song_name())
-            self.cursor = len(self.name)
-            self.msg = ""
+            self.confirm_new = False
+            self.transport.new_song(None)                  # straight in: it gets a name the first time it's saved
+            self.close()
         elif what == "SAVE":
             if e.song is None:
                 self.mode = "name"

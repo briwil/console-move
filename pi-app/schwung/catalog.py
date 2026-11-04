@@ -294,7 +294,8 @@ FX_ASSETS = [                       # ready-made effects from Schwung's releases
     {"id": 'gresil', "title": 'GRESIL', "kind": "fx", "repo": 'filliformes/gresil-move',
      "asset": 'gresil-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
     {"id": 'structor', "title": 'STRUCTOR', "kind": "fx", "repo": 'filliformes/structor-move',
-     "asset": 'structor-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
+     "asset": 'structor-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain',
+     "off": "damages memory and crashes Console (fxprobe.py together)"},
     {"id": 'dissolver', "title": 'DISSOLVER', "kind": "fx", "repo": 'filliformes/dissolver-move',
      "asset": 'dissolver-module.tar.gz', "json": "module.json", "build": [], "cat": 'grain'},
     {"id": 'capicola', "title": 'CAPICOLA', "kind": "fx", "repo": 'charlesvestal/schwung-capicola',
@@ -349,6 +350,8 @@ _add_installed()
 def _add_fx_assets():
     here = os.path.dirname(os.path.abspath(__file__))
     for a in FX_ASSETS:
+        if a.get("off"):
+            continue                          # (taken out: see its "off")
         folder = os.path.join(here, "modules", a["id"])
         try:
             info = json.load(open(os.path.join(folder, "module.json")))

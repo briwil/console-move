@@ -1353,6 +1353,7 @@ class Transport:
             self.say("NO INPUT DEVICE", 2)
         else:
             self.say("TRACK %d%s  INPUT %s" % (n, " STEREO" if t in e.stereo else "", text), 2)
+            self.input_popup = (time.monotonic() + 2.5, t, number - 2)        # the Move shows it big, on the whole screen
 
     def box_edit(self, what, delta=0):
         info = self.engine.change_box(what, delta)

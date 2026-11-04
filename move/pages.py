@@ -41,6 +41,9 @@ def draw(f, T, menu=None):
                 confirm_page(f, menu.kits)
             else:
                 text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
+        elif getattr(T, "input_popup", None) and time.monotonic() < T.input_popup[0] \
+                and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+            input_popup(f, T)
         elif T.fx_page:                                   # left button 3: over the instrument's pages too
             fx_page(f, T)
         elif T.seq_page:
@@ -64,6 +67,9 @@ def draw(f, T, menu=None):
 
 def message(f, T):
     """The app's short messages (TRACK 3 ARMED...), over the bottom line."""
+    pop = getattr(T, "input_popup", None)
+    if pop and time.monotonic() < pop[0] and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+        return                                        # the big input screen has its own bottom line
     if T.message and time.monotonic() < T.message_until:
         f.rect(0, H - 8, W, 8, 1)
         f.small(1, H - 6, T.message[:31], 0)
@@ -242,6 +248,65 @@ def bar_dots(f, T, top, bottom, x0, x1, mid, ppb):
             if bx >= x0:
                 f.dot(bx, top)
             k += 1
+
+
+def input_parts(e, c):
+    """A track's input channel as two lines: who and what, for the big input screen."""
+    import audio
+    if c is None:
+        return "ALL INSTRUMENTS", "MIXED"
+    if c >= audio.EXT_IN:
+        return "MOVE INPUT", "LEFT" if c == audio.EXT_IN else "RIGHT"
+    slot, k = divmod(c, audio.SLOT_CH)
+    mid = e.slots[slot] if slot < audio.SLOTS else None
+    if not mid:
+        return "INSTRUMENT %d" % (slot + 1), "EMPTY"
+    try:
+        import instpage
+        who = dict(instpage.machines()).get(mid) or mid
+    except Exception:
+        who = mid
+    if k >= audio.DRUM_KIT and e.is_synth(mid):
+        return "%d  %s" % (slot + 1, who), ("SOUND LEFT", "SOUND RIGHT", "SOUND (MONO)")[k - audio.DRUM_KIT]
+    what = "KIT LEFT" if k == audio.DRUM_KIT else "KIT RIGHT" if k == audio.DRUM_KIT + 1 else \
+        "KIT (ALL DRUMS)" if k == audio.DRUM_KIT + 2 else "DRUM %d ONLY" % (k + 1)
+    return "%d  %s" % (slot + 1, who), what
+
+
+def fit_lines(f, text, y, big=True):
+    """Draws text centred at y as large as fits (double size, else normal on one or two lines). Returns the next y."""
+    text = str(text).upper()
+    if big and len(text) <= 10:
+        f.big((W - len(text) * 12 + 2) // 2, y, text)
+        return y + 17
+    if len(text) <= 21:
+        f.centre(W // 2, y + 3, text)
+        return y + 17
+    cut = text.rfind(" ", 0, 21)
+    cut = cut if cut > 0 else 21
+    f.centre(W // 2, y, text[:cut].strip())
+    f.centre(W // 2, y + 9, text[cut:].strip()[:21])
+    return y + 19
+
+
+def input_popup(f, T):
+    """Turning a track's input knobs: the choice on the whole screen, in big letters."""
+    e = T.engine
+    _until, t, side = T.input_popup
+    src = e.source(t)
+    stereo = t in e.stereo
+    c = src[side] if isinstance(src, tuple) and side < len(src) else src
+    who, what = input_parts(e, c)
+    header(f, "TRACK %d  %s" % (t + 1, ("LEFT IN" if side == 0 else "RIGHT IN") if stereo else "INPUT"))
+    y = fit_lines(f, who, 14)
+    fit_lines(f, what, y + 1)
+    try:
+        choices = e.track_input_choices(stereo=stereo)
+        pos = choices.index(c) + 1 if c in choices else 0
+        f.right(W - 2, 58, "%d / %d" % (pos, len(choices)), small=True)
+    except Exception:
+        pass
+    f.small(1, 58, "TURN TO CHANGE")
 
 
 def focus_page(f, T):

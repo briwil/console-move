@@ -1642,9 +1642,21 @@ class Engine:
         out = []
         for i in self.loaded_slots():
             ks = list(range(DRUM_KIT + 2)) if stereo else list(range(DRUM_KIT)) + [DRUM_KIT + 2]
+            if getattr(self, "bridge", None) and not self._lane_inputs(self.slots[i]):
+                ks = [DRUM_KIT, DRUM_KIT + 1] if stereo else [DRUM_KIT + 2]       # a synth or module: only its kit has sound
             out += [i * SLOT_CH + k for k in ks]
         out += [EXT_IN, EXT_IN + 1]                         # the Move's audio input
         return out + ([] if stereo else [None])
+
+    def _lane_inputs(self, mid):
+        """Does this instrument have a recording input for each drum (the sound core's drum machines do; synths and
+        Schwung modules, like the sampler, only have the kit)?"""
+        try:
+            m = self.drums.get(mid)
+            mods = getattr(sys.modules.get("drums"), "schwung_modules", None)
+            return not (mods and isinstance(m, mods.Module))
+        except Exception:
+            return True
 
     def step_input(self, t, side, delta):
         """Knobs in the zoomed view: side 0 is a mono track's input or a stereo track's left, 1 its right.

@@ -81,6 +81,17 @@ class Frame:
                         self.dot(x + k * 6 + col, y + row, c)
         return len(s) * 6 - 1
 
+    def big(self, x, y, s, c=1):
+        """The 5x7 letters at double size (10 x 14 pixels, 12 apart). Returns the width drawn."""
+        s = str(s).upper()
+        for k, ch in enumerate(s):
+            cols = FONT.get(ch, FONT["?"] if ch.strip() else FONT[" "])
+            for col, bits in enumerate(cols):
+                for row in range(7):
+                    if bits >> row & 1:
+                        self.rect(x + k * 12 + col * 2, y + row * 2, 2, 2, c)
+        return len(s) * 12 - 2
+
     def small(self, x, y, s, c=1, limit=None):
         """3x5 letters, 4 pixels apart. Returns the width drawn."""
         s = str(s).upper()

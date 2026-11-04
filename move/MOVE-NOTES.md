@@ -96,6 +96,13 @@ Tests: `move/core_test.py` (pads), `move/seq_test.py` (the real sequencer; `quie
   exits with 75 and RNBOLauncher starts it again). Shift + Menu: export.
 - Shift + Back: save, quit and hand the Move back.
 
+## Big screen (move/screenview.py, screenview.html)
+
+http://move.local:8080 on a phone / tablet on the same network (or the Move on the phone's hotspot): the tape
+with real waveforms, 8 tracks, bar grid, loop, track states, and a copy of the Move's screen. View only. The
+page polls /state (~15 a second) and fetches /wave/<channel>:<crc> only when a waveform changes. Sized for
+a Galaxy Z Fold's open screen (2448 x 1848 landscape); "Full screen" button, or Chrome > Add to home screen.
+
 ## Crash logs (move/crashlog.py)
 
 Every run writes console/crashes/running.log: what the app prints, every button / knob / pad, and (with

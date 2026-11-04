@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0c0e">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<title>Console</title>
+<style>
+  :root {
+    --bg: #0b0c0e; --panel: #131519; --line: #23262d; --dim: #5c616c; --text: #e8e9ec; --soft: #a3a8b3;
+    --amber: #f2b33d; --red: #ff5a4e; --green: #49d17d; --orange: #ff9a3c;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #offline { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+    gap: 1.2vh; background: rgba(11,12,14,.92); font-size: 2.4vh; color: var(--soft); text-align: center; }
+  #offline b { color: var(--text); font-size: 3.2vh; font-weight: 600; }
+  #fs { position: fixed; left: 50%; top: 1.6vh; transform: translateX(-50%); padding: .8vh 1.2vw; border-radius: 1vh; border: 1px solid var(--line);
+    background: var(--panel); color: var(--soft); font-size: 1.6vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="offline"><b>Looking for Console…</b><span>The Move and this device need to be on the same Wi-Fi (or this phone's hotspot),<br>with Console running.</span></div>
+<button id="fs">Full screen</button>
+<script>
+"use strict";
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const COLORS = ["#f2b33d", "#4fb3ff", "#ff6b9a", "#49d17d", "#b38cff", "#ff9a3c", "#36d6c8", "#e6e36a"];
+let S = null, got = 0, waves = {}, want = {}, fails = 0, dpr = 1, W = 0, H = 0, screenImg = null, screenKey = "";
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = Math.round(innerWidth * dpr); H = Math.round(innerHeight * dpr);
+  cv.width = W; cv.height = H;
+}
+addEventListener("resize", resize); resize();
+
+document.getElementById("fs").onclick = () => {
+  const el = document.documentElement;
+  (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  try { screen.orientation.lock("landscape"); } catch (e) {}
+};
+document.addEventListener("fullscreenchange", () => {
+  document.getElementById("fs").style.display = document.fullscreenElement ? "none" : "";
+});
+
+async function poll() {
+  try {
+    const r = await fetch("/state", {cache: "no-store"});
+    S = await r.json(); got = performance.now(); fails = 0;
+    document.getElementById("offline").style.display = "none";
+    for (const t of S.tracks) for (const id of t.waves) if (!waves[id] && !want[id]) loadWave(id);
+  } catch (e) {
+    if (++fails > 8) document.getElementById("offline").style.display = "flex";
+  }
+  setTimeout(poll, 66);
+}
+async function loadWave(id) {
+  want[id] = 1;
+  try {
+    const r = await fetch("/wave/" + id);
+    const buf = new Uint8Array(await r.arrayBuffer());
+    const ch = id.split(":")[0];
+    for (const k of Object.keys(waves)) if (k.split(":")[0] === ch && k !== id) delete waves[k];
+    waves[id] = buf;
+  } catch (e) {}
+  delete want[id];
+}
+poll();
+
+function pos() {                       // the playhead, moved on between the Move's updates while playing
+  if (!S) return 0;
+  return S.playing ? S.pos + Math.min(0.5, (performance.now() - got) / 1000) * S.bpm / 60 : S.pos;
+}
+function rr(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+function text(s, x, y, size, color, weight, align, font) {
+  g.font = (weight || 400) + " " + Math.round(size) + "px " + (font || "system-ui, -apple-system, Roboto, sans-serif");
+  g.fillStyle = color; g.textAlign = align || "left"; g.textBaseline = "middle"; g.fillText(s, x, y);
+}
+const MONO = "ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace";
+
+function draw() {
+  requestAnimationFrame(draw);
+  g.fillStyle = "#0b0c0e"; g.fillRect(0, 0, W, H);
+  if (!S) return;
+  const u = Math.min(W / 2448, H / 1848) * 1.0;          // one unit: the Fold's open screen at 1
+  const pad = 28 * u, P = pos();
+  // ---------------------------------------------------------------- the top line
+  const topH = 120 * u;
+  const st = S.recording ? (S.overdub ? "ODUB" : "REC") : S.playing ? "PLAY" : "STOP";
+  const stc = S.recording ? (S.overdub ? "#ff9a3c" : "#ff5a4e") : S.playing ? "#49d17d" : "#5c616c";
+  rr(pad, pad, 190 * u, 76 * u, 18 * u); g.fillStyle = stc; g.fill();
+  text(st, pad + 95 * u, pad + 39 * u, 40 * u, "#0b0c0e", 800, "center");
+  text(S.position, pad + 230 * u, pad + 40 * u, 66 * u, "#e8e9ec", 600, "left", MONO);
+  let x = pad + 230 * u + g.measureText(S.position).width + 44 * u;
+  text(S.bpm.toFixed(S.bpm % 1 ? 1 : 0) + " BPM", x, pad + 40 * u, 38 * u, "#a3a8b3", 500); x += g.measureText(S.bpm + " BPM").width + 34 * u;
+  text(S.sig[0] + "/" + S.sig[1], x, pad + 40 * u, 38 * u, "#a3a8b3", 500); x += 110 * u;
+  const badge = (label, on, color) => {
+    g.font = "700 " + Math.round(26 * u) + "px system-ui"; const w = g.measureText(label).width + 36 * u;
+    rr(x, pad + 18 * u, w, 44 * u, 12 * u); g.fillStyle = on ? color : "#1a1d22"; g.fill();
+    text(label, x + w / 2, pad + 40 * u, 26 * u, on ? "#0b0c0e" : "#5c616c", 700, "center"); x += w + 14 * u;
+  };
+  badge("LOOP", S.loop_on && S.loop, "#f2b33d");
+  if (S.song_mode) badge("SONG", true, "#b38cff");
+  text(S.song || "NEW PROJECT", W - pad, pad + 40 * u, 38 * u, S.song ? "#e8e9ec" : "#5c616c", 600, "right");
+
+  // ---------------------------------------------------------------- the whole tape, small
+  const ovY = topH + 6 * u, ovH = 64 * u, gutter = 300 * u, X0 = pad + gutter, X1 = W - pad;
+  const span = (S.zoom || 4) * S.bar, ppb = (X1 - X0) / span, mid = X0 + (X1 - X0) / 2;
+  const viewA = P - span / 2, viewB = P + span / 2;
+  const total = Math.max(S.length, 8);
+  rr(X0, ovY, X1 - X0, ovH, 10 * u); g.fillStyle = "#131519"; g.fill();
+  const lh = ovH / 8;
+  S.tracks.forEach((t, i) => {
+    for (const b of t.boxes) {
+      const a = X0 + b[0] / total * (X1 - X0), w = Math.max(2 * u, (b[1] - b[0]) / total * (X1 - X0));
+      g.fillStyle = COLORS[i] + (t.audible ? "cc" : "44"); g.fillRect(a, ovY + i * lh + 1 * u, w, lh - 2 * u);
+    }
+  });
+  if (S.loop) { g.fillStyle = "rgba(242,179,61,.18)"; g.fillRect(X0 + S.loop[0] / total * (X1 - X0), ovY, (S.loop[1] - S.loop[0]) / total * (X1 - X0), ovH); }
+  g.strokeStyle = "#e8e9ec"; g.lineWidth = 2 * u;
+  g.strokeRect(X0 + Math.max(0, viewA) / total * (X1 - X0), ovY + 1 * u, span / total * (X1 - X0), ovH - 2 * u);
+  g.fillStyle = "#ff5a4e"; g.fillRect(X0 + P / total * (X1 - X0) - 1.5 * u, ovY, 3 * u, ovH);
+  text("TAPE", pad + 4 * u, ovY + ovH / 2, 26 * u, "#5c616c", 700);
+
+  // ---------------------------------------------------------------- the 8 tracks
+  const footH = 250 * u, tY = ovY + ovH + 22 * u, tH = H - footH - tY - 10 * u, rowH = tH / 8;
+  const rulerH = 40 * u;
+  // bar numbers and grid
+  g.save(); g.beginPath(); g.rect(X0, tY - 4 * u, X1 - X0, tH + 8 * u); g.clip();
+  const firstBar = Math.floor(viewA / S.bar) - 1;
+  for (let k = firstBar; k * S.bar <= viewB + S.bar; k++) {
+    for (let bt = 0; bt < S.bar; bt += S.unit || 1) {
+      const bx = mid + (k * S.bar + bt - P) * ppb;
+      if (bx < X0 - 2 || bx > X1 + 2) continue;
+      g.fillStyle = bt === 0 ? "#2b2f37" : "#181b20"; g.fillRect(bx, tY + rulerH, bt === 0 ? 2 * u : 1 * u, tH - rulerH);
+      if (bt === 0 && k >= 0) text(String(k + 1), bx + 8 * u, tY + rulerH / 2, 26 * u, "#7c818c", 600, "left", MONO);
+    }
+  }
+  if (S.loop) {
+    const a = mid + (S.loop[0] - P) * ppb, b = mid + (S.loop[1] - P) * ppb;
+    g.fillStyle = S.loop_on ? "rgba(242,179,61,.10)" : "rgba(242,179,61,.04)"; g.fillRect(a, tY + rulerH, b - a, tH - rulerH);
+    g.fillStyle = S.loop_on ? "#f2b33d" : "#7a6330";
+    for (const lx of [a, b]) g.fillRect(lx - 1.5 * u, tY + 6 * u, 3 * u, tH - 6 * u);
+    g.fillRect(a, tY + 6 * u, b - a, 6 * u);
+  }
+  g.restore();
+  const laneTop = tY + rulerH, laneH = (tH - rulerH) / 8;
+  S.tracks.forEach((t, i) => {
+    const y = laneTop + i * laneH, h = laneH - 10 * u, col = COLORS[i];
+    // the label
+    rr(pad, y, gutter - 22 * u, h, 16 * u);
+    g.fillStyle = t.selected ? "#1d2027" : "#131519"; g.fill();
+    if (t.selected) { g.strokeStyle = col; g.lineWidth = 3 * u; g.stroke(); }
+    text(String(t.n), pad + 46 * u, y + h * 0.42, Math.min(64 * u, h * 0.55), t.audible ? col : "#3d4148", 800, "center");
+    const chips = [];
+    if (t.armed) chips.push(["●", "#ff5a4e"]);
+    if (t.muted) chips.push(["M", "#5c616c"]);
+    if (t.solo) chips.push(["S", "#f2b33d"]);
+    if (t.stereo) chips.push(["ST", "#4fb3ff"]);
+    let cx = pad + 92 * u;
+    for (const [lab, cc] of chips) { text(lab, cx, y + h * 0.3, 26 * u, cc, 800); g.font = "800 " + Math.round(26 * u) + "px system-ui"; cx += g.measureText(lab).width + 14 * u; }
+    // volume bar, pan dot
+    const vx = pad + 92 * u, vw = gutter - 140 * u, vy = y + h * 0.58;
+    g.fillStyle = "#23262d"; g.fillRect(vx, vy, vw, 8 * u);
+    g.fillStyle = t.audible ? col : "#3d4148"; g.fillRect(vx, vy, vw * Math.min(1, t.vol), 8 * u);
+    g.fillStyle = "#a3a8b3"; g.fillRect(vx + vw / 2 + t.pan * vw / 2 - 2 * u, vy + 14 * u, 4 * u, 10 * u);
+    if (t.armed && t.peak > 0) { g.fillStyle = t.peak > 0.95 ? "#ff5a4e" : "#49d17d"; g.fillRect(vx, vy - 14 * u, vw * Math.min(1, t.peak), 6 * u); }
+    if (h > 110 * u) text(t.input.slice(0, 26), pad + 22 * u, y + h - 22 * u, 20 * u, "#5c616c", 500);
+    // the lane
+    g.save(); g.beginPath(); g.rect(X0, y, X1 - X0, h); g.clip();
+    g.fillStyle = t.selected ? "#121419" : "#0e1013"; g.fillRect(X0, y, X1 - X0, h);
+    const halves = t.stereo && t.waves.length > 1 ? 2 : 1;
+    for (const b of t.boxes) {
+      const a = mid + (b[0] - P) * ppb, z = mid + (b[1] - P) * ppb;
+      if (z < X0 || a > X1) continue;
+      rr(a + 1 * u, y + 2 * u, Math.max(2 * u, z - a - 2 * u), h - 4 * u, 10 * u);
+      g.fillStyle = col + (t.audible ? "2e" : "12"); g.fill();
+      g.strokeStyle = col + (t.audible ? "aa" : "40"); g.lineWidth = 2 * u; g.stroke();
+      for (let s = 0; s < halves; s++) {
+        const lv = waves[t.waves[s]];
+        if (!lv) continue;
+        const hy = y + 6 * u + s * (h - 12 * u) / halves, hh = (h - 12 * u) / halves, cy = hy + hh / 2;
+        g.fillStyle = col + (t.audible ? "ff" : "55");
+        const xa = Math.max(X0, a + 3 * u), xb = Math.min(X1, z - 3 * u), step = Math.max(1, Math.round(2 * u));
+        for (let px = xa; px < xb; px += step) {
+          const b0 = P + (px - mid) / ppb, b1 = P + (px + step - mid) / ppb;
+          let i0 = Math.floor(b0 * S.res), i1 = Math.max(i0 + 1, Math.floor(b1 * S.res)), m = 0;
+          for (let k = Math.max(0, i0); k < Math.min(lv.length, i1); k++) if (lv[k] > m) m = lv[k];
+          const v = m / 255 * (hh / 2 - 2 * u);
+          if (v > 0.5) g.fillRect(px, cy - v, step, v * 2);
+        }
+      }
+    }
+    g.restore();
+  });
+  // the playhead
+  g.fillStyle = S.recording ? "#ff5a4e" : "#e8e9ec";
+  g.fillRect(mid - 2 * u, tY, 4 * u, tH);
+  g.beginPath(); g.moveTo(mid - 14 * u, tY); g.lineTo(mid + 14 * u, tY); g.lineTo(mid, tY + 18 * u); g.fill();
+
+  // ---------------------------------------------------------------- the bottom: the Move's own screen, the message
+  const fy = H - footH + 10 * u, sh = footH - 30 * u, sw = sh * 2;
+  rr(W - pad - sw - 16 * u, fy - 8 * u, sw + 16 * u, sh + 16 * u, 14 * u); g.fillStyle = "#131519"; g.fill();
+  if (S.screen) {
+    if (S.screen !== screenKey) {
+      screenKey = S.screen;
+      const raw = atob(S.screen), img = g.createImageData(128, 64);
+      for (let yy = 0; yy < 64; yy++) for (let xx = 0; xx < 128; xx++) {
+        const on = (raw.charCodeAt(yy * 16 + (xx >> 3)) >> (7 - (xx & 7))) & 1, o = (yy * 128 + xx) * 4;
+        img.data[o] = on ? 232 : 14; img.data[o + 1] = on ? 233 : 16; img.data[o + 2] = on ? 236 : 19; img.data[o + 3] = 255;
+      }
+      const oc = document.createElement("canvas"); oc.width = 128; oc.height = 64; oc.getContext("2d").putImageData(img, 0, 0);
+      screenImg = oc;
+    }
+    g.imageSmoothingEnabled = false;
+    if (screenImg) g.drawImage(screenImg, W - pad - sw - 8 * u, fy, sw, sh);
+  }
+  const sel = S.tracks.find(t => t.selected);
+  if (sel) {
+    const pan = Math.abs(sel.pan) < 0.05 ? "C" : (sel.pan < 0 ? "L" : "R") + Math.round(Math.abs(sel.pan) * 100);
+    text("TRACK " + sel.n, pad, fy + 34 * u, 44 * u, COLORS[sel.n - 1], 800);
+    text("VOL " + Math.round(sel.vol * 100) + "   PAN " + pan + (sel.stereo ? "   STEREO" : "") + (sel.armed ? "   ARMED" : ""),
+         pad + 250 * u, fy + 34 * u, 34 * u, "#a3a8b3", 600);
+    text("IN  " + sel.input, pad, fy + 96 * u, 30 * u, "#7c818c", 500);
+  }
+  if (S.message) {
+    rr(pad, fy + 140 * u, W - 2 * pad - sw - 50 * u, 76 * u, 14 * u); g.fillStyle = "#1d2027"; g.fill();
+    text(S.message.slice(0, 90), pad + 24 * u, fy + 178 * u, 32 * u, "#e8e9ec", 600);
+  }
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

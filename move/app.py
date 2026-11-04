@@ -464,6 +464,12 @@ def main():
     T.pad_curve = max(0, min(2, int(e.settings.get("pad_curve", 1)))) if e else 1
     T.song = movesong.Song(T)
     T.key("DRUMS")                                   # start on left button 1: the instruments
+    try:
+        import screenview
+        screenview.start(T)                          # the big screen: http://move.local:8080
+    except Exception as ex:                          # noqa: BLE001
+        print("Big screen:", ex)
+        screenview = None
     st = stress.Stress(STRESS_MINUTES, T, m, e, board) if STRESS_MINUTES else None
     if st:
         T.say("STRESS TEST: %g MINUTES. SHIFT + BACK STOPS IT" % STRESS_MINUTES, 5)
@@ -551,6 +557,8 @@ def main():
                     T.say("PATTERN RECORDING OFF", 2)
                 T._rec_was_playing = bool(e.playing)
                 pages.draw(frame, T, m)
+                if screenview is not None:
+                    screenview.frame(frame)                   # (a copy for the big screen, if one is open)
                 if st is not None:                            # the stress test: the time left, bottom right
                     left = st.left()
                     frame.rect(99, 57, 29, 7, 1)

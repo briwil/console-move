@@ -405,7 +405,11 @@ class Module:
             return
         value = max(0, min(self.params[index]["steps"], int(value)))
         with self._lock:
+            if value == self.values[index]:
+                return                    # (a knob turned on past the end: sending it again crashed Noisemaker)
             self.values[index] = value
+            if self.params[index]["key"] in self.spec.get("quiet_first", ()):
+                self._pending.append(("all_off",))    # this setting can't change under sounding notes
             self._pending.append(("param", index, value))
             p = self.params[index]
             if p["voice"] is None and (p["kind"] == "menu" or p.get("int")):

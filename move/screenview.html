@@ -50,13 +50,27 @@ document.addEventListener("fullscreenchange", () => {
   document.getElementById("fs").style.display = document.fullscreenElement ? "none" : "";
 });
 
+function took(st) {
+  S = st; got = performance.now(); fails = 0;
+  document.getElementById("offline").style.display = "none";
+  for (const t of S.tracks) for (const id of t.waves) if (!waves[id] && !want[id]) loadWave(id);
+  if (S.page === "seq" && S.seq_id && S.seq_id !== SEQ_ID && seqWant !== S.seq_id) loadSeq(S.seq_id);
+}
+// the Move pushes its state as it changes (no asking); if that can't work here, ask 15 times a second
+let polling = false, lastMsg = 0;
+function listen() {
+  let es;
+  try { es = new EventSource("/events"); } catch (e) { startPoll(); return; }
+  es.onmessage = ev => { lastMsg = performance.now(); try { took(JSON.parse(ev.data)); } catch (e) {} };
+  es.onerror = () => { if (++fails > 8) document.getElementById("offline").style.display = "flex"; };
+  setInterval(() => { if (!polling && lastMsg && performance.now() - lastMsg > 4000) { es.close(); startPoll(); } }, 2000);
+  setTimeout(() => { if (!lastMsg && !polling) { es.close(); startPoll(); } }, 5000);
+}
+function startPoll() { if (!polling) { polling = true; poll(); } }
 async function poll() {
   try {
     const r = await fetch("/state", {cache: "no-store"});
-    S = await r.json(); got = performance.now(); fails = 0;
-    document.getElementById("offline").style.display = "none";
-    for (const t of S.tracks) for (const id of t.waves) if (!waves[id] && !want[id]) loadWave(id);
-    if (S.page === "seq" && S.seq_id && S.seq_id !== SEQ_ID && seqWant !== S.seq_id) loadSeq(S.seq_id);
+    took(await r.json());
   } catch (e) {
     if (++fails > 8) document.getElementById("offline").style.display = "flex";
   }
@@ -78,7 +92,7 @@ async function loadSeq(id) {
   try { const r = await fetch("/seq/" + id); if (r.ok) { SEQ = await r.json(); SEQ_ID = id; } } catch (e) {}
   seqWant = "";
 }
-poll();
+listen();
 
 function pos() {                       // the playhead, moved on between the Move's updates while playing
   if (!S) return 0;
@@ -264,6 +278,13 @@ function seqHeader(u, pad, y, title, sub, accent) {
     text("● REC", W - pad - pw - 40 * u, y + 32 * u, 32 * u, "#ff5a4e", 800, "right"); }
 }
 
+function stepNow(L, spb, length, straight, fallback) {
+  // the playing step, worked out here between the Move's updates (only for steps played in order)
+  if (!S.playing || L.clock === null || L.clock === undefined || !straight || !length) return fallback;
+  const beats = L.clock + Math.min(0.5, (performance.now() - got) / 1000) * S.bpm / 60;
+  const k = Math.floor((beats - L.anchor) * spb + 1e-6);
+  return ((k % length) + length) % length;
+}
 function drawSeq(u, pad, y0, y1) {
   const L = S.seq;
   if (SEQ.kind === "drums") drawDrums(u, pad, y0, y1, L); else drawNotes(u, pad, y0, y1, L);
@@ -286,7 +307,7 @@ function drawDrums(u, pad, y0, y1, L) {
     // the 16 the buttons show, for the picked lane
     if (isSel) { const a = X0 + L.first * cw, w = Math.min(16, ln.length - L.first) * cw;
       g.fillStyle = "rgba(255,255,255,.05)"; g.fillRect(a, y - 3 * u, w, h + 6 * u); }
-    const at = L.at ? L.at[li] : null;
+    const at = stepNow(L, ln.spb, ln.length, ln.straight, L.at ? L.at[li] : null);
     for (let i = 0; i < ln.length; i++) {
       const s = ln.steps[i], x = X0 + i * cw, gap = Math.max(2 * u, cw * 0.1);
       const bx = x + gap / 2, bw = cw - gap, by = y, bh = h;
@@ -354,8 +375,10 @@ function drawNotes(u, pad, y0, y1, L) {
       if (mark) text(mark, x + 6 * u, y + h / 2, Math.min(20 * u, h * 0.7), "#0b0c0e", 800);
     }
   }
-  if (L.at !== null && L.at !== undefined) {
-    const x = X0 + (L.at + 0.5) * cw; g.fillStyle = "#e8e9ec"; g.fillRect(x - 2 * u, top, 4 * u, y1 - top);
+  const atN = (L.lane === null || L.lane === undefined || !SEQ.per_note)
+    ? stepNow(L, SEQ.spb, SEQ.length, SEQ.straight, L.at) : L.at;
+  if (atN !== null && atN !== undefined) {
+    const x = X0 + (atN + 0.5) * cw; g.fillStyle = "#e8e9ec"; g.fillRect(x - 2 * u, top, 4 * u, y1 - top);
   }
 }
 </script>

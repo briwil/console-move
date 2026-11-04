@@ -167,7 +167,10 @@ def seq_data(T):
     playing = bool(e.playing)
     fpb = e.frames_per_beat()
     live = {"pattern": seq.current + 1, "queued": (seq.queued + 1) if seq.queued is not None else None,
-            "rec": bool(getattr(T, "live_rec", False))}
+            "rec": bool(getattr(T, "live_rec", False)),
+            # (the page works the playing step out itself between updates, from these: the sequencer's clock
+            # as you hear it, and where the pattern's step 0 is, in beats)
+            "clock": round(e._heard_frame() / fpb, 5) if playing else None, "anchor": round(seq.anchor / fpb, 5)}
     if T.synth_shown():
         import notes
         ms = T.msyn
@@ -183,7 +186,8 @@ def seq_data(T):
                   "root": notes.NAMES[seq.root], "scale": notes.SCALES[seq.scale][0],
                   "degrees": [(seq.root + d) % 12 for d in seq.degrees()],
                   "per_note": bool(getattr(seq, "move_type", 0)), "bar_beats": seq.bar_beats,
-                  "spb": pat.steps_per_beat()}
+                  "spb": pat.steps_per_beat(),
+                  "straight": not any(n.comp for d in pat.notes.values() for n in d.values())}
         live.update({"shown": shown, "lane": ms.lane, "first": ms.first(), "page_len": ms.length(),
                      "down": sorted(ms.down), "selected": sorted(ms.selected),
                      "at": ms.playing_step() if playing else None})
@@ -200,6 +204,7 @@ def seq_data(T):
         lanes.append({"name": names[li] if li < len(names) else "LANE %d" % (li + 1), "length": ln.length,
                       "rate": sequencer.RATES[ln.rate][0], "spb": ln.steps_per_beat(), "hits": ln.hits,
                       "group": sequencer.group_steps(ln.steps_per_beat(), tuple(getattr(e, "time_sig", (4, 4)))),
+                      "straight": not any(st.comp for st in ln.steps[:ln.length]),     # (plays its steps in order)
                       "steps": steps})
     static = {"kind": "drums", "title": title, "lanes": lanes, "chances": sequencer.CHANCES}
     try:
@@ -250,6 +255,32 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _events(self):
+        """The state pushed to the page as it changes (checked 40 times a second; sent when something did,
+        and at least twice a second), instead of the page asking."""
+        global _asked
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        last, sent = None, 0.0
+        while True:
+            now = time.monotonic()
+            _asked = now
+            try:
+                st = state()
+            except (RuntimeError, ValueError, KeyError, IndexError, AttributeError, TypeError):
+                time.sleep(0.025)                        # (changed under it by Console: next time)
+                continue
+            st.pop("t", None)
+            body = json.dumps(st, separators=(",", ":"))
+            if body != last or now - sent > 0.5:
+                self.wfile.write(b"data: " + body.encode() + b"\n\n")
+                self.wfile.flush()
+                last, sent = body, now
+            time.sleep(0.025)
+
     def do_GET(self):
         path = self.path.split("?")[0]
         try:
@@ -263,6 +294,8 @@ class _Handler(BaseHTTPRequestHandler):
                                       ).encode(), "application/manifest+json")
             elif path == "/icon.svg":
                 self._send(ICON.encode(), "image/svg+xml", cache=True)
+            elif path == "/events":
+                self._events()
             elif path == "/state":
                 global _asked
                 _asked = time.monotonic()

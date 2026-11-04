@@ -551,7 +551,7 @@ class Transport:
         held = self.__dict__.setdefault("_midi_held", {})
         if velocity:
             e.note_on(note, velocity)
-            if self.seq_page and e.playing:
+            if self.seq_page and e.playing and getattr(self, "live_rec", True):     # (the Move: only while recording)
                 at = e._heard_frame()
                 held[note] = (e.seq.live_place(note, at, e.frames_per_beat()), at)
                 e.seq_changed()

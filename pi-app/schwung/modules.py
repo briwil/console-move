@@ -253,7 +253,9 @@ class Module:
                 lo, hi = _number(p.get("min")), _number(p.get("max"))
                 if lo is None or hi is None or hi <= lo:
                     lo, hi = 0.0, 1.0
-                if kind == "int":
+                if kind == "int" and lo == 0 and hi == 1:     # a switch (OB-Xd's OSC1 SAW): OFF / ON
+                    entry.update(kind="menu", options=["OFF", "ON"], raw=["0", "1"], steps=1)
+                elif kind == "int":
                     steps = int(hi - lo)
                     entry.update(kind="num", int=True, lo=lo, hi=hi, steps=max(1, steps))
                     if lo > 0 and hi / lo >= 100:             # a frequency (20-20000): even steps by octave, not by Hz

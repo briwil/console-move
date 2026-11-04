@@ -1179,6 +1179,10 @@ class Transport:
     def new_song(self, name):
         self.focus.track = None
         self.engine.new_song(name)
+        try:
+            self.insfx_apply({})                     # a new song starts with no insert effects
+        except Exception as ex:                      # noqa: BLE001
+            print("insert effects:", ex)
         self.tape.pos = 0.0
         self.s.set("song", t=name)
         self.say("NEW PROJECT: %s" % name.upper(), 5)

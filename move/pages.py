@@ -725,6 +725,101 @@ def preset_list(f, k):
     f.small(1, 58, (msg or "PLAY: LOAD IT   BACK: CANCEL").upper()[:31])
 
 
+def menu_list_page(f, menu, T):
+    """The project menu: NEW, SAVE, LOAD, SETTINGS. Holding Shift turns NEW PROJECT into DELETE PROJECT."""
+    import menu as menu_mod
+    shift = bool(getattr(T, "shift_held", lambda: False)())
+    e = menu.engine
+    header(f, ((e.song or "UNTITLED") if e else "DEMO").upper()[:21])
+    rows = []
+    for label, _ in menu_mod.ITEMS:
+        rows.append({"NEW": "DELETE PROJECT" if shift else "NEW PROJECT", "SAVE": "RENAME PROJECT" if shift else "SAVE PROJECT",
+                     "LOAD": "LOAD PROJECT", "SETTINGS": "SETTINGS"}[label])
+    biglist(f, rows, menu.choice, fit=4)
+    msg = str(getattr(menu, "msg", "") or "")
+    f.small(1, 58, (msg or ("SHIFT + PUSH: DELETE / RENAME" if shift else "")).upper()[:31])
+
+
+def delete_page(f, menu):
+    """Deleting a project: the list, then a full-screen "are you sure?"."""
+    if menu.confirm:
+        header(f, "DELETE PROJECT")
+        name = str(menu.confirm[1]).upper()
+        f.text(2, 16, "ARE YOU SURE?")
+        f.text(2, 30, name[:21])
+        f.small(2, 42, "IT IS GONE FOR GOOD")
+        f.small(1, 52, "PLAY: YES, DELETE IT")
+        f.small(1, 58, "BACK: NO, KEEP IT")
+        return
+    renaming = getattr(menu, "rename_pick", False)
+    header(f, "RENAME WHICH PROJECT?" if renaming else "DELETE WHICH PROJECT?", "%d" % len(menu.songs))
+    rows = [(s + ("  OPEN" if menu.engine and s == menu.engine.song else "")) for s in menu.songs]
+    biglist(f, [r.upper() for r in rows], menu.pick, fit=4)
+    msg = str(getattr(menu, "msg", "") or "")
+    f.small(1, 58, (msg or ("PLAY: RENAME   BACK: CANCEL" if renaming else "PLAY: DELETE   BACK: CANCEL")).upper()[:31])
+
+
+def settings_page(f, menu):
+    """The settings, one row each: the row you're on is a white bar. Push the wheel: the value goes black inside a
+    white box and the wheel changes it; push again: back to the rows."""
+    import menu as menu_mod
+    names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO"}
+    header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
+    rows = menu_mod.SETTINGS
+    for i, what in enumerate(rows):
+        y = 12 + i * 9
+        full = str(menu.setting_text(what) or "")
+        short = full.split("  ")[0].split(": ")[0].upper()[:14]
+        label = names.get(what, menu_mod.LABELS.get(what, what))
+        on = i == menu.row
+        if on and not menu.editing:
+            f.rect(0, y - 1, W, 9, 1)
+            f.text(2, y, label, 0)
+            f.right(W - 3, y, short, c=0)
+        else:
+            f.text(2, y, label)
+            if on:                                            # editing: the value in a white box
+                w = len(short) * 6 + 3
+                f.rect(W - 3 - w + 1, y - 1, w + 1, 9, 1)
+                f.right(W - 3, y, short, c=0)
+            else:
+                f.right(W - 3, y, short)
+    full = str(menu.setting_text(rows[menu.row]) or "")
+    msg = str(getattr(menu, "msg", "") or "") or (menu.update_message() if rows[menu.row] == "UPDATE" else "") or full
+    f.small(1, 58, msg.upper()[:31])
+
+
+def name_page(f, menu, prompt=None):
+    """Naming (a project, a Wi-Fi password): the name in big letters, the letter under the cursor inverted in a
+    white box (at the end: an empty box, the next letter)."""
+    title = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(menu, "renaming", ""),
+              "wifi": "PASSWORD FOR %s" % getattr(menu, "joining", "")}.get(menu.naming, "NAME THIS PROJECT")
+    header(f, (prompt or title).upper()[:21])
+    name = "".join(menu.name)
+    per = 20
+    cur = menu.cursor
+    row = cur // per
+    rows = max(row + 1, (len(name) + per - 1) // per, 1)
+    first = max(0, min(row - 1, rows - 3))
+    for r in range(first, min(rows, first + 3)):
+        y = 16 + (r - first) * 11
+        for k, ch in enumerate(name[r * per:(r + 1) * per]):
+            x = 2 + k * 6
+            if r * per + k == cur:
+                f.rect(x - 1, y - 1, 7, 9, 1)
+                f.text(x, y, ch, 0)
+            else:
+                f.text(x, y, ch)
+        if r == row and cur >= len(name):                  # the cursor after the last letter
+            x = 2 + (cur - r * per) * 6
+            f.rect(x - 1, y - 1, 7, 9, 1)
+    msg = str(getattr(menu, "msg", "") or "")
+    if msg:
+        f.small(1, 44, msg.upper()[:31])
+    f.small(1, 51, "WHEEL: LETTER   < >: MOVE")
+    f.small(1, 58, "DELETE: ERASE  PLAY: OK  BACK: CANCEL")
+
+
 def text_page(f, s, msg=""):
     """A Pi menu screen: its texts, row by row (from top to bottom), the highlighted row inverted."""
     bar = s.get("menu_bar")

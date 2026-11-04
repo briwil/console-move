@@ -336,7 +336,7 @@ story += [
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
       "as the synth sequencer's knobs 5 and 6.", BODY),
     p("Arpeggiator (synths)", H2),
-    p("A synth's last sound page is ARP (Right past INSERT 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
+    p("A synth's last sound page is ARP (Right past INSERT 2; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
       "its sound pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "
       "the chords in the sequencer, into a run of single notes. What you record from the pads is the notes you played, "
       "not the arp's. A rest in the rhythm does not use up a note: the run carries on at the next one.", BODY),
@@ -348,8 +348,10 @@ story += [
          "so give it a longer length, or a faster rate, to hear more than one note."),
         ("Knob 5  GATE", "How long each note lasts, 10-200 % of a step (over 100 they overlap)."),
         ("Knob 6  HOLD", "The notes keep going after you let go; new notes replace them."),
-        ("Knob 7  GLIDE", "Portamento between the notes (the synth has to answer CC 65 / CC 5)."),
-        ("Knob 8  BEND", "Each note starts bent up (+) or down (-) and slides to its pitch (pitch bend)."),
+        ("Knob 7  STYLE", "Five rhythm patterns laid over your rhythm: GALLOP, OFFBEAT, TRESILLO, SYNCOPATED, STUTTER "
+         "(OFF: just your rhythm). A rest in either is a rest; an accent in either is an accent."),
+        ("ARP 2 (Right)", "Knob 1 GLIDE: portamento between the notes (the synth has to answer CC 65 / CC 5). "
+         "Knob 2 BEND: each note starts bent up (+) or down (-) and slides to its pitch (pitch bend)."),
         ("Step buttons", "The 16-step rhythm: tap a step to go note (blue), accent (white, louder), rest (dim). "
          "It follows the song's clock while it plays."),
     ]),

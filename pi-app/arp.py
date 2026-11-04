@@ -20,12 +20,21 @@ except ImportError:                                       # (the core's own test
              ("1/4", 1), ("1/4T", 1.5), ("1/2", 0.5), ("1/2T", 0.75), ("1/1", 0.25)]
 
 MODES = ["UP", "DOWN", "UP-DOWN", "DOWN-UP", "RANDOM", "AS PLAYED", "CHORD"]
+# STYLE: five rhythm patterns over the 16 steps (0 rest, 1 note, 2 accent), laid over the hand-made rhythm
+STYLES = ["OFF", "GALLOP", "OFFBEAT", "TRESILLO", "SYNCOPATED", "STUTTER"]
+STYLE_PATTERNS = [
+    [2, 1, 0, 1] * 4,
+    [1, 0, 2, 0] * 4,
+    [2, 0, 0, 1, 0, 0, 1, 0] * 2,
+    [2, 0, 1, 1, 0, 2, 0, 1, 1, 0, 2, 0, 1, 1, 0, 0],
+    [2, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1, 0, 0, 1, 1],
+]
 LOOKAHEAD = 2205                                          # frames (50 ms): live steps are sent this far ahead
 SLIDE_STEPS = 4                                           # a BEND is sent as this many pitch-bend messages
 
 
 def default():
-    return {"on": 0, "mode": 0, "oct": 1, "rate": 0, "gate": 50, "hold": 0, "rhythm": [1] * 16, "glide": 0, "bend": 0}
+    return {"on": 0, "mode": 0, "oct": 1, "rate": 0, "gate": 50, "hold": 0, "rhythm": [1] * 16, "glide": 0, "bend": 0, "style": 0}
 
 
 def clean(d):
@@ -43,6 +52,7 @@ def clean(d):
             out["rhythm"] = r + [1] * (16 - len(r))
             out["glide"] = max(0, min(100, int(d.get("glide", 0))))
             out["bend"] = max(-100, min(100, int(d.get("bend", 0))))
+            out["style"] = max(0, min(len(STYLES) - 1, int(d.get("style", 0))))
         except (TypeError, ValueError):
             return default()
     return out
@@ -97,6 +107,9 @@ class Arp:
         """What step number k of the grid does: (notes, velocity) or None for a rest. notes: this run's notes."""
         c = self.cfg
         r = c["rhythm"][k % 16]
+        if c.get("style"):                                    # a style on top of the rhythm: a rest in either is a rest
+            st = STYLE_PATTERNS[c["style"] - 1][k % 16]
+            r = 0 if (r == 0 or st == 0) else max(r, st)
         if r == 0:
             return None
         run = cycle(notes, c["mode"], c["oct"])
@@ -172,6 +185,8 @@ class Arp:
 
     def tick(self, midi, src, now):
         """Every few ms: send the live steps falling before now + LOOKAHEAD."""
+        if not self.cfg["hold"] and self.held:                # HOLD off: only what is still down stays
+            self.held = [n for n in self.held if n in self.down]
         if not self.held:
             if self.next_t is not None:
                 self._glide_off(midi, src, now)

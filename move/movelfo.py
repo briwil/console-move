@@ -34,7 +34,7 @@ class MoveLFO:
 
     def last(self):
         """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's ARP."""
-        return lfo.COUNT + self._inserts() - 1 + (2 if self.has_arp() else 0)
+        return lfo.COUNT + self._inserts() - 1 + (3 if self.has_arp() else 0)
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
@@ -43,7 +43,7 @@ class MoveLFO:
         return None
 
     def pads_tab(self):
-        return self.arp_tab() + 1 if self.has_arp() else None
+        return self.arp_tab() + 2 if self.has_arp() else None
 
     def pads_on_page(self):
         """True on the PADS page (the hexagon icon): the pads' key, scale and octave."""
@@ -79,7 +79,11 @@ class MoveLFO:
 
     def arp_on_page(self):
         """True on the ARP page."""
-        return self.tab is not None and self.tab == self.arp_tab()
+        return self.tab is not None and self.arp_tab() is not None and self.tab in (self.arp_tab(), self.arp_tab() + 1)
+
+    def arp_second(self):
+        """True on ARP 2 (glide, bend)."""
+        return self.tab is not None and self.arp_tab() is not None and self.tab == self.arp_tab() + 1
 
     def goto_arp(self):
         """The ARP icon (step button 3 on a synth's sound page): straight to the arp page."""
@@ -91,16 +95,29 @@ class MoveLFO:
         return self.T.engine.seq.arp_cfg
 
     def arp_values(self):
+        """[(label, text)] for the page's knobs: ARP 1 (ON ... STYLE) or ARP 2 (GLIDE, BEND)."""
         c = self.cfg()
+        if self.arp_second():
+            return [("GLIDE", "%d%%" % c["glide"] if c["glide"] else "OFF"),
+                    ("BEND", "%+d%%" % c["bend"] if c["bend"] else "OFF")]
         return [("ON", "ON" if c["on"] else "OFF"), ("MODE", arp.MODES[c["mode"]]), ("OCT", str(c["oct"])),
                 ("RATE", sequencer.RATES[c["rate"]][0]), ("GATE", "%d%%" % c["gate"]),
-                ("HOLD", "ON" if c["hold"] else "OFF"), ("GLIDE", "%d%%" % c["glide"] if c["glide"] else "OFF"),
-                ("BEND", "%+d%%" % c["bend"] if c["bend"] else "OFF")]
+                ("HOLD", "ON" if c["hold"] else "OFF"), ("STYLE", arp.STYLES[c["style"]])]
 
     def arp_knob(self, number, delta, shift):
         c = self.cfg()
         k = number - 1
-        if k in (0, 1, 2, 3, 5):                     # a list or a switch: several clicks a choice
+        if self.arp_second():
+            if k == 0:
+                c["glide"] = max(0, min(100, c["glide"] + 5 * delta))
+            elif k == 1:
+                c["bend"] = max(-100, min(100, c["bend"] + 5 * delta))
+            else:
+                return
+            self.T.engine.seq_changed()
+            self.T.say("ARP  %s  %s" % self.arp_values()[k], 2)
+            return
+        if k in (0, 1, 2, 3, 5, 6):                  # a list or a switch: several clicks a choice
             way = knobgate.gate(("arp", k), delta, shift)
             if not way:
                 return
@@ -113,14 +130,12 @@ class MoveLFO:
                 c["oct"] = max(1, min(4, c["oct"] + one))
             elif k == 3:
                 c["rate"] = sequencer.next_rate(c["rate"], one)
-            else:
+            elif k == 5:
                 c["hold"] = 1 if one > 0 else 0
+            else:
+                c["style"] = max(0, min(len(arp.STYLES) - 1, c["style"] + one))
         elif k == 4:
             c["gate"] = max(10, min(200, c["gate"] + 5 * delta))
-        elif k == 6:
-            c["glide"] = max(0, min(100, c["glide"] + 5 * delta))
-        elif k == 7:
-            c["bend"] = max(-100, min(100, c["bend"] + 5 * delta))
         else:
             return
         self.T.engine.seq_changed()
@@ -212,7 +227,7 @@ class MoveLFO:
         if self.pads_on_page():
             return True
         if self.arp_on_page():
-            return (n - 1) in (0, 1, 2, 3, 5)
+            return (not self.arp_second()) and (n - 1) in (0, 1, 2, 3, 5, 6)
         if self.insert_pos() is not None:
             return False
         if self.held:

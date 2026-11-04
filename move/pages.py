@@ -457,7 +457,7 @@ def arp_page(f, T):
     """A synth's arpeggiator: knobs 1-8 are its settings, the 16 step buttons its rhythm (drawn along the bottom)."""
     ml = T.mlfo
     c = ml.cfg()
-    header(f, "ARP", "ON" if c["on"] else "OFF")
+    header(f, "ARP 2" if ml.arp_second() else "ARP", "ON" if c["on"] else "OFF")
     for i, (label, shown) in enumerate(ml.arp_values()):
         col, row = divmod(i, 4)
         x, y = col * 65, 12 + row * 8

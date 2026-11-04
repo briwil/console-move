@@ -148,5 +148,5 @@ Icons light only while Shift is held, on a synth's sound pages; Shift + step 2 o
 `pi-app/arp.py`; settings in the synth sequencer's `arp_cfg` (saved with the instrument). It sits between the notes and the
 synth: the pads you hold (live) and the sequencer's chords become runs of single notes (core/instruments.py, `Slot`). Pads
 are recorded as played (not the arp's notes). Page: the last sound page of a synth (Right past INSERT 2), or the icon (step 3)
-on the settings pages. Knobs 1-8: ON, MODE, OCT, RATE, GATE, HOLD, GLIDE, BEND; step buttons: the 16-step rhythm (tap:
+on the settings pages. Knobs 1-7: ON, MODE, OCT, RATE, GATE, HOLD, STYLE (5 rhythm patterns); ARP 2: GLIDE, BEND; step buttons: the 16-step rhythm (tap:
 note, accent, rest). GLIDE sends CC 65 / CC 5 (the synth must answer them); BEND is pitch bend (the synth's own range).

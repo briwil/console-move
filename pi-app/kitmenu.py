@@ -28,7 +28,7 @@ import sequencer
 KITS = os.path.join(audio.DATA, "kits")
 ITEMS = [("MACHINE", "menu_more"), ("SAVE", "menu_new"), ("LOAD", "menu_save"), ("COPY", "menu_load"),
          ("PASTE", "menu_settings"), ("CLEAR_ALL", "menu_more2"), ("CLEAR", "menu_more3")]
-TEXTS = {"MACHINE": "DRUM MACHINE", "SAVE": "SAVE Kit", "LOAD": "LOAD Kit", "COPY": "COPY Pattern",
+TEXTS = {"MACHINE": "DRUM MACHINE", "SAVE": "SAVE Preset", "LOAD": "LOAD Preset", "COPY": "COPY Pattern",
          "PASTE": "PASTE Pattern", "CLEAR_ALL": "CLEAR Pattern", "CLEAR": "CLEAR Locks + Steps"}
 MAIN = [("NEW", "menu_r1"), ("SAVE", "menu_r2"), ("LOAD", "menu_r3"), ("SETTINGS", "menu_r4")]   # right column
 MAIN_TEXTS = {"NEW": "NEW Project", "SAVE": "SAVE Project", "LOAD": "LOAD Project", "SETTINGS": "SETTINGS"}

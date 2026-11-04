@@ -527,12 +527,18 @@ class MoveSynth:
         if self.down:
             for i in self.down:
                 here.update(self.notes_at(i))
+        used = set()
+        if self.kind:                                           # PER NOTE: the notes that have steps, orange
+            with seq.lock:
+                used = {pitch for step in seq.pattern.notes.values() for pitch in step}
         for p in range(32):
             note = self.pad_note(p)
             if self.kind and self.lane is not None and note == self.lane:
                 out.append(120)
             elif note in here:
                 out.append(127)
+            elif note in used:
+                out.append(3)                                   # (orange in the Move's colours)
             elif note % 12 == seq.root:
                 out.append(45)
             else:

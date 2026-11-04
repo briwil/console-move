@@ -137,6 +137,8 @@ function draw() {
   const footH = 250 * u;
   if (S.page === "seq" && SEQ && S.seq) {
     drawSeq(u, pad, topH + 6 * u, H - footH - 16 * u);
+  } else if (S.page === "sound" && S.sound && S.sound.knobs) {
+    drawSound(u, pad, topH + 6 * u, H - footH - 16 * u, S.sound);
   } else {
   // ---------------------------------------------------------------- the whole tape, small
   const ovY = topH + 6 * u, ovH = 64 * u, gutter = 300 * u, X0 = pad + gutter, X1 = W - pad;
@@ -251,7 +253,7 @@ function draw() {
     g.imageSmoothingEnabled = false;
     if (screenImg) g.drawImage(screenImg, W - pad - sw - 8 * u, fy, sw, sh);
   }
-  const sel = S.page === "seq" ? null : S.tracks.find(t => t.selected);     // (the sequencer: its own header says it)
+  const sel = S.page !== "tape" ? null : S.tracks.find(t => t.selected);     // (the sequencer: its own header says it)
   if (sel) {
     const pan = Math.abs(sel.pan) < 0.05 ? "C" : (sel.pan < 0 ? "L" : "R") + Math.round(Math.abs(sel.pan) * 100);
     text("TRACK " + sel.n, pad, fy + 34 * u, 44 * u, COLORS[sel.n - 1], 800);
@@ -265,6 +267,106 @@ function draw() {
   }
 }
 requestAnimationFrame(draw);
+
+// ------------------------------------------------------------------ the instrument's sound page
+const IMGS = {}, imgWant = {};
+function instImage(id) {
+  if (IMGS[id] !== undefined || imgWant[id]) return IMGS[id] || null;
+  imgWant[id] = 1;
+  fetch("/img/" + encodeURIComponent(id)).then(r => r.text()).then(t => {
+    const rows = t.split(/\s+/).filter(Boolean).slice(0, 64);
+    if (rows.length < 8) { IMGS[id] = null; return; }
+    const oc = document.createElement("canvas"); oc.width = 128; oc.height = rows.length;
+    const c2 = oc.getContext("2d"), img = c2.createImageData(128, rows.length);
+    rows.forEach((row, y) => { for (let x = 0; x < 128; x++) {
+      const nib = parseInt(row[x >> 2] || "0", 16), on = (nib >> (3 - (x & 3))) & 1, o = (y * 128 + x) * 4;
+      img.data[o] = on ? 232 : 0; img.data[o + 1] = on ? 233 : 0; img.data[o + 2] = on ? 236 : 0; img.data[o + 3] = on ? 255 : 0; } });
+    c2.putImageData(img, 0, 0); IMGS[id] = oc;
+  }).catch(() => { IMGS[id] = null; });
+  return null;
+}
+
+function dial(cx, cy, r, k, u, accent) {
+  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  if (k.turning) { g.beginPath(); g.arc(cx, cy, r + 26 * u, 0, 7); g.fillStyle = accent + "18"; g.fill(); }
+  if (k.choice) {
+    rr(cx - r, cy - r * 0.55, r * 2, r * 1.1, 22 * u); g.fillStyle = "#16181d"; g.fill();
+    g.strokeStyle = k.turning ? accent : "#2b2f37"; g.lineWidth = 3 * u; g.stroke();
+    let t = String(k.text), size = 46 * u;
+    g.font = "800 " + Math.round(size) + "px system-ui";
+    while (g.measureText(t).width > r * 1.8 && size > 18 * u) { size -= 2 * u; g.font = "800 " + Math.round(size) + "px system-ui"; }
+    text(t, cx, cy, size, "#e8e9ec", 800, "center");
+  } else {
+    g.lineCap = "round";
+    g.beginPath(); g.arc(cx, cy, r, a0, a1); g.strokeStyle = "#23262d"; g.lineWidth = 18 * u; g.stroke();
+    g.beginPath(); g.arc(cx, cy, r, a0, a0 + (a1 - a0) * k.frac); g.strokeStyle = accent; g.lineWidth = 18 * u; g.stroke();
+    if (k.mod !== undefined) {                     // where an LFO has it right now
+      const am = a0 + (a1 - a0) * k.mod;
+      g.beginPath(); g.arc(cx, cy, r - 26 * u, Math.min(a0 + (a1 - a0) * k.frac, am), Math.max(a0 + (a1 - a0) * k.frac, am));
+      g.strokeStyle = "#b38cff"; g.lineWidth = 8 * u; g.stroke();
+      g.beginPath(); g.arc(cx + Math.cos(am) * (r - 26 * u), cy + Math.sin(am) * (r - 26 * u), 8 * u, 0, 7); g.fillStyle = "#b38cff"; g.fill();
+    }
+    g.lineCap = "butt";
+    const ap = a0 + (a1 - a0) * k.frac;
+    g.beginPath(); g.moveTo(cx + Math.cos(ap) * (r - 40 * u), cy + Math.sin(ap) * (r - 40 * u));
+    g.lineTo(cx + Math.cos(ap) * (r + 12 * u), cy + Math.sin(ap) * (r + 12 * u)); g.strokeStyle = "#e8e9ec"; g.lineWidth = 6 * u; g.stroke();
+    let t = String(k.text), size = 44 * u;
+    g.font = "700 " + Math.round(size) + "px system-ui";
+    while (g.measureText(t).width > r * 1.4 && size > 18 * u) { size -= 2 * u; g.font = "700 " + Math.round(size) + "px system-ui"; }
+    text(t, cx, cy + 4 * u, size, "#e8e9ec", 700, "center");
+  }
+  text(k.n + "  " + k.label, cx, cy + r + 46 * u, 32 * u, k.turning ? accent : "#a3a8b3", 700, "center");
+  if (k.lfo) text("LFO " + k.lfo.join("+"), cx, cy - r - 30 * u, 24 * u, "#b38cff", 800, "center");
+}
+
+function drawSound(u, pad, y0, y1, D) {
+  const accent = D.synth ? "#4fb3ff" : "#f2b33d";
+  text(D.title, pad, y0 + 30 * u, 50 * u, accent, 800);
+  g.font = "800 " + Math.round(50 * u) + "px system-ui"; let x = pad + g.measureText(D.title).width + 30 * u;
+  if (D.voice) { text(D.voice, x, y0 + 32 * u, 36 * u, "#e8e9ec", 700); g.font = "700 " + Math.round(36 * u) + "px system-ui"; x += g.measureText(D.voice).width + 30 * u; }
+  if (D.octave) text("OCT " + (D.octave > 0 ? "+" : "") + D.octave, W - pad, y0 + 32 * u, 32 * u, "#a3a8b3", 700, "right");
+  // the page tabs
+  let tx = pad, ty = y0 + 84 * u;
+  D.pages.forEach((name, i) => {
+    g.font = "700 " + Math.round(26 * u) + "px system-ui"; const w = g.measureText(name).width + 40 * u;
+    if (tx + w > W - pad) { tx = pad; ty += 58 * u; }
+    rr(tx, ty, w, 46 * u, 23 * u); g.fillStyle = i === D.tab ? accent : "#16181d"; g.fill();
+    text(name, tx + w / 2, ty + 23 * u, 26 * u, i === D.tab ? "#0b0c0e" : "#7c818c", 700, "center");
+    tx += w + 12 * u;
+  });
+  const top = ty + 80 * u, leftW = (W - 2 * pad) * 0.30;
+  // the picture, and a drum machine's pads
+  const img = instImage(D.id);
+  let py = top;
+  if (img) {
+    const iw = leftW, ih = iw / 2;
+    rr(pad, py, iw, ih, 18 * u); g.fillStyle = "#101216"; g.fill();
+    g.imageSmoothingEnabled = false; g.drawImage(img, pad + 12 * u, py + 6 * u, iw - 24 * u, ih - 12 * u);
+    py += ih + 30 * u;
+  }
+  if (D.pads && D.pads.length) {
+    const n = D.pads.length, cols = 4, rowsN = Math.ceil(n / cols);
+    const cw = leftW / cols, ch = Math.min(cw * 0.8, (y1 - py) / rowsN);
+    D.pads.forEach((p, i) => {
+      const c = i % cols, r = rowsN - 1 - Math.floor(i / cols);       // bottom row first, as on the Move
+      const x = pad + c * cw + 6 * u, y = py + r * ch + 6 * u, w = cw - 12 * u, h = ch - 12 * u;
+      const flash = Math.max(0, 1 - p.hit / 0.25);
+      rr(x, y, w, h, 16 * u); g.fillStyle = p.on ? "#2a2416" : "#15171c"; g.fill();
+      if (flash > 0) { g.globalAlpha = flash; g.fillStyle = accent; g.fill(); g.globalAlpha = 1; }
+      if (p.on) { g.strokeStyle = accent; g.lineWidth = 4 * u; g.stroke(); }
+      let t = p.name, size = 26 * u; g.font = "700 " + Math.round(size) + "px system-ui";
+      while (g.measureText(t).width > w - 16 * u && size > 14 * u) { size -= 1 * u; g.font = "700 " + Math.round(size) + "px system-ui"; }
+      text(t, x + w / 2, y + h / 2, size, flash > 0.3 ? "#0b0c0e" : p.on ? "#e8e9ec" : "#7c818c", 700, "center");
+    });
+  }
+  // the 8 knobs: 1-4 on top, 5-8 under them (as on the Move)
+  const X0 = pad + leftW + 60 * u, X1 = W - pad, cellW = (X1 - X0) / 4, cellH = (y1 - top) / 2;
+  const r = Math.min(cellW * 0.33, cellH * 0.30);
+  D.knobs.forEach((k, i) => {
+    const c = i % 4, row = Math.floor(i / 4);
+    dial(X0 + c * cellW + cellW / 2, top + row * cellH + cellH * 0.45, r, k, u, accent);
+  });
+}
 
 // ------------------------------------------------------------------ the sequencer
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

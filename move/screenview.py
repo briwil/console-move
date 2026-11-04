@@ -118,8 +118,14 @@ def state():
                 _seq_cache.pop(next(iter(_seq_cache)))
         except Exception as ex:                          # noqa: BLE001
             page, seq_live = "tape", {"error": str(ex)[:80]}
+    sound = None
+    if page == "sound":
+        try:
+            sound = sound_data(T)
+        except Exception as ex:                          # noqa: BLE001
+            page, sound = "tape", {"error": str(ex)[:80]}
     out = {
-        "page": page, "seq_id": seq_id, "seq": seq_live,
+        "page": page, "seq_id": seq_id, "seq": seq_live, "sound": sound,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),
@@ -147,9 +153,77 @@ def _page(T):
         return "tape"
     if getattr(T, "fx_page", None):
         return "tape"
-    if getattr(T, "seq_page", False) and T.engine and T.engine.drums and T.engine.slot is not None:
+    e = T.engine
+    if not (e and e.drums and e.slot is not None and e.slots[e.slot]):
+        return "tape"
+    if getattr(T, "seq_page", False):
         return "seq"
+    if getattr(T, "drum_page", False) and not getattr(T, "inst_page", False) \
+            and not T.sbrowse.active and not T.mlfo.active():
+        return "sound"
     return "tape"
+
+
+CHOICE_KINDS = ("menu", "onoff", "voice", "vel_target", "lfo_target")
+
+
+def sound_data(T):
+    """The instrument's sound page: its pages, the one shown, its 8 settings (and which an LFO is moving)."""
+    import lfo
+    e = T.engine
+    d = e.drums
+    mid = e.slots[e.slot]
+    try:
+        import instpage
+        title = dict(instpage.machines()).get(mid) or mid
+    except Exception:                                    # noqa: BLE001
+        title = mid
+    pages = T.drum_pages()
+    tab = min(T.drum_tab, len(pages) - 1)
+    params = pages[tab][1][:8]
+    synth = bool(e.is_synth(mid))
+    lfos = lfo.of(e.seq.pattern) if hasattr(e.seq, "pattern") else []
+    last = getattr(getattr(e, "bridge", None), "_lfos", None)
+    last = getattr(last, "last", {}) if last else {}
+    now = time.monotonic()
+    knobs = []
+    for i, p in enumerate(params):
+        kind = d.kind(p)
+        k = {"n": i + 1, "label": d.label(p), "text": d.value_text(p), "choice": kind in CHOICE_KINDS,
+             "frac": round(max(0.0, min(1.0, d.fraction(p))), 4),
+             "turning": now - T.drumpage.edited.get(i + 1, 0.0) < 1.0}
+        for j, l in enumerate(lfos):
+            if l.get("dest") == p:
+                k.setdefault("lfo", []).append(j + 1)
+                v = last.get((e.slot, j))
+                if v and v[0] == p:
+                    try:
+                        k["mod"] = round(max(0.0, min(1.0, d.fraction(p, v[1]))), 4)
+                    except Exception:                    # noqa: BLE001
+                        pass
+        knobs.append(k)
+    out = {"title": title, "id": mid, "synth": synth, "pages": [n for n, _ in pages], "tab": tab,
+           "knobs": knobs, "octave": getattr(T, "octave", 0)}
+    if not synth:
+        names = list(getattr(d, "lane_names", None) or [])
+        lv = list(getattr(d, "lane_voice", None) or range(len(names)))
+        hits = getattr(T, "_drum_hits", [])
+        voice = getattr(T, "drum_voice", 0)
+        out["pads"] = [{"name": names[i], "voice": lv[i] if i < len(lv) else i,
+                        "on": voice == (lv[i] if i < len(lv) else i),
+                        "hit": round(now - hits[lv[i] % len(hits)], 3) if hits and i < len(lv) else 9}
+                       for i in range(min(16, len(names)))]
+        vn = list(getattr(d, "names", None) or [])
+        out["voice"] = vn[voice] if voice < len(vn) else ""
+    return out
+
+
+def image(mid):
+    """An instrument's picture (move/instimg/<id>.txt: 64 rows of 32 hex digits), as that text."""
+    try:
+        return open(os.path.join(HERE, "instimg", "%s.txt" % os.path.basename(mid))).read().encode()
+    except OSError:
+        return b""
 
 
 def seq_data(T):
@@ -300,6 +374,8 @@ class _Handler(BaseHTTPRequestHandler):
                 global _asked
                 _asked = time.monotonic()
                 self._send(json.dumps(state(), separators=(",", ":")).encode(), "application/json")
+            elif path.startswith("/img/"):
+                self._send(image(path.split("/")[2]), "text/plain", cache=True)
             elif path.startswith("/seq/"):
                 body = _seq_cache.get(path.split("/")[2])
                 if body is None:

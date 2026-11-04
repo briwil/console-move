@@ -190,7 +190,7 @@ class Menu:
         elif name in CONFIRM:
             self.create()
         elif name == "FILE":
-            self.mode = {"rename": "load", "wifi": "wifi"}.get(self.naming, "list")
+            self.mode = {"wifi": "wifi"}.get(self.naming, "list")      # (renaming: back to the menu, not the OPEN list)
             self.letters = LETTERS
             self.msg = ""
 
@@ -599,7 +599,7 @@ class Menu:
             self.say("A NAME CAN'T START WITH A DOT")
             return
         if self.naming == "rename" and name == self.renaming:
-            self.mode = "load"                            # same name: nothing to do
+            self.mode = "list"                            # same name: nothing to do
             return
         if e.song_exists(name) and not (self.naming == "rename" and name.lower() == self.renaming.lower()):
             self.say("THERE'S ALREADY A PROJECT CALLED %s" % name.upper())
@@ -614,7 +614,8 @@ class Menu:
                 self.transport.s.set("song", t=name)
             self.songs = e.song_names()
             self.pick = self.songs.index(name) if name in self.songs else 0
-            self.mode = "load"
+            self.mode = "list"                            # done: back to the menu
+            self.rename_pick = False
             self.say("RENAMED TO %s" % name.upper())
             return
         if self.naming == "new":

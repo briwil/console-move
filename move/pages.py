@@ -575,7 +575,7 @@ def lfo_page(f, T):
         f.small(x + 1, y, "%d %s" % (i + 1, label))
         f.right(x + 62, y, str(value)[:9], small=True)
     f.small(1, 50, "STEPS: TAP = REST, HOLD + 2/4")
-    f.small(1, 57, "< > : SETTINGS, LFOS, INSERTS")
+    f.small(1, 57, "< >: PAGES   BACK: SETTINGS")
 
 
 def sample_page(f, sb):

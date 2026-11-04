@@ -5,7 +5,7 @@ Start it (Console running or not):
 
     ssh -i ~/.ssh/move_key ableton@move.local "echo 60 > /data/UserData/console/stress"
 
-(60 = minutes; "60 random" skips the first two parts.) If Console is running it restarts into the test; otherwise start Console as usual. It uses
+(60 = minutes; "60 random" skips the first two parts, "60 inserts" the first one.) If Console is running it restarts into the test; otherwise start Console as usual. It uses
 its own projects (console/stress-data), so your songs and settings aren't touched. It:
 
   1. loads every instrument in turn and plays it (with the memory it took),
@@ -35,6 +35,7 @@ DATA = os.path.join(HOME, "stress-data")
 INSERTS_FILE = os.path.join(HOME, "insert-fx.json")      # (shared with your own data: put back at the end)
 BACKUP = os.path.join(HOME, "insert-fx.json.stress-backup")
 RANDOM_ONLY = False             # "60 random" in the file: straight to part 3
+INSERTS_FIRST = False           # "60 inserts": straight to part 2 (no instruments tried first)
 
 # the Move's controls the test presses (see app.py). Not the volume knob, and never Shift + Back (that quits).
 PADS = range(68, 100)
@@ -50,10 +51,11 @@ def prepare():
     """At the very start (before anything reads CONSOLE_DATA). Returns the test's minutes, or None for
     a normal start."""
     if os.path.exists(FLAG):
-        global RANDOM_ONLY
+        global RANDOM_ONLY, INSERTS_FIRST
         try:
             words = open(FLAG).read().split()
             RANDOM_ONLY = "random" in [w.lower() for w in words[1:]]
+            INSERTS_FIRST = "inserts" in [w.lower() for w in words[1:]]
             minutes = float(words[0]) if words else 60
         except (OSError, ValueError):
             minutes = 60
@@ -139,7 +141,7 @@ class Stress:
         self.mem = []                         # [(seconds, rss kb)]
         self.loads = []                       # [(what, rss before, rss after)]
         self.finished = False
-        self.phase = "random" if RANDOM_ONLY else "instruments"
+        self.phase = "random" if RANDOM_ONLY else "inserts" if INSERTS_FIRST else "instruments"
         if RANDOM_ONLY:
             self.random_from = self.start
         self.next_event = self.start + 2

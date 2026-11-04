@@ -282,6 +282,17 @@ function drawTape(u, pad, y0, y1, P) {
       }
     }
     g.globalAlpha = 1;
+    // the grid, over the recording: bars bright, beats dimmer, sixteenths when zoomed right in
+    const unit = S.unit || 1, step = ppb * unit > 90 * u ? unit / 4 : unit;
+    for (let k = Math.max(0, Math.floor(viewA / step) - 1); k * step <= viewB + step; k++) {
+      const pos = k * step, gx = mid + (pos - P) * ppb;
+      if (gx < X0 || gx > X1) continue;
+      const on = (q) => Math.abs(pos / q - Math.round(pos / q)) < 1e-6;
+      const bar = on(S.bar), beat = on(unit);
+      g.fillStyle = bar ? "rgba(236,238,241,0.42)" : beat ? "rgba(236,238,241,0.16)" : "rgba(236,238,241,0.07)";
+      const lw = (bar ? 2.5 : 1.5) * u;
+      g.fillRect(Math.round(gx - lw / 2), ly, lw, laneH);
+    }
     g.restore();
   });
   // the loop's in and out lines, the playhead

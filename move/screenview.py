@@ -108,7 +108,7 @@ def state():
     import tape
     fpb = e.frames_per_beat()
     region = e.loop_region()
-    armed = set(e.arm_extra) | {T.armed - 1}
+    armed = set(e.record_tracks())                     # what a recording goes onto (the Move: SHIFT + a track key)
     tracks = []
     for t in range(8):
         chans = e.chans(t)

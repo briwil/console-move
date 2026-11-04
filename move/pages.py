@@ -34,7 +34,7 @@ def draw(f, T, menu=None):
             if menu.kits.mode == "list":
                 kit_list(f, menu.kits)
             elif menu.kits.mode == "name":
-                name_page(f, menu.kits, "NAME THIS KIT")
+                name_page(f, menu.kits, "NAME THIS PRESET")
             else:
                 text_page(f, menu.kits.s, getattr(menu.kits, "msg", ""))
         elif T.seq_page:
@@ -705,7 +705,7 @@ def kit_list(f, k):
     rows = [kitmenu.TEXTS[key].upper() for key, _ in kitmenu.ITEMS] + \
            [kitmenu.MAIN_TEXTS[key].upper() for key, _ in kitmenu.MAIN]
     f.rect(0, 0, W, 9, 1)
-    f.text(1, 1, "DRUMS MENU", 0)
+    f.text(1, 1, "INSTRUMENT MENU", 0)
     f.right(W - 2, 2, "%d/%d" % (k.choice + 1, len(rows)), small=True, c=0)
     biglist(f, rows, k.choice, fit=5)                        # (the bottom line is for messages)
     msg = getattr(k, "msg", "")

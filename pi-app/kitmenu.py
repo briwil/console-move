@@ -158,9 +158,9 @@ class KitMenu(menu.Menu):
             self.mode = "name"
             taken = {n.lower() for n in kit_names(self.drums.machine)}
             n = 1
-            while ("kit %d" % n) in taken:
+            while ("preset %d" % n) in taken:
                 n += 1
-            self.name = list("Kit %d" % n)
+            self.name = list("Preset %d" % n)
             self.cursor = len(self.name)
             self.msg, self.replace = "", None
         elif what == "COPY":
@@ -195,7 +195,7 @@ class KitMenu(menu.Menu):
         else:
             self.kits = kit_names(self.drums.machine)
             if not self.kits:
-                self.say("NO SAVED KITS YET: SAVE ONE FIRST")
+                self.say("NO SAVED PRESETS YET: SAVE ONE FIRST")
                 return
             self.mode, self.msg = "load", ""
             self.pick = min(self.pick, len(self.kits) - 1)
@@ -223,7 +223,7 @@ class KitMenu(menu.Menu):
         same = [n for n in kit_names(self.drums.machine) if n.lower() == name.lower()]
         if same and self.replace != name:
             self.replace = name
-            self.say("THERE'S ALREADY A KIT CALLED %s: PLAY AGAIN TO REPLACE IT" % name.upper())
+            self.say("THERE'S ALREADY A PRESET CALLED %s: PLAY AGAIN TO REPLACE IT" % name.upper())
             return
         try:
             os.makedirs(kits_dir(self.drums.machine), exist_ok=True)
@@ -239,7 +239,7 @@ class KitMenu(menu.Menu):
             return
         self.replace = None
         self.close()
-        self.transport.say("KIT SAVED: %s" % name.upper(), 3)
+        self.transport.say("PRESET SAVED: %s" % name.upper(), 3)
 
     def load(self):
         if not self.kits:
@@ -256,7 +256,7 @@ class KitMenu(menu.Menu):
         with e.lock:
             e.dirty.add(-1)                         # the song keeps the kit it's using
         self.close()
-        self.transport.say("KIT LOADED: %s" % name.upper(), 3)
+        self.transport.say("PRESET LOADED: %s" % name.upper(), 3)
 
     def item_y(self, item):
         """Where a menu item sits: the drums menu's 7 rows, evenly spaced."""
@@ -283,7 +283,7 @@ class KitMenu(menu.Menu):
             return
         t.reset_drum_view()
         self.close()
-        t.say("SLOT %d: %s  (ITS OWN KIT AND PATTERNS)" % (e.slot + 1, title), 4)
+        t.say("SLOT %d: %s  (ITS OWN PRESETS AND PATTERNS)" % (e.slot + 1, title), 4)
 
     def paste_pattern(self):
         """The copied pattern onto the current one (SHIFT+CUT on the sequencer undoes it)."""
@@ -383,7 +383,7 @@ class KitMenu(menu.Menu):
         elif loading:
             s.set("prompt", t="")
             s.set("name_text", t="")
-            hint = ("LOAD A KIT     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK" if self.mode == "load" else
+            hint = ("LOAD A PRESET     BIG KNOB: PICK ONE     PLAY: LOAD IT     FILE: BACK" if self.mode == "load" else
                     "DRUM MACHINE FOR THIS SLOT     BIG KNOB: PICK ONE     PLAY: SWITCH     FILE: BACK")
         elif self.mode == "paste":
             s.set("prompt", t="PASTE PATTERN %d ONTO" % (self.pattern_clip[1] + 1), y=self.prompt_y)
@@ -400,7 +400,7 @@ class KitMenu(menu.Menu):
             s.set("name_text", t="%d LOCK%s ON %d STEP%s" % (locks, "" if locks == 1 else "S", steps, "" if steps == 1 else "S"))
             hint = "PLAY: CLEAR (VELOCITY 100, CHANCE 100%, NO RATCHETS; STEPS STAY ON OR OFF)   FILE: BACK"
         else:
-            s.set("prompt", t="NAME THIS KIT", y=self.prompt_y)
+            s.set("prompt", t="NAME THIS PRESET", y=self.prompt_y)
             s.set("name_text", t="".join(self.name) or " ")
             hint = "BIG KNOB: LETTER   ARROW KEYS: MOVE   CUT: DELETE   PLAY: SAVE   FILE: CANCEL"
         s.set("menu_hint", t=hint)

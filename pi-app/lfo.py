@@ -13,6 +13,7 @@ The setting goes up and down around the value it has on the instrument's page.
 """
 import copy
 import math
+import time
 import random
 
 WAVES = ["SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "RANDOM"]
@@ -139,16 +140,20 @@ class Runner:
                 if prev and prev[0] != dest:
                     self._restore(m, prev[0])
                     self.last.pop(key, None)
-                if not l or dest < 0 or dest >= getattr(m, "param_count", 0) or not e.playing:
-                    if prev and prev[0] == dest and not e.playing:
+                running = e.playing or k == e.slot          # stopped: the instrument you're on still moves (to play it by hand)
+                if not l or dest < 0 or dest >= getattr(m, "param_count", 0) or not running:
+                    if prev and prev[0] == dest and not running:
                         self._restore(m, dest)
                         self.last.pop(key, None)
                     continue
-                if (not e.playing) or m.kind(dest) not in ("num", "pm", "send"):
+                if m.kind(dest) not in ("num", "pm", "send"):
                     continue
-                frame = e.seq_clock + e.read_ahead
-                if l["mode"] == 1:
-                    frame -= getattr(seq, "anchor", 0)
+                if e.playing:
+                    frame = e.seq_clock + e.read_ahead
+                    if l["mode"] == 1:
+                        frame -= getattr(seq, "anchor", 0)
+                else:                                       # not playing: a clock of its own (TRIG has no pattern start to wait for)
+                    frame = time.monotonic() * getattr(e, "rate", 44100)
                 beats = frame / fpb
                 ph = beats / SPEEDS[l["speed"]][1] + l["phase"] / 100.0
                 lock = (l.get("steps") or {}).get(int(math.floor(beats * 4)) % STEPS)

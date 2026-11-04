@@ -14,10 +14,13 @@ Controls (see MOVE-NOTES.md):
   (see moveseq.py), on song mode its rows; pads: drums on the left 4 x 4, the picked drum chromatically on the right (Shift + pad: pattern). Shift + touch a knob = push it. Shift + Back: save, quit and go back to the normal Move
   (Ctrl+C over SSH only quits the app).
 """
+import faulthandler
 import os
 import queue
 import sys
 import time
+
+faulthandler.enable(all_threads=True)      # a crash inside an effect or synth (not Python's): app.log gets the Python line it was on
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)

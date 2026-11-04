@@ -66,6 +66,24 @@ def one(fx_id):
         run(a, 100)
         stage("closing again (%d)" % (k + 2))
         a.choose(0)
+    stage("knobs turned while sound runs at the same time (as in Console)")
+    import threading
+    a.choose(index)
+    go = [True]
+
+    def sound():
+        while go[0]:
+            run(a, 1, knobs=False)
+    th = threading.Thread(target=sound)
+    th.start()
+    end = time.time() + 5
+    while time.time() < end and a.params:
+        k = random.randrange(len(a.params))
+        a.knob(k, random.choice((-40, -5, -1, 1, 5, 40)))          # (big jumps too: ends of the range)
+        time.sleep(0.0005)
+    go[0] = False
+    th.join()
+    a.choose(0)
     stage("two at once")
     a.choose(index)
     b = insertfx.Insert(None, 1, 0)

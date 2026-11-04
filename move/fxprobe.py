@@ -5,7 +5,8 @@ and close it a few more times; then two copies at once. Prints which ones crash,
     ssh -i ~/.ssh/move_key ableton@move.local "python3 /data/UserData/console/move/fxprobe.py"
 
 (Console can keep running: this doesn't use the sound.) Takes a few minutes. Just one: add its name, e.g.
-fxprobe.py structor. The instruments: fxprobe.py instruments (or fxprobe.py instruments surge).
+fxprobe.py structor. The instruments: fxprobe.py instruments (or fxprobe.py instruments surge). As in the stress
+test, everything in one process (and which instrument brings a crash on): fxprobe.py together.
 """
 import os
 import random
@@ -234,6 +235,128 @@ def sweep(mid, key, mode=""):
             print("ok (it says %r)" % inst.get(key), flush=True)
 
 
+def together_child(inst_ids, rounds, seed):
+    """In one process, as in Console: these instruments started (and played a little), then every insert
+    effect in turn with a second one beside it, sound going through them."""
+    import ctypes
+    import numpy as np
+    import catalog
+    import drums
+    import insertfx
+    rng = random.Random(seed)
+    d = drums.Drums("lxr")
+    keep = []
+    for mid in inst_ids:
+        print("stage: starting instrument %s" % mid, flush=True)
+        m = d.get(mid)
+        if m is None:
+            continue
+        keep.append(m)
+        for b in range(40):
+            if b % 8 == 0:
+                (m.note_on(60, 100) if hasattr(m, "note_on") else m.hit(0, 100))
+            m.render(BLOCK)
+        if hasattr(m, "all_off"):
+            m.all_off()
+            m.render(BLOCK)
+    lib = insertfx.Insert()._lib()
+    fp = ctypes.POINTER(ctypes.c_float)
+    a, b = insertfx.Insert(None, 0, 0), insertfx.Insert(None, 0, 1)
+    n = len(catalog.FX)
+    ids = [f["id"] for f in catalog.FX]
+    others = []                                  # (like your song: TAPESCAM and JUNOLOGUE on other instruments)
+    for k, fx in enumerate(("tapescam", "tapescam", "junologue-chorus")):
+        if fx in ids:
+            o = insertfx.Insert(None, 1 + k, 0)
+            o.choose(1 + ids.index(fx))
+            others.append(o)
+    for r in range(rounds):
+        for i in range(1, n + 1):
+            j = rng.randrange(n + 1)
+            print("stage: effects %s + %s" % (catalog.FX[i - 1]["id"], catalog.FX[j - 1]["id"] if j else "none"),
+                  flush=True)
+            a.choose(i)
+            b.choose(j)
+            for k in range(150):
+                left = (np.random.standard_normal(BLOCK) * 0.2).astype(np.float32)
+                right = left.copy()
+                for ins in [a, b] + others:
+                    if ins.h:
+                        lib.sh_fx_process(ins.h, left.ctypes.data_as(fp), right.ctypes.data_as(fp), BLOCK)
+                if k % 30 == 0:
+                    for ins in (a, b):
+                        if ins.params:
+                            ins.knob(rng.randrange(len(ins.params)), rng.choice((-3, 3)))
+    a.choose(0)
+    b.choose(0)
+    print("stage: done", flush=True)
+    return 0
+
+
+def together(env):
+    """fxprobe.py together: is it a mix that crashes (as in the stress test), and which instrument brings it on?
+    Tries the effects alone, then with every instrument started first, then narrows the instruments down."""
+    import drums
+    allinst = [mid for mid, _ in drums.available_machines()]
+    tries = [0]
+
+    def crashes(ids, label):
+        for attempt in range(2):
+            tries[0] += 1
+            t = time.time()
+            try:
+                r = subprocess.run([sys.executable, os.path.abspath(__file__), "--together", ",".join(ids), "2",
+                                    str(attempt + 1)], capture_output=True, text=True, timeout=600, env=env)
+                out, code = (r.stdout + r.stderr).strip().splitlines(), r.returncode
+            except subprocess.TimeoutExpired:
+                out, code = [], "hung"
+            stages = [l[7:] for l in out if l.startswith("stage: ")]
+            if code != 0:
+                why = "FROZE" if code == "hung" else "CRASHED (%s)" % (_signame(-code) if isinstance(code, int)
+                                                                     and code < 0 else code)
+                print("  %-44s %s, while: %s" % (label, why, stages[-1] if stages else "?"), flush=True)
+                for l in [x for x in out if not x.startswith(("stage: ", "insert effect:", "instrument:"))][-3:]:
+                    print("        " + l[:150])
+                return True
+        print("  %-44s ok (%.0f s)" % (label, time.time() - t), flush=True)
+        return False
+
+    print("Effects one after another in one process, as in the stress test (memory checks on)...\n", flush=True)
+    if crashes([], "effects only, no instruments"):
+        print("\nIt's among the effects themselves (no instrument needed).")
+        return
+    if not crashes(allinst, "after all %d instruments" % len(allinst)):
+        print("\nNo crash this way: send this to Claude.")
+        return
+    group = allinst
+    while len(group) > 1 and tries[0] < 40:
+        half = len(group) // 2
+        first, second = group[:half], group[half:]
+        if crashes(first, "after " + _names(first)):
+            group = first
+        elif crashes(second, "after " + _names(second)):
+            group = second
+        else:
+            print("\nIt takes instruments from both halves together: %s" % ", ".join(group))
+            return
+    print("\nThe instrument that brings it on: %s" % ", ".join(group))
+
+
+def _names(ids):
+    return ", ".join(ids) if len(ids) <= 3 else "%s ... %s (%d)" % (ids[0], ids[-1], len(ids))
+
+
+def _check_env():
+    env = dict(os.environ, MALLOC_CHECK_="3", MALLOC_PERTURB_="165")
+    dbg = next((p for p in ("/lib/libc_malloc_debug.so.0", "/usr/lib/libc_malloc_debug.so.0",
+                            "/lib/aarch64-linux-gnu/libc_malloc_debug.so.0",
+                            "/usr/lib/aarch64-linux-gnu/libc_malloc_debug.so.0",
+                            "/usr/lib/x86_64-linux-gnu/libc_malloc_debug.so.0") if os.path.exists(p)), None)
+    if dbg:
+        env["LD_PRELOAD"] = dbg
+    return env, dbg
+
+
 def _signame(n):
     try:
         return signal.Signals(n).name
@@ -248,6 +371,8 @@ def main():
         sys.exit(one_inst(sys.argv[2]))
     if len(sys.argv) > 3 and sys.argv[1] == "sweep":
         return sweep(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "")
+    if len(sys.argv) > 4 and sys.argv[1] == "--together":
+        sys.exit(together_child([x for x in sys.argv[2].split(",") if x], int(sys.argv[3]), int(sys.argv[4])))
     insts = len(sys.argv) > 1 and sys.argv[1] == "instruments"
     if insts:
         import drums
@@ -259,6 +384,8 @@ def main():
         wanted = sys.argv[1:]
     if wanted:
         ids = [i for i in ids if i in wanted]
+    if len(sys.argv) > 1 and sys.argv[1] == "together":
+        return together(_check_env()[0])
     bad = []
     # the C library's memory checks on in each test: an effect that writes where it shouldn't is caught (a
     # damaged heap often doesn't crash the effect that did it, only something later, somewhere else)

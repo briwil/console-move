@@ -58,7 +58,7 @@ def build_host():
             os.path.getmtime(src), os.path.getmtime(os.path.join(HERE, "plugin_api_v1.h"))):
         return True
     try:
-        run(["gcc", "-O2", "-shared", "-fPIC", "-o", HOST_LIB + ".tmp", src, "-ldl"], HERE)
+        run(["gcc", "-O2", "-shared", "-fPIC", "-o", HOST_LIB + ".tmp", src, "-ldl", "-lpthread"], HERE)
         os.replace(HOST_LIB + ".tmp", HOST_LIB)
         return True
     except (RuntimeError, OSError, subprocess.SubprocessError) as e:

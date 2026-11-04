@@ -477,6 +477,10 @@ def main():
             if now >= next_screen:
                 next_screen = now + 1 / FPS_SCREEN
                 menu_tick(m)
+                if T.live_rec and (not T.seq_page or (getattr(T, "_rec_was_playing", False) and not e.playing)):
+                    T.live_rec = False                        # recording into the pattern ends at Stop, or when you leave the page
+                    T.say("PATTERN RECORDING OFF", 2)
+                T._rec_was_playing = bool(e.playing)
                 pages.draw(frame, T, m)
                 core.display(frame.bytes())
             if now >= next_lights:

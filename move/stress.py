@@ -5,7 +5,8 @@ Start it (Console running or not):
 
     ssh -i ~/.ssh/move_key ableton@move.local "echo 60 > /data/UserData/console/stress"
 
-(60 = minutes; "60 random" skips the first two parts, "60 inserts" the first one.) If Console is running it restarts into the test; otherwise start Console as usual. It uses
+(60 = minutes; "60 random" skips the first two parts, "60 inserts" the first one; "songfx": only the song
+inserts' load test, below.) If Console is running it restarts into the test; otherwise start Console as usual. It uses
 its own projects (console/stress-data), so your songs and settings aren't touched. It:
 
   1. loads every instrument in turn and plays it (with the memory it took),
@@ -20,6 +21,14 @@ Every 30 seconds it notes the app's memory. The report is console/stress-report.
     ssh -i ~/.ssh/move_key ableton@move.local "cat /data/UserData/console/stress-report.txt"
 
 When it's finished Console restarts as normal with your own songs. Shift + Back stops it early.
+
+The song inserts' load test ("songfx", about 15 minutes):
+
+    ssh -i ~/.ssh/move_key ableton@move.local "echo songfx > /data/UserData/console/stress"
+
+4 instruments, then 8, play busy patterns; each insert effect in turn is SONG INSERT 1 (so every instrument runs
+a copy of it) while the sound core's DSP load is measured. The report ranks them and marks the ones that
+overload (the sound would break up), so they can be kept off the SONG INSERT list.
 """
 import os
 import random
@@ -36,6 +45,8 @@ INSERTS_FILE = os.path.join(HOME, "insert-fx.json")      # (shared with your own
 BACKUP = os.path.join(HOME, "insert-fx.json.stress-backup")
 RANDOM_ONLY = False             # "60 random" in the file: straight to part 3
 INSERTS_FIRST = False           # "60 inserts": straight to part 2 (no instruments tried first)
+SONGFX = False                  # "songfx": only the song inserts' load test
+SONGFX_SET = ["lxr", "606", "braids", "obxd", "808", "plaits", "dexed", "wurl"]   # what plays (the first 4, then 8)
 
 # the Move's controls the test presses (see app.py). Not the volume knob, and never Shift + Back (that quits).
 PADS = range(68, 100)
@@ -53,9 +64,15 @@ def prepare():
     if os.path.exists(FLAG):
         global RANDOM_ONLY, INSERTS_FIRST
         try:
+            global SONGFX
             words = open(FLAG).read().split()
-            RANDOM_ONLY = "random" in [w.lower() for w in words[1:]]
-            INSERTS_FIRST = "inserts" in [w.lower() for w in words[1:]]
+            low = [w.lower() for w in words]
+            SONGFX = "songfx" in low
+            if SONGFX:
+                words = [w for w in words if w.lower() != "songfx"] or ["60"]
+                low = [w.lower() for w in words]
+            RANDOM_ONLY = "random" in low[1:]
+            INSERTS_FIRST = "inserts" in low[1:]
             minutes = float(words[0]) if words else 60
         except (OSError, ValueError):
             minutes = 60
@@ -141,7 +158,8 @@ class Stress:
         self.mem = []                         # [(seconds, rss kb)]
         self.loads = []                       # [(what, rss before, rss after)]
         self.finished = False
-        self.phase = "random" if RANDOM_ONLY else "inserts" if INSERTS_FIRST else "instruments"
+        self.phase = "songfx" if SONGFX else "random" if RANDOM_ONLY else "inserts" if INSERTS_FIRST else "instruments"
+        self.sfx = None                       # the song inserts' load test (see sweep_songfx)
         if RANDOM_ONLY:
             self.random_from = self.start
         self.next_event = self.start + 2
@@ -328,6 +346,8 @@ class Stress:
                 self.sweep_instruments(now)
             elif self.phase == "inserts":
                 self.sweep_inserts(now)
+            elif self.phase == "songfx":
+                self.sweep_songfx(now)
             else:
                 self.monkey(now)
         except Exception:                                    # noqa: BLE001
@@ -430,6 +450,132 @@ class Stress:
             T._insfx_save()
         self.guarded("insert %d" % i, load)
         self.sub, self.step_at = 3, now + 3
+
+    # ------------------------------------------------------------ the song inserts' load test
+
+    def _fill(self, k, mid):
+        """Slot k: this instrument, with a busy pattern (so the effects have sound to work on)."""
+        e = self.e
+        e.set_slot(k, mid)
+        e.open_slot(k)
+        q = e.seq
+        if hasattr(q, "shown_notes"):                        # a synth: a chord now and then, a line
+            sh = q.shown_notes()
+            for st in range(0, 16, 2):
+                q.toggle(st, sh[(st * 3) % len(sh)], 2)
+                if st % 8 == 0:
+                    q.toggle(st, sh[(st * 3 + 2) % len(sh)], 4)
+        else:                                                # a drum machine: kick, snare, hats
+            for lane, every in ((0, 4), (1, 8), (2, 2), (3, 3)):
+                for st in range(0, 16, every):
+                    try:
+                        q.toggle(lane, st)
+                    except Exception:                        # noqa: BLE001
+                        pass
+        e.seq_changed()
+
+    def _sample(self):
+        core = getattr(self.e, "core", None)
+        if core is None:
+            return
+        try:
+            v = float(core.load())
+        except Exception:                                    # noqa: BLE001
+            return
+        if v >= 0:
+            self.sfx["loads"].append(v)
+
+    def sweep_songfx(self, now):
+        """4 instruments, then 8: no song insert (the baseline), then each insert effect as SONG INSERT 1 in turn,
+        a few seconds each, measuring the sound core's DSP load (and its cycles: a missed one is a dropout)."""
+        e, T = self.e, self.T
+        import catalog
+        x = self.sfx
+        if x is None:
+            want = [m for m in SONGFX_SET if m in self.inst_list] or self.inst_list[:8]
+            self.sfx = x = {"want": want, "counts": [c for c in (4, 8) if c <= len(want)] or [len(want)],
+                            "ci": 0, "fx": -1, "stage": "load", "at": now, "loads": [], "rows": {}, "c0": None,
+                            "t0": 0.0}
+            self.say("SONG INSERTS: LOAD TEST  (%s)" % ", ".join(want))
+            self.say("each effect as SONG INSERT 1: a copy on every instrument; DSP load avg / max, dropouts, memory")
+            T.inst_sends = True
+        if x["ci"] >= len(x["counts"]):
+            self.songfx_result()
+            self.finish("finished")
+            return
+        n = x["counts"][x["ci"]]
+        if x["stage"] == "load":                             # the instruments, playing
+            self.playing(False)
+            for k in range(8):
+                self.guarded("slot %d" % (k + 1), lambda k=k: (self._fill(k, x["want"][k]) if k < n else e.set_slot(k, None)))
+            self.guarded("song insert off", lambda: (T.songfx(0).choose(0), T.songfx_sync()))
+            self.playing(True)
+            self.say("")
+            self.say("%d INSTRUMENTS  %s" % (n, [s or "-" for s in e.slots]))
+            x["stage"], x["at"], x["fx"] = "settle", now + 3, 0
+            return
+        if self.beat(now) and self.rng.random() < 0.5:       # someone playing the pads too
+            self.pad(self.rng.choice(PADS), self.rng.randint(60, 127), self.rng.uniform(0.05, 0.3))
+        if x["stage"] == "settle":
+            if now < x["at"]:
+                return
+            x["loads"], x["stage"], x["at"] = [], "measure", now + 6
+            core = getattr(e, "core", None)
+            x["c0"], x["t0"], x["rss0"] = (core.cycles() if core else None), now, self.rss()
+            x["cpu0"] = _status().get("cpu", 0)
+            return
+        if x["stage"] == "measure":
+            self._sample()
+            if now < x["at"]:
+                return
+            core = getattr(e, "core", None)
+            missed = 0
+            if core is not None and x["c0"] is not None:
+                expect = (now - x["t0"]) * core.rate / max(1, core.block)
+                missed = max(0, int(round(expect - (core.cycles() - x["c0"]))))
+            ld = x["loads"]
+            cpu = 100.0 * (_status().get("cpu", 0) - x["cpu0"]) / max(0.001, now - x["t0"])   # the app's own CPU
+            avg = sum(ld) / len(ld) if ld else -1
+            peak = max(ld) if ld else -1
+            if not ld:                                       # (no DSP load from the sound server: judge by CPU)
+                avg = peak = min(100.0, cpu)                 # (roughly: the sound runs on one core)
+            name = "(no song insert)" if x["fx"] == 0 else catalog.FX[x["fx"] - 1]["title"].upper()
+            if x["fx"] == 0:
+                x["base_missed"] = missed                    # (what the cycle count misses anyway: not the effects')
+            missed = max(0, missed - x.get("base_missed", 0))
+            err = T.songfx(0).error if x["fx"] else ""
+            verdict = ("FAILED TO START" if err else "OVERLOAD" if (peak >= 90 or missed > 2) else
+                       "HEAVY" if peak >= 70 else "ok")
+            row = x["rows"].setdefault(name, {})
+            row[n] = (avg, peak, missed, verdict, _mb(self.rss() - x["rss0"]))
+            self.say("  %-20s avg %5.1f%%  max %5.1f%%  cpu %5.0f%%  dropouts %3d  mem %+5.1f MB  %s" % (
+                name, avg, peak, cpu, missed, row[n][4], verdict + (("  (%s)" % err[:40]) if err else "")))
+            x["fx"] += 1
+            if x["fx"] > len(catalog.FX):
+                x["ci"], x["stage"] = x["ci"] + 1, "load"
+                self.guarded("song insert off", lambda: (T.songfx(0).choose(0), T.songfx_sync()))
+                return
+            i = x["fx"]
+            self.guarded("song insert %s" % catalog.FX[i - 1]["id"],
+                         lambda: (T.songfx(0).choose(i), T.songfx_sync()))
+            x["stage"], x["at"] = "settle", now + 2
+
+    def songfx_result(self):
+        x = self.sfx or {}
+        rows = x.get("rows", {})
+        counts = x.get("counts", [])
+        self.say("")
+        self.say("SONG INSERTS: RESULT (the heaviest first, by their worst load)")
+        worst = sorted(rows.items(), key=lambda kv: -max(v[1] for v in kv[1].values()))
+        for name, r in worst:
+            self.say("  %-20s %s" % (name, "   ".join("%d inst: max %5.1f%% %s" % (c, r[c][1], r[c][3])
+                                                         for c in counts if c in r)))
+        rows = {k: v for k, v in rows.items() if not k.startswith("(")}
+        bad = [name for name, r in rows.items() if any(v[3] in ("OVERLOAD", "FAILED TO START") for v in r.values())]
+        heavy = [name for name, r in rows.items() if name not in bad and any(v[3] == "HEAVY" for v in r.values())]
+        self.say("")
+        self.say("  TO KEEP OFF THE SONG INSERT LIST (overload or don't start): %s" % (", ".join(bad) or "none"))
+        self.say("  HEAVY (fine with fewer instruments): %s" % (", ".join(heavy) or "none"))
 
     # ------------------------------------------------------------ 3: random use
 

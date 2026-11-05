@@ -291,7 +291,9 @@ class MoveLFO:
         return "I%d %s" % (pos + 1, ins.params[idx][1] if idx < len(ins.params) else "?")
 
     def dests(self):
-        return lfo.settings_dest(self.T.engine.drums) + self.insert_dests()
+        d = self.T.engine.drums
+        mine = getattr(d, "id", "") == "sampler"             # (a sampler: the settings of the drum you are on, not all 16's)
+        return lfo.settings_dest(d, self.T.drum_voice if mine else None) + self.insert_dests()
 
     def values(self):
         """[(label, text)] for knobs 1-6."""
@@ -302,7 +304,10 @@ class MoveLFO:
         if l["dest"] >= lfo.INSERT_DEST:
             dest = self.insert_label(l["dest"])[:9] if l["dest"] in self.insert_dests() else "OFF"
         elif l["dest"] >= 0 and l["dest"] < getattr(d, "param_count", 0):
-            dest = ("%s" % d.label(l["dest"]))[:9]
+            dest = ("%s" % d.label(l["dest"]))
+            if getattr(d, "id", "") == "sampler":              # which drum: "D3 LEVEL"
+                dest = "D%d %s" % (d.params[l["dest"]]["voice"] + 1, dest)
+            dest = dest[:9]
         return [("DEST", dest), ("WAVE", lfo.WAVES[l["wave"]]), ("SPEED", lfo.SPEEDS[l["speed"]][0]),
                 ("DEPTH", "%+d%%" % l["depth"]), ("PHASE", "%d%%" % l["phase"]), ("MODE", lfo.MODES[l["mode"]])]
 

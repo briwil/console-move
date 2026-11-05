@@ -118,11 +118,14 @@ def wave(shape, ph, cycle, seed):
     return random.Random(hash((seed, int(math.floor(ph)))) & 0xFFFFFFFF).uniform(-1, 1)
 
 
-def settings_dest(machine):
-    """[param indexes] an LFO can move on this instrument: the number settings, in page order."""
+def settings_dest(machine, only_voice=None):
+    """[param indexes] an LFO can move on this instrument: the number settings, in page order (only_voice: just
+    that drum's)."""
     out = []
     try:
         for voice in range(max(1, getattr(machine, "voices", 1))):
+            if only_voice is not None and voice != only_voice:
+                continue
             for _name, params in machine.pages(voice):
                 for p in params:
                     if p not in out and machine.kind(p) in ("num", "pm", "send") and p < machine.param_count:

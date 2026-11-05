@@ -520,6 +520,8 @@ class Stress:
             self.say("each effect as SONG INSERT 1: a copy on every instrument; DSP load avg / max, dropouts, memory")
             T.inst_sends = True
         if x["ci"] >= len(x["counts"]):
+            if not x.get("ob_done") and self.obxd_check(now):
+                return
             self.songfx_result()
             self.finish("finished")
             return
@@ -529,8 +531,9 @@ class Stress:
             for k in range(8):
                 self.guarded("slot %d" % (k + 1), lambda k=k: (self._fill(k, x["want"][k]) if k < n else e.set_slot(k, None)))
             self.guarded("song insert off", lambda: (T.songfx(0).choose(0), T.songfx_sync()))
-            self.playing(True)
-            self.say("")
+            self.guarded("open slot 1", lambda: e.open_slot(0))   # the random pads: always slot 1, the drum machine
+            self.playing(True)                                       # (they went to the last one loaded: OB-Xd with
+            self.say("")                                             # 4, Wurl with 8, and the halves didn't compare)
             self.say("%d INSTRUMENTS  %s" % (n, [s or "-" for s in e.slots]))
             # warm up first: right after a start or an update the app is busy (loading, first-run work) and the
             # first numbers came out higher with 4 instruments than with 8. Wait at least 20 s and until the
@@ -600,6 +603,73 @@ class Stress:
                          lambda: (T.songfx(0).choose(i), T.songfx_sync()))
             x["stage"], x["at"] = "settle", now + 2
 
+    def obxd_check(self, now):
+        """OB-Xd on its own in slot 1: its pattern only, then played hard (4-note chords about 4 times a second,
+        long-ish notes), at a few voice counts. Returns True while it is still running."""
+        e, x = self.e, self.sfx
+        ob = x.get("ob")
+        if ob is None:
+            if "obxd" not in self.inst_list:
+                x["ob_done"] = True
+                return False
+            self.playing(False)
+            self.guarded("song insert off", lambda: (self.T.songfx(0).choose(0), self.T.songfx_sync()))
+            for k in range(8):
+                self.guarded("slot %d" % (k + 1), lambda k=k: (self._fill(k, "obxd") if k == 0 else e.set_slot(k, None)))
+            self.guarded("open slot 1", lambda: e.open_slot(0))
+            self.playing(True)
+            d = e.drums
+            idx = next((i for i, q in enumerate(getattr(d, "params", [])) if q.get("key") == "voice_count"), None)
+            settings = [None]                                # None: as it loads
+            if idx is not None:
+                start = d.get_param(idx)
+                texts = {d.value_text(idx, v): v for v in range(d.params[idx]["steps"] + 1)}
+                settings = [start] + [texts[t] for t in ("16", "8", "4") if t in texts and texts[t] != start]
+            x["ob"] = ob = {"idx": idx, "settings": settings, "i": 0, "phase": "set", "at": now, "rows": []}
+            self.say("")
+            self.say("OB-XD CHECK: on its own, its pattern, then played hard (4-note chords, 4 a second)%s" % (
+                "" if idx is not None else "  (no voice count setting found)"))
+            return True
+        if ob["i"] >= len(ob["settings"]):
+            if ob["idx"] is not None:
+                self.guarded("voices back", lambda: e.drums.set_param(ob["idx"], ob["settings"][0]))
+            self.release_all()
+            self.say("  OB-XD: %s" % "   ".join("%s voices: pattern max %.0f%%, played hard max %.0f%% (dropouts %d)"
+                                                 % r for r in ob["rows"]))
+            x["ob_done"] = True
+            return False
+        v = ob["settings"][ob["i"]]
+        if ob["phase"] == "set":
+            if ob["idx"] is not None:
+                self.guarded("voices", lambda: e.drums.set_param(ob["idx"], v))
+            ob["phase"], ob["at"] = "wait", now + 3
+            return True
+        if ob["phase"] == "hard" and self.beat(now) and self.rng.random() < 0.5:
+            for _ in range(4):
+                self.pad(self.rng.choice(PADS), self.rng.randint(80, 127), self.rng.uniform(0.4, 1.0))
+        if ob["phase"] in ("pattern", "hard"):
+            self._sample()
+        if now < ob["at"]:
+            return True
+        core = getattr(e, "core", None)
+        if ob["phase"] in ("pattern", "hard"):
+            ld, missed = x["loads"], 0
+            if core is not None and ob.get("c0") is not None:
+                expect = (now - ob["t0"]) * core.rate / max(1, core.block)
+                missed = max(0, int(round(expect - (core.cycles() - ob["c0"]))) - x.get("base_missed", 0))
+            ob[ob["phase"]] = (max(ld) if ld else -1, missed)
+        if ob["phase"] == "hard":
+            text = e.drums.value_text(ob["idx"], v) if ob["idx"] is not None else "?"
+            ob["rows"].append((text, ob["pattern"][0], ob["hard"][0], ob["hard"][1]))
+            self.say("  %-4s voices   pattern: max %5.1f%%   played hard: max %5.1f%%  dropouts %d" % (
+                text, ob["pattern"][0], ob["hard"][0], ob["hard"][1]))
+            self.release_all()
+            ob["i"], ob["phase"], ob["at"] = ob["i"] + 1, "set", now + 2
+            return True
+        ob["phase"] = "pattern" if ob["phase"] == "wait" else "hard"
+        x["loads"], ob["c0"], ob["t0"], ob["at"] = [], (core.cycles() if core else None), now, now + 8
+        return True
+
     def probe(self, now, n):
         """Console was busy with no effect on: which threads use the CPU, then each instrument taken out in turn
         (and put back) to see whose absence brings the load down."""
@@ -618,6 +688,7 @@ class Stress:
             pr["step"] = "out"
         elif pr["step"] == "out":                            # take instrument k out for a few seconds
             if pr["k"] >= n:
+                self.guarded("open slot 1", lambda: e.open_slot(0))
                 x["stage"], x["at"] = "settle", now + 3
                 self.say("    (all back: the measurements go on)")
                 return

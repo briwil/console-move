@@ -178,3 +178,13 @@ synth: the pads you hold (live) and the sequencer's chords become runs of single
 are recorded as played (not the arp's notes). Page: the last sound page of a synth (Right past INSERT 2), or the icon (step 3)
 on the settings pages. Knobs 1-7: ON, MODE, OCT, RATE, GATE, HOLD, STYLE (5 rhythm patterns); ARP 2: GLIDE, BEND; step buttons: the 16-step rhythm (tap:
 note, accent, rest). GLIDE sends CC 65 / CC 5 (the synth must answer them); BEND is pitch bend (the synth's own range).
+
+## Open question: OB-Xd sometimes ~18% heavier (Nov 2026, parked)
+Start-up checks (`echo startup > console/stress`) with LXR-02, 606, Braids and OB-Xd playing: the sound load is
+either ~45% or ~27%, and which one flips each time OB-Xd is loaded (heavy, light, heavy...). Ruled out: its
+settings (identical), stuck notes (all notes off changed nothing), loading while stopped vs playing, pressing Play.
+It sounds fine either way and never dropped out, so it was parked. A next step would be timing each source
+(sequencer copy / hands copy) inside core.c, and checking whether the denormal flush gets switched off.
+Song inserts are settled: Tape Echo 2, Dissolver, Dragonfly Hall and Cloudseed are off the SONG INSERT list
+(insertfx.SONG_SKIP); with 8 playing instruments nothing else overloaded. The tape is 5 minutes long: the load
+tests rewind and play on when it ends.

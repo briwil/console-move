@@ -69,7 +69,7 @@ def prepare():
             low = [w.lower() for w in words]
             SONGFX = "songfx" in low
             if SONGFX:
-                words = [w for w in words if w.lower() != "songfx"] or ["60"]
+                words = [w for w in words if w.lower() != "songfx"] or ["25"]      # (a time limit only: it ends itself, in about 15)
                 low = [w.lower() for w in words]
             RANDOM_ONLY = "random" in low[1:]
             INSERTS_FIRST = "inserts" in low[1:]
@@ -191,8 +191,8 @@ class Stress:
             self.rep = open(REPORT, "w", buffering=1)
         except OSError:
             self.rep = None
-        self.say("CONSOLE STRESS TEST  started %s, %d minutes (seed %d)" %
-                 (time.strftime("%Y-%m-%d %H:%M:%S"), minutes, seed))
+        self.say("CONSOLE STRESS TEST  started %s, %s%d minutes (seed %d)" %
+                 (time.strftime("%Y-%m-%d %H:%M:%S"), "up to " if SONGFX else "", minutes, seed))
         self.say("%d instruments, %d insert effects to try" % (len(self.inst_list), self.fx_count - 1))
         self.say("")
         m.update_action = lambda: None         # (no software updates in the middle of the test)

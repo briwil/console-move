@@ -275,7 +275,7 @@ def _extra_pages(T, out, base):
     out["pages"] = out["pages"] + extra
     if not ml.active():
         return
-    if ml.pads_on_page():
+    if ml.pads_on_page() and "PADS" in extra:
         out["tab"] = base + extra.index("PADS")
         seq, vals = T.engine.seq, dict(ml.pads_values())
         oc, v, curve = getattr(T, "octave", 0), getattr(T, "pad_vel", 0), getattr(T, "pad_curve", 1)
@@ -287,7 +287,7 @@ def _extra_pages(T, out, base):
             _card(5, "CURVE", vals["CURVE"], choice=True, options=3, at=curve)]
         return
     if ml.arp_on_page():                                 # (the arp's own panel goes over this)
-        out["tab"] = base + extra.index("ARP")
+        out["tab"] = base + extra.index("ARP") if "ARP" in extra else out["tab"]
         out["knobs"] = []
         return
     pos = ml.insert_pos()

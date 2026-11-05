@@ -426,8 +426,9 @@ story += [
          "can see where a splice lands, the loop, the playhead and the track's volume. ARM shows only on tracks "
          "that really record (armed with Shift + a step button)."),
         ("Instrument pages", "The sequencer (drum steps or a synth's piano roll) and the sound page with its "
-         "8 settings as vertical bars. On the instruments list and similar pages the title says INST and "
-         "the slot number instead of a track."),
+         "8 settings as vertical bars. Its tabs go on past the instrument's own pages as the Move does: LFO 1, "
+         "LFO 2, INSERT 1, INSERT 2 and, on a synth, ARP and PADS, each with the same setting cards. On the "
+         "instruments list the title says INST and the slot number instead of a track."),
         ("Arp", "On the ARP page: a translucent panel over the sound page with every arp setting and all its "
          "options. The picked option is white, the rest dim; GATE, GLIDE and BEND show their value, and the "
          "16 rhythm steps are along the bottom."),

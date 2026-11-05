@@ -443,7 +443,7 @@ def menu_panel(T, m):
     sb = getattr(T, "sbrowse", None)
     if sb is not None and sb.active:
         rows, pick = _rows([r[0] for r in sb.entries], sb.pick)
-        return {"title": sb.title(), "rows": rows, "pick": pick, "empty": "EMPTY", "hint": "PUSH: OPEN / CHOOSE  ·  BACK: UP"}
+        return {"title": sb.title(), "rows": rows, "pick": pick, "empty": "EMPTY", "hint": "PUSH: CHOOSE  ·  DELETE + PUSH: REMOVE" if sb.stage == "which" else "PUSH: OPEN / CHOOSE  ·  BACK: UP"}
     fp = getattr(T, "fxpick", None)
     if fp is not None and fp.active and fp.choices:
         rows, pick = _rows([c[1] for c in fp.choices], fp.pick)

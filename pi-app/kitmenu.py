@@ -249,9 +249,9 @@ class KitMenu(menu.Menu):
         if d.machine == "sampler":
             import sampler
             files, values = list(getattr(d, "files", [])), data["values"]
-            data["samples"] = {}                     # "3": drum 4's first sample, "b3": its second
+            data["samples"] = {}                     # "3": drum 4's first sample, "b3": its second, "c3"-"e3": 3-5
             for v in range(sampler.LANES):
-                for w, tag in ((0, ""), (1, "b")):
+                for w, tag in enumerate(("", "b", "c", "d", "e")):
                     k = sampler.sample_param(v, w)
                     if k < len(values) and 0 < values[k] <= len(files):
                         data["samples"][tag + str(v)] = files[values[k] - 1]
@@ -286,7 +286,8 @@ class KitMenu(menu.Menu):
                 by_name.setdefault(os.path.basename(f).lower(), i)
             for v, path in samples.items():
                 v = str(v)
-                k = sampler.sample_param(int(v[1:]), 1) if v.startswith("b") else sampler.sample_param(int(v), 0)
+                w = "bcde".index(v[0]) + 1 if v[:1] in ("b", "c", "d", "e") else 0
+                k = sampler.sample_param(int(v[1:] if w else v), w)
                 if not 0 <= k < len(values):
                     continue
                 if path in files:

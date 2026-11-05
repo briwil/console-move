@@ -166,6 +166,8 @@ class MoveBoard:
             k.put(("KNOB", 9, 1 if num == PLUS else -1, self.shift))
         elif num == BACK:
             k.put("QUIT" if self.shift else "BACK")
+        elif num == 3 and "CUT" in self.held and self.T.sbrowse.active:
+            k.put("SB_REMOVE")                             # Delete + push the wheel in the sample browser: take it out
         elif num in PRESS:
             k.put(PRESS[num][1 if self.shift else 0])
 
@@ -796,6 +798,9 @@ def handle(name, T, m, e):
             return
         if name in ("HOME", "PLAY"):
             sb.push()
+            return
+        if name == "SB_REMOVE":
+            sb.remove()
             return
         if name in ("BACK", "FILE", "DRUMS_BACK"):
             sb.back()

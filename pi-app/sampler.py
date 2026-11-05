@@ -5,6 +5,8 @@ Each drum has 8 settings: SAMPLE (the file), LEVEL, PITCH (0.5 semitone a click,
 the sample it begins), DECAY (127: the whole sample; lower: faded out sooner), PAN, REVERB and DELAY; and after
 all of those (so older songs and presets still line up) a second sample (SAMPLE 2) and BLEND for each drum:
 0 only the first sample, 64 both at full volume, 127 only the second. Pitch, start, decay etc. are shared.
+After those: RANDOM (on: each hit plays one of up to five samples at random, BLEND off) and SAMPLES 3-5 (only
+heard with RANDOM on).
 It looks like the other drum machines to the rest of the app (drums.py's Drums class).
 
 A song keeps a sample as its place in the sorted list of files, so adding or removing samples can change which
@@ -27,16 +29,34 @@ LABELS = ["SAMPLE", "LEVEL", "PITCH", "START", "DECAY", "PAN", "REVERB", "DELAY"
 DEFAULTS = [0, 100, 64, 0, 127, 64, 0, 0]
 SAMPLE2 = LANES * PER                     # settings 128-143: each drum's second sample
 BLEND = SAMPLE2 + LANES                   # settings 144-159: each drum's BLEND
-ALL = BLEND + LANES
+RANDOM = BLEND + LANES                    # settings 160-175: each drum's RANDOM (0 off, 1 on)
+SAMPLE3 = RANDOM + LANES                  # settings 176-223: each drum's samples 3, 4 and 5 (RANDOM's)
+ALL = SAMPLE3 + 3 * LANES
+SAMPLES = 5                               # a drum's samples with RANDOM on (2 with it off)
+SOLO = 10000                              # (not a setting: the browser's preview, only one sample heard)
 
 
 def sample_param(voice, which=0):
-    """The setting that holds drum voice's first (which 0) or second (1) sample."""
-    return voice * PER if which == 0 else SAMPLE2 + voice
+    """The setting that holds drum voice's sample which (0-4)."""
+    if which == 0:
+        return voice * PER
+    if which == 1:
+        return SAMPLE2 + voice
+    return SAMPLE3 + (which - 2) * LANES + voice
 
 
 def is_sample(param):
-    return (param < SAMPLE2 and param % PER == 0) or SAMPLE2 <= param < BLEND
+    return (param < SAMPLE2 and param % PER == 0) or SAMPLE2 <= param < BLEND or SAMPLE3 <= param < ALL
+
+
+def sample_slot(param):
+    """(drum, which sample 0-4) for a sample setting."""
+    if param < SAMPLE2:
+        return param // PER, 0
+    if param < BLEND:
+        return param - SAMPLE2, 1
+    w, v = divmod(param - SAMPLE3, LANES)
+    return v, w + 2
 MAX_SECONDS = 12
 MAX_FILES = 4000
 LIVE_TAIL = RATE * 4
@@ -154,11 +174,14 @@ class Sampler:
         self.params += [{"key": "sample2_%d" % (v + 1), "label": "SAMPLE 2", "voice": v, "kind": "menu"}
                         for v in range(LANES)]
         self.params += [{"key": "blend%d" % (v + 1), "label": "BLEND", "voice": v, "kind": "num"} for v in range(LANES)]
+        self.params += [{"key": "random%d" % (v + 1), "label": "RANDOM", "voice": v, "kind": "menu"} for v in range(LANES)]
+        self.params += [{"key": "sample%d_%d" % (w + 3, v + 1), "label": "SAMPLE %d" % (w + 3), "voice": v,
+                         "kind": "menu"} for w in range(3) for v in range(LANES)]
         self.param_count = self.engine_params = len(self.params)
-        self.init_values = [DEFAULTS[i % PER] for i in range(LANES * PER)] + [0] * LANES + [0] * LANES
+        self.init_values = [DEFAULTS[i % PER] for i in range(LANES * PER)] + [0] * (ALL - SAMPLE2)
         self.values = list(self.init_values)
         self.lane_voice = list(range(LANES))
-        self.fast_params = {i * PER for i in range(LANES)} | set(range(SAMPLE2, BLEND))   # the SAMPLE settings
+        self.fast_params = {i * PER for i in range(LANES)} | set(range(SAMPLE2, BLEND)) | set(range(SAMPLE3, ALL))
         self._send_keys = [(v * PER + 6, v * PER + 7) for v in range(LANES)]
         self._lock = threading.Lock()
         self._pending = []
@@ -166,9 +189,12 @@ class Sampler:
         self.load_kit(self.init_values)
 
     # ------------------------------------------------------------ names
+    def random_on(self, v):
+        return bool(self.values[RANDOM + v])
+
     def sample_name(self, v, which=None):
-        """The drum's sample name (which None: the first, or the second if only it is set)."""
-        order = (which,) if which is not None else (0, 1)
+        """The drum's sample name (which None: the first one set)."""
+        order = (which,) if which is not None else range(SAMPLES if self.random_on(v) else 2)
         for w in order:
             i = self.values[sample_param(v, w)]
             if 0 < i <= len(self.files):
@@ -206,11 +232,17 @@ class Sampler:
         return self.params[param]["kind"] if 0 <= param < len(self.params) else "num"
 
     def _top(self, param):
+        if RANDOM <= param < SAMPLE3:
+            return 1
         return len(self.files) if is_sample(param) else 127
 
     def value_text(self, param, v=None):
         v = self.get_param(param) if v is None else v
-        if param >= BLEND:                            # BLEND: which sample, and how loud the other one is
+        if RANDOM <= param < SAMPLE3:
+            return "ON" if v else "OFF"
+        if BLEND <= param < RANDOM:                   # BLEND: which sample, and how loud the other one is
+            if self.random_on(param - BLEND):
+                return "OFF (RANDOM)"
             if v == 0:
                 return "S1"
             if v == 127:
@@ -218,7 +250,7 @@ class Sampler:
             if v == 64:
                 return "BOTH"
             return ("S2 %d%%" % round(v / 64 * 100)) if v < 64 else ("S1 %d%%" % round((127 - v) / 63 * 100))
-        k = 0 if param >= SAMPLE2 else param % PER
+        k = 0 if is_sample(param) else param % PER
         if k == 0:
             if 0 < v <= len(self.files):
                 return os.path.splitext(os.path.basename(self.files[v - 1]))[0].upper()
@@ -238,7 +270,7 @@ class Sampler:
     @staticmethod
     def lockable(param):
         if param >= SAMPLE2:
-            return param >= BLEND                     # BLEND can be locked on a step (the second sample can't)
+            return BLEND <= param < RANDOM            # BLEND can be locked on a step (the samples, RANDOM can't)
         return 1 <= param % PER <= 4                  # level, pitch, start, decay (not the sample, pan or sends)
 
     def stepped(self, param, v, clicks):
@@ -288,6 +320,11 @@ class Sampler:
     _seq_left = _live_left = 0
 
     # ------------------------------------------------------------ sound
+    def solo(self, v, which):
+        """The sample browser's preview: hear only sample which (0-4) of drum v; None: all again."""
+        with self._lock:
+            self._pending.append(("param", SOLO + v, 0 if which is None else which + 1))
+
     def hit(self, lane, velocity=100):
         with self._lock:
             self._pending.append(("hit", lane, velocity))
@@ -297,7 +334,7 @@ class Sampler:
             return None
         if index not in self._cache:
             if len(self._cache) > 48:
-                used = set(self.values[0:SAMPLE2:PER]) | set(self.values[SAMPLE2:BLEND])
+                used = set(self.values[0:SAMPLE2:PER]) | set(self.values[SAMPLE2:BLEND]) | set(self.values[SAMPLE3:ALL])
                 self._cache = {k: v for k, v in self._cache.items() if k in used}
             self._cache[index] = read_wav(self.files[index - 1])
         return self._cache[index]
@@ -305,11 +342,18 @@ class Sampler:
     def _set(self, lib, index, value):
         """One setting into a copy of the engine (lib: the library, or a stand-in that queues the call for the
         sound core)."""
-        if index >= BLEND:
+        if index >= SOLO:
+            lib.sw_set(("solo%d" % (index - SOLO + 1)).encode(), int(value))
+            return
+        if BLEND <= index < RANDOM:
             lib.sw_set(("blend%d" % (index - BLEND + 1)).encode(), int(value))
             return
-        if index >= SAMPLE2:
-            v, k, slot = index - SAMPLE2, 0, index - SAMPLE2 + LANES     # (the engine's 16-31: second samples)
+        if RANDOM <= index < SAMPLE3:
+            lib.sw_set(("random%d" % (index - RANDOM + 1)).encode(), int(value))
+            return
+        if is_sample(index):
+            v, w = sample_slot(index)
+            k, slot = 0, w * LANES + v                    # (the engine's 0-15 first samples, 16-31 second... 64-79)
         else:
             v, k = divmod(index, PER)
             slot = v

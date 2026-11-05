@@ -1,7 +1,8 @@
 """The SAMPLE BROWSER: choosing a sampler drum's sample by folders instead of one long list.
 
-Push the big wheel on a sampler drum's page to open it. It first asks which of the drum's two samples (SAMPLE 1
-or SAMPLE 2; BLEND mixes them). Then: the wheel turns through the list, push the wheel to open a folder / choose
+Push the big wheel on a sampler drum's page to open it. It first asks which of the drum's samples: SAMPLE 1 and
+SAMPLE 2 (BLEND mixes them), then RANDOM (push: on / off). With RANDOM on, SAMPLES 3-5 too, and each hit plays
+one of them at random (BLEND off). Delete + push the wheel on a sample: take it out. Then: the wheel turns through the list, push the wheel to open a folder / choose
 a sample, "< UP" goes up, Back goes up a folder (from the top: back to SAMPLE 1 / 2, and Back again leaves).
 The highlighted sample is played as you land on it; leaving with Back puts the old sample back."""
 import os
@@ -57,11 +58,20 @@ class SampleBrowser:
         rel = os.path.relpath(self.folder, self.root) if self.folder != self.root else os.path.basename(self.root)
         return ("D%d S%d  %s" % (self.voice + 1, self.which + 1, rel.upper()))[:27]
 
+    def _random(self):
+        import sampler
+        return bool(self.drums.get_param(sampler.RANDOM + self.voice)) if hasattr(sampler, "RANDOM") else False
+
     def _which_list(self):
         d = self.drums
-        names = [d.sample_name(self.voice, w) if hasattr(d, "sample_name") else "" for w in (0, 1)]
-        self.entries = [("SAMPLE %d  %s" % (w + 1, names[w] if names[w] != "EMPTY" else "-"), "which", w)
-                        for w in (0, 1)]
+        rnd = self._random()
+
+        def row(w):
+            name = d.sample_name(self.voice, w) if hasattr(d, "sample_name") else ""
+            return ("SAMPLE %d  %s" % (w + 1, name if name != "EMPTY" else "-"), "which", w)
+        self.entries = [row(0), row(1), ("RANDOM  %s" % ("ON" if rnd else "OFF"), "random", None)]
+        if rnd:
+            self.entries += [row(w) for w in (2, 3, 4)]
 
     # ------------------------------------------------------------ opening and leaving
     def open(self, drums, voice):
@@ -82,16 +92,27 @@ class SampleBrowser:
         self.which, self.stage = which, "files"
         self.param = sampler.sample_param(self.voice, which)
         self.orig = self.drums.get_param(self.param)
-        self.blend = sampler.BLEND + self.voice          # while browsing, hear only the sample being chosen
-        self.blend_orig = self.drums.get_param(self.blend)
-        self.drums.set_param(self.blend, 127 if which else 0)
+        if hasattr(self.drums, "solo"):
+            self.drums.solo(self.voice, which)            # while browsing, hear only the sample being chosen
         self.folder = self.root                        # always from the top of the samples
         self._list()
         self.pick = 0
 
     def _unsolo(self):
-        if self.stage == "files" and getattr(self, "blend", None) is not None:
-            self.drums.set_param(self.blend, self.blend_orig)
+        if self.stage == "files" and hasattr(self.drums, "solo"):
+            self.drums.solo(self.voice, None)
+
+    def remove(self):
+        """Delete + push the wheel on a sample: take it out of the drum."""
+        if self.stage != "which" or not self.entries:
+            return
+        _l, kind, w = self.entries[self.pick]
+        if kind != "which":
+            return
+        import sampler
+        self.drums.set_param(sampler.sample_param(self.voice, w), 0)
+        self._which_list()
+        self.T.say("DRUM %d: SAMPLE %d TAKEN OUT" % (self.voice + 1, w + 1), 2)
 
     def close(self, keep):
         self._cancel()
@@ -114,6 +135,13 @@ class SampleBrowser:
         if kind == "which":
             self._choose_which(val)
             return
+        if kind == "random":
+            import sampler
+            on = not self._random()
+            self.drums.set_param(sampler.RANDOM + self.voice, 1 if on else 0)
+            self._which_list()
+            self.T.say("RANDOM %s" % ("ON: EACH HIT ONE OF THE SAMPLES, BLEND OFF" if on else "OFF: BLEND IS BACK"), 3)
+            return
         if kind in ("up", "dir"):
             came = self.folder
             self.folder = val
@@ -129,7 +157,8 @@ class SampleBrowser:
             self._unsolo()
             self.T.engine.hit(self.voice, 110)
             self.active = False
-            if self.which and self.blend_orig == 0:
+            import sampler
+            if self.which == 1 and not self._random() and self.drums.get_param(sampler.BLEND + self.voice) == 0:
                 self.T.say("SAMPLE 2 IN. BLEND (KNOB 8) IS ALL ON SAMPLE 1: TURN IT TO HEAR IT", 4)
 
     def back(self):
@@ -143,7 +172,7 @@ class SampleBrowser:
             self._unsolo()
             self.stage = "which"
             self._which_list()
-            self.pick = self.which
+            self.pick = next((k for k, (_l, kind, v) in enumerate(self.entries) if kind == "which" and v == self.which), 0)
 
     def folder_up(self):
         came = self.folder

@@ -2,20 +2,23 @@
  * calls sw_render, like the other drum machines' libraries in drums/schwung/glue_common.h). Samples are loaded by
  * Python (sw_load); settings are sw_set("<name><drum>", value) with the names below.
  *
- * Each drum has two samples (sw_load(drum, ...) and sw_load(16 + drum, ...)), played together from the same hit
- * with the same pitch, start and decay, and BLEND (0-127) between them: 0 only the first, 64 both at full
- * volume, 127 only the second. BLEND is read as the sound plays, so an LFO on it morphs a ringing sample. */
+ * Each drum has up to five samples (sw_load(16 * w + drum, ...), w 0-4). RANDOM off (random<drum> 0): samples 1
+ * and 2 play together from the same hit with the same pitch, start and decay, and BLEND (0-127) between them: 0
+ * only the first, 64 both at full volume, 127 only the second (read as the sound plays, so an LFO on it morphs a
+ * ringing sample); 3-5 are silent. RANDOM on: each hit plays one of the loaded samples 1-5, picked at random,
+ * and BLEND is ignored. solo<drum> n (1-5, not saved): the sample browser's preview plays only sample n. */
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 #define VOICES 16
+#define SAMPLES 5
 typedef struct { float *x; int n; int on; double pos; } player_t;      /* one sample of a drum, playing */
-typedef struct { player_t p[2]; double rate; float gain; int age, fade; float mixed[2]; } voice_t;   /* mixed: last block's BLEND gains */
-
+typedef struct { player_t p[SAMPLES]; double rate; float gain; int age, fade, pick; float mixed[SAMPLES]; } voice_t;
+                                                         /* mixed: last block's BLEND gains; pick: RANDOM's sample */
 static voice_t V[VOICES];
-static int level[VOICES], pitch[VOICES], start[VOICES], decay[VOICES], blend[VOICES];
+static int level[VOICES], pitch[VOICES], start[VOICES], decay[VOICES], blend[VOICES], rnd[VOICES], solo[VOICES];
 static float RATE = 44100.f;
 static int inited = 0;
 
@@ -52,6 +55,8 @@ void sw_set(const char *key, int value)
     else if (!strcmp(name, "start")) start[v] = value;
     else if (!strcmp(name, "decay")) decay[v] = value;
     else if (!strcmp(name, "blend")) blend[v] = value;
+    else if (!strcmp(name, "random")) rnd[v] = value ? 1 : 0;
+    else if (!strcmp(name, "solo")) solo[v] = value <= SAMPLES ? value : 0;
 }
 
 int sw_get(const char *key)
@@ -64,16 +69,17 @@ int sw_get(const char *key)
     if (!strcmp(name, "start")) return start[v];
     if (!strcmp(name, "decay")) return decay[v];
     if (!strcmp(name, "blend")) return blend[v];
+    if (!strcmp(name, "random")) return rnd[v];
     return -1;
 }
 
-/* the sample for a drum (mono floats at the engine's rate): voice 0-15 its first sample, 16-31 its second;
-   n = 0 empties it */
+/* the sample for a drum (mono floats at the engine's rate): voice 0-15 its first sample, 16-31 its second ...
+   64-79 its fifth; n = 0 empties it */
 void sw_load(int voice, const float *data, int n)
 {
-    int which = voice >= VOICES;
-    if (which) voice -= VOICES;
-    if (voice < 0 || voice >= VOICES) return;
+    if (voice < 0 || voice >= VOICES * SAMPLES) return;
+    int which = voice / VOICES;
+    voice %= VOICES;
     player_t *p = &V[voice].p[which];
     float *old = p->x;
     float *copy = 0;
@@ -87,23 +93,40 @@ void sw_load(int voice, const float *data, int n)
     if (old) free(old);
 }
 
+/* BLEND's gain for each sample of drum v: only samples 1 and 2 (3-5 are RANDOM's), as before: the first full up
+   to the middle then fading out, the second fading in up to the middle (if just one of them is loaded: full) */
+static void gains(int v, float *g)
+{
+    int b = blend[v];
+    for (int w = 0; w < SAMPLES; w++) g[w] = 0.f;
+    int a = V[v].p[0].x && V[v].p[0].n >= 2, c = V[v].p[1].x && V[v].p[1].n >= 2;
+    g[0] = !c ? 1.f : b <= 64 ? 1.f : (127 - b) / 63.f;       /* (only one of the two loaded: it plays full) */
+    g[1] = !a ? 1.f : b >= 64 ? 1.f : b / 64.f;
+}
+
 void sw_trigger(int voice, int velocity)
 {
     if (voice < 0 || voice >= VOICES || velocity <= 0) return;
     voice_t *p = &V[voice];
-    int any = 0;
-    for (int w = 0; w < 2; w++) {
+    int loaded[SAMPLES], n = 0;
+    for (int w = 0; w < (rnd[voice] ? SAMPLES : 2); w++)      /* (RANDOM off: samples 3-5 are silent) */
+        if (p->p[w].x && p->p[w].n >= 2) loaded[n++] = w;
+    int sl = solo[voice] && p->p[solo[voice] - 1].x && p->p[solo[voice] - 1].n >= 2;
+    if (!n && !sl) return;
+    p->pick = sl ? solo[voice] - 1                        /* the browser's preview: only that sample */
+                 : rnd[voice] ? loaded[rand() % n] : -1;
+    for (int w = 0; w < SAMPLES; w++) {
         player_t *q = &p->p[w];
-        q->on = q->x && q->n >= 2;
-        if (q->on) { q->pos = (double)q->n * start[voice] / 127.0 * 0.95; any = 1; }
+        q->on = q->x && q->n >= 2 && (p->pick < 0 ? w < 2 : p->pick == w);
+        if (q->on) q->pos = (double)q->n * start[voice] / 127.0 * 0.95;
     }
-    if (!any) return;
     if (velocity > 127) velocity = 127;
     p->rate = pow(2.0, ((pitch[voice] - 64) / 2.0) / 12.0);
     p->gain = (level[voice] / 127.0f) * (velocity / 127.0f);
     p->age = 0;
-    p->mixed[0] = blend[voice] <= 64 ? 1.f : (127 - blend[voice]) / 63.f;     /* (no glide in from an old BLEND) */
-    p->mixed[1] = blend[voice] >= 64 ? 1.f : blend[voice] / 64.f;
+    if (p->pick >= 0) {
+        for (int w = 0; w < SAMPLES; w++) p->mixed[w] = w == p->pick ? 1.f : 0.f;
+    } else gains(voice, p->mixed);                                  /* (no glide in from an old BLEND) */
     {
         double d = decay[voice] / 127.0;
         p->fade = decay[voice] >= 127 ? 0 : (int)(RATE * (0.03 + d * d * 2.5));
@@ -116,12 +139,15 @@ void sw_render(float *out, int frames)
     memset(out, 0, sizeof(float) * frames * VOICES);
     for (int v = 0; v < VOICES; v++) {
         voice_t *p = &V[v];
-        if (!p->p[0].on && !p->p[1].on) continue;
-        /* BLEND: the first sample full up to the middle then fading out, the second fading in up to the middle */
-        int b = blend[v];
-        float mix[2] = { b <= 64 ? 1.f : (127 - b) / 63.f, b >= 64 ? 1.f : b / 64.f };
+        int playing = 0;
+        for (int w = 0; w < SAMPLES; w++) playing |= p->p[w].on;
+        if (!playing) continue;
+        float mix[SAMPLES];
+        if (p->pick >= 0) {
+            for (int w = 0; w < SAMPLES; w++) mix[w] = w == p->pick ? 1.f : 0.f;
+        } else gains(v, mix);
         int age0 = p->age;
-        for (int w = 0; w < 2; w++) {
+        for (int w = 0; w < SAMPLES; w++) {
             player_t *q = &p->p[w];
             if (!q->on) continue;
             int age = age0;
@@ -142,7 +168,6 @@ void sw_render(float *out, int frames)
             }
         }
         p->age = age0 + frames;
-        p->mixed[0] = mix[0];
-        p->mixed[1] = mix[1];
+        for (int w = 0; w < SAMPLES; w++) p->mixed[w] = mix[w];
     }
 }

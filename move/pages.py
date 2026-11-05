@@ -599,7 +599,7 @@ def sample_page(f, sb):
             f.text(2, y, rows[k], 0, limit=W - 4)
         else:
             f.text(2, y, rows[k], 1, limit=W - 4)
-    f.small(1, H - 6, "PUSH: OPEN/CHOOSE  BACK: UP")
+    f.small(1, H - 6, "PUSH: CHOOSE  DEL+PUSH: REMOVE" if sb.stage == "which" else "PUSH: OPEN/CHOOSE  BACK: UP")
 
 
 def sound_page(f, T):

@@ -191,10 +191,13 @@ story += [
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
          "(the ones without a picture yet show their name). Push to choose."),
         ("SAMPLER", "A drum machine of 16 drums, each with two .wav samples from the Move's sample folders. "
-         "Push the wheel on a drum: SAMPLE 1 or SAMPLE 2, then the folders. Knobs: LEVEL, PITCH, START, DECAY, PAN, "
-         "REVERB, DELAY (shared by both samples) and BLEND: all the way left only sample 1, the middle both at "
-         "full volume, all the way right only sample 2. BLEND can be an LFO's target or a step lock, so it can "
-         "morph between the two, even while a sample rings. Older songs and presets: sample 2 empty, BLEND left."),
+         "Push the wheel on a drum: SAMPLE 1, SAMPLE 2 and RANDOM; push a sample for the folders, or <b>Delete + "
+         "push</b> to take it out. Knobs: LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY (shared by all its samples) "
+         "and BLEND: all the way left only sample 1, the middle both at full volume, all the way right only sample "
+         "2. BLEND can be an LFO's target or a step lock, so it can morph between the two, even while a sample "
+         "rings. Older songs and presets: sample 2 empty, BLEND left."),
+        ("RANDOM", "Push it to turn it on: SAMPLES 3, 4 and 5 appear under it, and each hit plays one of the drum's "
+         "samples (1-5) at random. BLEND is off while it's on (and back as it was when you turn it off)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
         ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then (a synth "

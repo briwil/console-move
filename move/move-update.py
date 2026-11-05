@@ -64,12 +64,7 @@ def setup():
 
 def download():
     """The latest main branch, as a tar archive in memory."""
-    if not os.path.exists(TOKEN):
-        sys.exit("No GitHub access key yet: save it in %s (see MOVE-NOTES.md)." % TOKEN)
-    key = open(TOKEN).read().strip()
-    req = urllib.request.Request("https://api.github.com/repos/%s/tarball/main" % REPO,
-                                 headers={"Authorization": "Bearer " + key, "Accept": "application/vnd.github+json",
-                                          "User-Agent": "console-move-updater"})
+    req = _api("https://api.github.com/repos/%s/tarball/main" % REPO)
     say("Downloading the latest from GitHub...")
     with urllib.request.urlopen(req, timeout=120) as r:
         return r.read()
@@ -81,9 +76,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _api(url, accept="application/vnd.github+json"):
-    key = open(TOKEN).read().strip()
-    return urllib.request.Request(url, headers={"Authorization": "Bearer " + key, "Accept": accept,
-                                                "User-Agent": "console-move-updater"})
+    """A GitHub request. With an access key saved (a private project) it is sent with it; without one the project
+    must be public."""
+    headers = {"Accept": accept, "User-Agent": "console-move-updater"}
+    if os.path.exists(TOKEN):
+        headers["Authorization"] = "Bearer " + open(TOKEN).read().strip()
+    return urllib.request.Request(url, headers=headers)
 
 
 def fetch_libs():

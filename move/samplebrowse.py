@@ -25,6 +25,7 @@ class SampleBrowser:
         self.param = 0
         self.orig = 0
         self._timer = None
+        self.last_file = None      # and the file it was on
         self.last_folder = None    # where the last pick left off: the next one starts there
 
     # ------------------------------------------------------------ the folders
@@ -99,6 +100,13 @@ class SampleBrowser:
         self.folder = self.last_folder if self.last_folder in (self._tree or {}) else self.root   # (where the last pick left off)
         self._list()
         self.pick = 0
+        if self.folder == self.last_folder:                 # (and on the file it was on)
+            self.pick = next((k for k, (_l, kind, v) in enumerate(self.entries) if kind == "file" and v == self.last_file), 0)
+
+    def _remember(self):
+        self.last_folder = self.folder
+        if self.entries and self.pick < len(self.entries) and self.entries[self.pick][1] == "file":
+            self.last_file = self.entries[self.pick][2]
 
     def _unsolo(self):
         if self.stage == "files" and hasattr(self.drums, "solo"):
@@ -118,7 +126,7 @@ class SampleBrowser:
 
     def close(self, keep):
         if self.stage == "files":
-            self.last_folder = self.folder
+            self._remember()
         self._cancel()
         if not keep and self.stage == "files":
             self.drums.set_param(self.param, self.orig)
@@ -164,7 +172,7 @@ class SampleBrowser:
             self.drums.set_param(self.param, val)
             self._unsolo()
             self.T.engine.hit(self.voice, 110)
-            self.last_folder = self.folder
+            self._remember()
             self.stage = "which"                       # (back to SAMPLE 1 / 2 ..., not out to the instrument)
             self._which_list()
             self.pick = next((k for k, (_l, kind, v) in enumerate(self.entries) if kind == "which" and v == self.which), 0)
@@ -178,7 +186,7 @@ class SampleBrowser:
         elif self.folder != self.root:
             self.folder_up()
         else:                                          # the top of the samples: back to SAMPLE 1 / 2
-            self.last_folder = None
+            self._remember()
             self._cancel()
             self.drums.set_param(self.param, self.orig)
             self._unsolo()

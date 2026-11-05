@@ -174,8 +174,7 @@ class SampleBrowser:
         else:
             self._cancel()
             self.drums.set_param(self.param, val)
-            self._unsolo()
-            self.T.engine.hit(self.voice, 110)
+            self._unsolo()                             # (no sound as it goes back to the list)
             self._remember()
             self.stage = "which"                       # (back to SAMPLE 1 / 2 ..., not out to the instrument)
             self._which_list()

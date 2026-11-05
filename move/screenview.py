@@ -362,7 +362,7 @@ def menu_panel(T, m):
             title = {"new": "NAME THE NEW PROJECT", "rename": "RENAME %s" % getattr(m, "renaming", ""),
                      "wifi": "PASSWORD FOR %s" % getattr(m, "joining", "")}.get(m.naming, "NAME THIS PROJECT")
             return {"title": title.upper(), "name": "".join(m.name), "cursor": m.cursor,
-                    "hint": msg(m)}
+                    "hint": msg(m) or "WHEEL: LETTER  ·  < >: MOVE  ·  DELETE: ERASE  ·  PLAY: OK  ·  BACK: CANCEL"}
         if mode == "settings":
             names = {"TIMESIG": "TIME SIG", "SCREEN": "EXTERNAL SCREEN"}
             rows = []
@@ -372,20 +372,22 @@ def menu_panel(T, m):
                              "text": full.split("  ")[0].split(": ")[0].upper().strip()})
             full = str(m.setting_text(menu_mod.SETTINGS[m.row]) or "").strip()
             hint = msg(m) or (m.update_message() if menu_mod.SETTINGS[m.row] == "UPDATE" else "") or full
-            return {"title": "SETTINGS", "right": "",
+            return {"title": "SETTINGS", "right": "TURN, PUSH: DONE" if m.editing else "PUSH: CHANGE IT",
                     "rows": rows, "pick": m.row, "editing": bool(m.editing), "hint": str(hint).upper()}
         if mode == "load":
             if m.confirm:
                 return {"title": "DELETE PROJECT", "lines": ["ARE YOU SURE?", str(m.confirm[1]).upper()],
-                        "hint": "IT IS GONE FOR GOOD"}
+                        "hint": "IT IS GONE FOR GOOD  ·  PLAY: YES, DELETE IT  ·  BACK: NO, KEEP IT"}
             renaming, deleting = getattr(m, "rename_pick", False), getattr(m, "deleting", False)
             title = "RENAME WHICH PROJECT?" if renaming else "DELETE WHICH PROJECT?" if deleting else "OPEN PROJECT"
             rows, pick = _rows(m.songs, m.pick)
             for r, name in zip(rows, m.songs):
                 if e and name == e.song:
                     r["text"] = "OPEN"
+            hint = "PLAY: RENAME  ·  BACK: CANCEL" if renaming else "PLAY: DELETE  ·  BACK: CANCEL" if deleting \
+                else "PLAY: OPEN  ·  BACK: CANCEL"
             return {"title": title, "right": str(len(m.songs)), "rows": rows, "pick": pick,
-                    "empty": "NO SAVED PROJECTS", "hint": msg(m)}
+                    "empty": "NO SAVED PROJECTS", "hint": msg(m) or hint}
         if mode == "list":
             shift = bool(getattr(T, "shift_held", lambda: False)())
             labels = [{"NEW": "DELETE PROJECT" if shift else "NEW PROJECT",
@@ -393,7 +395,7 @@ def menu_panel(T, m):
                        "LOAD": "LOAD PROJECT", "SETTINGS": "SETTINGS"}[k] for k, _ in menu_mod.ITEMS]
             rows, pick = _rows(labels, m.choice)
             return {"title": ((e.song or "UNTITLED") if e else "DEMO").upper(), "right": "MENU", "rows": rows,
-                    "pick": pick, "hint": msg(m)}
+                    "pick": pick, "hint": msg(m) or ("SHIFT + PUSH: DELETE / RENAME" if not shift else "")}
         return _text_screen(m.s, msg(m))
     if m is not None and m.kits.open:
         k = m.kits
@@ -406,11 +408,11 @@ def menu_panel(T, m):
                     "rows": rows, "pick": pick, "hint": msg(k)}
         if k.mode == "name":
             return {"title": "NAME THIS PRESET", "name": "".join(k.name), "cursor": k.cursor,
-                    "hint": msg(k)}
+                    "hint": msg(k) or "WHEEL: LETTER  ·  < >: MOVE  ·  DELETE: ERASE  ·  PLAY: OK  ·  BACK: CANCEL"}
         if k.mode == "load":
             rows, pick = _rows(k.kits, k.pick)
             return {"title": "LOAD PRESET", "right": str(len(k.kits)), "rows": rows, "pick": pick,
-                    "empty": "NO SAVED PRESETS", "hint": msg(k)}
+                    "empty": "NO SAVED PRESETS", "hint": msg(k) or "PLAY: LOAD IT  ·  BACK: CANCEL"}
         if k.mode in ("clear_all", "clear", "paste"):
             import notes as notes_mod
             synth = isinstance(k.seq, notes_mod.NoteSequencer)
@@ -427,22 +429,23 @@ def menu_panel(T, m):
             else:
                 title, lines = "PASTE PATTERN %d?" % (k.pattern_clip[1] + 1), ["ONTO PATTERN %d" % n,
                                                                               "IT HAS NOTES OR STEPS: PASTING REPLACES THEM"]
-            return {"title": title, "lines": lines, "hint": ""}
+            return {"title": title, "lines": lines, "hint": "PLAY: YES  ·  BACK: NO, KEEP IT"}
         return _text_screen(k.s, msg(k))
     sb = getattr(T, "sbrowse", None)
     if sb is not None and sb.active:
         rows, pick = _rows([r[0] for r in sb.entries], sb.pick)
-        return {"title": sb.title(), "rows": rows, "pick": pick, "empty": "EMPTY", "hint": ""}
+        return {"title": sb.title(), "rows": rows, "pick": pick, "empty": "EMPTY", "hint": "PUSH: OPEN / CHOOSE  ·  BACK: UP"}
     fp = getattr(T, "fxpick", None)
     if fp is not None and fp.active and fp.choices:
         rows, pick = _rows([c[1] for c in fp.choices], fp.pick)
-        return {"title": "CHOOSE AN EFFECT", "rows": rows, "pick": pick, "img": "fx." + fp.choices[fp.pick][0]}
+        return {"title": "CHOOSE AN EFFECT", "rows": rows, "pick": pick, "img": "fx." + fp.choices[fp.pick][0],
+                "hint": "WHEEL: PICK  ·  PUSH: CHOOSE  ·  BACK: CANCEL"}
     if getattr(T, "inst_page", False) and not (T.drum_page or T.seq_page or T.fx_page):
         ip = T.instp
         if ip.mode == "pick" and ip.choices:
             rows, pick = _rows([c[1] for c in ip.choices], ip.pick)
             return {"title": "SLOT %d: CHOOSE AN INSTRUMENT" % (ip.row + 1), "rows": rows, "pick": pick,
-                    "img": ip.choices[ip.pick][0]}
+                    "img": ip.choices[ip.pick][0], "hint": "WHEEL: PICK  ·  PUSH: CHOOSE  ·  BACK: CANCEL"}
         if ip.mode == "menu":
             rows, pick = _rows([c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices], ip.pick)
             return {"title": "SLOT %d" % (ip.row + 1), "rows": rows, "pick": pick}
@@ -457,11 +460,14 @@ def menu_panel(T, m):
             rows.append({"label": "%d  %s" % (i + 1, (names.get(mid, mid) or "—").upper()),
                          "text": "MUTE" if (e and i in e.slot_mutes) else ""})
         return {"title": "INSTRUMENTS", "rows": rows, "pick": ip.row,
-                "img": (e.slots[ip.row] if e and e.slots[ip.row] else "")}
+                "img": (e.slots[ip.row] if e and e.slots[ip.row] else ""),
+                "hint": "PUSH: OPEN  ·  SHIFT + PUSH: CHANGE / REMOVE  ·  STEPS 1-8: MUTE"}
     if getattr(T, "song_page", False) and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
         sg = T.song
         if not sg.rows:
-            return {"title": "SONG " + ("ON" if sg.on else "OFF"), "right": "NO ROWS", "lines": []}
+            return {"title": "SONG " + ("ON" if sg.on else "OFF"), "right": "NO ROWS",
+                    "lines": ["STEP BUTTON 1: ADD A ROW", "EACH ROW: A PATTERN FOR EVERY INSTRUMENT, PLAYED SO MANY TIMES (KNOB 8)"],
+                    "hint": "+ / -: SONG MODE ON / OFF"}
         row = sg.rows[sg.pick]
         rows = []
         for i, slot in enumerate(sg.slots()):
@@ -471,7 +477,8 @@ def menu_panel(T, m):
         playing = sg.playing_row
         return {"title": "SONG " + ("ON" if sg.on else "OFF"), "right": "ROW %d OF %d" % (sg.pick + 1, len(sg.rows)),
                 "rows": rows, "pick": -1, "knobs": True, "steps": len(sg.rows), "step_at": sg.pick,
-                "step_playing": playing if playing is not None else -1}
+                "step_playing": playing if playing is not None else -1,
+                "hint": "STEPS: ROWS  ·  DELETE + STEP: TAKE A ROW OUT  ·  + / -: SONG MODE ON / OFF"}
     return None
 
 
@@ -510,8 +517,9 @@ def fx_data(T):
                 rows.append({"n": i + 1, "label": label.upper(), "text": shown})
         fid = catalog.FX[sf.index - 1]["id"] if sf.index else "none"
         return {"title": "SONG INSERT %d" % (sf.pos + 1), "right": sf.name(), "rows": rows, "pick": -1,
-                "knobs": True, "img": "fx." + fid, "empty": "NO EFFECT",
-                "hint": (sf.error.upper() if sf.error else "")}
+                "knobs": True, "img": "fx." + fid, "empty": "NO EFFECT: PUSH THE WHEEL TO CHOOSE ONE",
+                "hint": (sf.error.upper() if sf.error else
+                         "ON EVERY INSTRUMENT (A COPY EACH), RECORDED WITH IT  ·  PUSH THE WHEEL: CHOOSE")}
     rows = []
     for i, (key, name) in enumerate(T.FX_KNOBS[which]):
         if key == "dly_time":

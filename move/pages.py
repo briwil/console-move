@@ -302,6 +302,7 @@ def input_popup(f, T):
         header(f, "TRACK %d" % (t + 1))
         f.big((W - (6 if stereo else 4) * 12 + 2) // 2, 20, "STEREO" if stereo else "MONO")
         f.centre(W // 2, 44, "LEFT AND RIGHT INPUTS" if stereo else "ONE INPUT")
+        f.small(1, 58, "TURN KNOB 1 TO CHANGE")
         return
     c = src[side] if isinstance(src, tuple) and side < len(src) else src
     who, what = input_parts(e, c)
@@ -314,6 +315,7 @@ def input_popup(f, T):
         f.right(W - 2, 58, "%d / %d" % (pos, len(choices)), small=True)
     except Exception:
         pass
+    f.small(1, 58, "TURN TO CHANGE")
 
 
 def focus_page(f, T):
@@ -522,8 +524,7 @@ def insert_page(f, T, pos):
         x, y = col * 65, 24 + row * 9
         f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
         f.right(x + 62, y, shown[:6], small=True)
-    if ins.error:
-        f.small(1, 59, str(ins.error).upper()[:31])
+    f.small(1, 59, (ins.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
 
 
 def arp_page(f, T):
@@ -544,6 +545,7 @@ def arp_page(f, T):
             f.rect(x + 1, 50, 4, 2, 1)
         elif r == 2:
             f.rect(x + 1, 48, 4, 4, 1)
+    f.small(1, 57, "STEPS: NOTE, ACCENT, REST")
 
 
 def pads_page(f, T):
@@ -555,6 +557,7 @@ def pads_page(f, T):
         x, y = col * 65, 13 + row * 14
         f.small(x + 1, y, "%d %s" % (i + 1, label))
         f.text(x + 1, y + 6, str(shown)[:10])
+    f.small(1, 57, "KEY, SCALE, OCTAVE, PAD FEEL" if ml.has_arp() else "OCTAVE, PAD FEEL")
 
 
 def lfo_page(f, T):
@@ -575,6 +578,8 @@ def lfo_page(f, T):
         x, y = col * 65, 13 + row * 11
         f.small(x + 1, y, "%d %s" % (i + 1, label))
         f.right(x + 62, y, str(value)[:9], small=True)
+    f.small(1, 50, "STEPS: TAP = REST, HOLD + 2/4")
+    f.small(1, 57, "< >: PAGES   BACK: SETTINGS")
 
 
 def sample_page(f, sb):
@@ -592,6 +597,7 @@ def sample_page(f, sb):
             f.text(2, y, rows[k], 0, limit=W - 4)
         else:
             f.text(2, y, rows[k], 1, limit=W - 4)
+    f.small(1, H - 6, "PUSH: OPEN/CHOOSE  BACK: UP")
 
 
 def sound_page(f, T):
@@ -675,11 +681,18 @@ def synth_seq_page(f, T):
         f.frame(8, 27, 112, 26)
         f.rect(9, 28, 110, 24, 0)
         if ms.sel is None:
-            f.centre(64, 37, "STEP SETTINGS")
+            f.centre(64, 31, "PRESS A PAD")
+            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
         else:
             key, label = ms.pad_items()[ms.sel]
-            f.centre(64, 31, str(label)[:16])
-            f.centre(64, 41, str(ms.item_value(key))[:16])
+            f.centre(64, 30, str(label)[:16])
+            f.centre(64, 40, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
+            f.centre(64, 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
+        return
+    if ms.down:
+        f.small(1, 28, "PADS: ADD / TAKE OFF NOTES")
+        f.small(1, 35, "TAP A LATER STEP: LENGTH")
+        f.small(1, 42, "KNOB 1: LENGTH")
         return
     for i, (label, value, _x) in enumerate(ms.knob_list()):
         col, row = divmod(i, 4)
@@ -732,11 +745,13 @@ def seq_page(f, T):
         f.frame(8, 27, 112, 26)
         f.rect(9, 28, 110, 24, 0)
         if not knobs:
-            f.centre(64, 37, "STEP SETTINGS")
+            f.centre(64, 31, "PRESS A PAD")
+            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
         else:
             label, value, on = knobs[0]
-            f.centre(64, 31, str(label)[:16])
-            f.centre(64, 41, str(value)[:16])
+            f.centre(64, 30, str(label)[:16])
+            f.centre(64, 40, ("KNOB 1: %s" % value)[:22], small=True)
+            f.centre(64, 46, "SAME PAD AGAIN: OFF" if on else "TURN KNOB 1 TO SET IT", small=True)
         return
     # the knobs
     knobs = ms.knob_list()
@@ -760,6 +775,11 @@ def song_page(f, T):
     header(f, "SONG " + ("ON" if sg.on else "OFF"),
            "ROW %d/%d" % (sg.pick + 1, len(sg.rows)) if sg.rows else "NO ROWS")
     if not sg.rows:
+        f.small(1, 14, "STEP BUTTON 1: ADD A ROW")
+        f.small(1, 21, "EACH ROW: A PATTERN FOR")
+        f.small(1, 28, "EVERY INSTRUMENT, PLAYED")
+        f.small(1, 35, "SO MANY TIMES (KNOB 8)")
+        f.small(1, 46, "+ / -: SONG MODE ON / OFF")
         return
     row = sg.rows[sg.pick]
     slots = sg.slots()
@@ -774,6 +794,7 @@ def song_page(f, T):
     f.right(W - 2, 13 + r * 8, "x%d" % row["repeat"], small=True)
     if sg.playing_row is not None:
         f.small(1, 48, "PLAYING ROW %d" % (sg.playing_row + 1))
+    f.small(1, 56, "STEPS: ROWS  DEL+STEP: OUT")
 
 
 # ------------------------------------------------------------------ effects
@@ -786,6 +807,9 @@ def song_insert_page(f, T, p):
     sf = T.songfx(p)
     header(f, "SONG INSERT %d" % (p + 1))
     f.text(2, 12, sf.name()[:21])
+    if not sf.params:
+        f.small(2, 24, "ON EVERY INSTRUMENT, A COPY EACH")
+        f.small(2, 31, "RECORDED WITH IT")
     for i in range(8):
         label, shown = sf.text(i)
         if not label:
@@ -794,8 +818,7 @@ def song_insert_page(f, T, p):
         x, y = col * 65, 24 + row * 9
         f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
         f.right(x + 62, y, shown[:6], small=True)
-    if sf.error:
-        f.small(1, 59, str(sf.error).upper()[:31])
+    f.small(1, 59, (sf.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
 
 
 def fx_page(f, T):
@@ -812,6 +835,7 @@ def fx_page(f, T):
     s = e.inst_send(which) if e else None
     f.small(1, 43, "4 THIS INSTRUMENT'S SEND")
     f.right(W - 2, 51, ("%d%%" % round(s * 100)) if s is not None else "NONE: OWN FX", small=True)
+    f.small(1, 59, "GOES ONTO THE TAPE WITH IT")
 
 
 # ------------------------------------------------------------------ the menus (any of the Pi's menu screens)
@@ -855,6 +879,8 @@ def confirm_page(f, k):
         f.text(2, 16, "ONTO PATTERN %d" % n)
         f.small(2, 30, "IT HAS NOTES OR STEPS:")
         f.small(2, 37, "PASTING REPLACES THEM")
+    f.small(1, 51, "PLAY: YES")
+    f.small(1, 58, "BACK: NO, KEEP IT")
 
 
 def preset_list(f, k):
@@ -862,8 +888,7 @@ def preset_list(f, k):
     header(f, "LOAD PRESET", "%d" % len(k.kits))
     biglist(f, [str(n).upper() for n in k.kits], k.pick, fit=4)
     msg = str(getattr(k, "msg", "") or "")
-    if msg:
-        f.small(1, 58, msg.upper()[:31])
+    f.small(1, 58, (msg or "PLAY: LOAD IT   BACK: CANCEL").upper()[:31])
 
 
 def menu_list_page(f, menu, T):
@@ -878,7 +903,7 @@ def menu_list_page(f, menu, T):
                      "LOAD": "LOAD PROJECT", "SETTINGS": "SETTINGS"}[label])
     biglist(f, rows, menu.choice, fit=4)
     msg = str(getattr(menu, "msg", "") or "")
-    f.small(1, 58, msg.upper()[:31])
+    f.small(1, 58, (msg or ("SHIFT + PUSH: DELETE / RENAME" if shift else "")).upper()[:31])
 
 
 def delete_page(f, menu):
@@ -889,6 +914,8 @@ def delete_page(f, menu):
         f.text(2, 16, "ARE YOU SURE?")
         f.text(2, 30, name[:21])
         f.small(2, 42, "IT IS GONE FOR GOOD")
+        f.small(1, 52, "PLAY: YES, DELETE IT")
+        f.small(1, 58, "BACK: NO, KEEP IT")
         return
     renaming = getattr(menu, "rename_pick", False)
     deleting = getattr(menu, "deleting", False)
@@ -899,7 +926,9 @@ def delete_page(f, menu):
     rows = [(s + ("  OPEN" if menu.engine and s == menu.engine.song else "")) for s in menu.songs]
     biglist(f, [r.upper() for r in rows], menu.pick, fit=4)
     msg = str(getattr(menu, "msg", "") or "")
-    f.small(1, 58, msg.upper()[:31])
+    hint = "PLAY: RENAME   BACK: CANCEL" if renaming else "PLAY: DELETE   BACK: CANCEL" if deleting else \
+        "PLAY: OPEN   BACK: CANCEL"
+    f.small(1, 58, (msg or hint).upper()[:31])
 
 
 def settings_page(f, menu):
@@ -908,7 +937,7 @@ def settings_page(f, menu):
     import menu as menu_mod
     names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO",
              "SCREEN": "EXTERNAL SCREEN", "TRIPLETS": "TRIPLETS"}
-    header(f, "SETTINGS")
+    header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
     rows = menu_mod.SETTINGS
     pitch = 9 if len(rows) <= 5 else 8                 # (six rows: a little closer together)
     fit = 5 if pitch == 9 else 6                       # more than six: the list scrolls with the picked row
@@ -1002,6 +1031,8 @@ def name_page(f, menu, prompt=None):
     msg = str(getattr(menu, "msg", "") or "")
     if msg:
         f.small(1, 44, msg.upper()[:31])
+    f.small(1, 51, "WHEEL: LETTER   < >: MOVE")
+    f.small(1, 58, "DELETE: ERASE  PLAY: OK  BACK: CANCEL")
 
 
 def text_page(f, s, msg=""):

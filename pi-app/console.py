@@ -385,9 +385,9 @@ class Transport:
         elif name == "INPUT":
             if e:
                 n = self.armed
-                self.say("TRACK %d: %s  %s" % (
+                self.say("TRACK %d: %s  %s   ·   PRESS %d AGAIN TO ZOOM IN, THEN KNOBS 1-3 TO CHANGE" % (
                     n, "STEREO" if (n - 1) in e.stereo else "MONO",
-                    e.input_text(n - 1) if e.device else "NO INPUT DEVICE"), 5)
+                    e.input_text(n - 1) if e.device else "NO INPUT DEVICE", n), 5)
         elif name in ("PAN_LEFT", "PAN_RIGHT"):
             self.pan(self.armed, -0.1 if name == "PAN_LEFT" else 0.1)
         elif name == "EXPORT":
@@ -487,7 +487,7 @@ class Transport:
             self.instp.row = e.slot
         if e.input_choice != "DRUMS":
             e.set_input("DRUMS", "INSTRUMENTS")
-            self.say("INPUT: INSTRUMENTS", 4)
+            self.say("INPUT: INSTRUMENTS  (SETTINGS > INPUT TO CHANGE BACK)", 4)
 
     def back_key(self):
         """SHIFT+MIDI, back: the drum page or sequencer -> INSTRUMENTS -> the tape."""
@@ -703,9 +703,9 @@ class Transport:
         a, b = sorted((s["start"], s["pos"]))
         e.set_region(a, b, loop_on=True if b > a else None)
         if b > a:
-            self.say("IN %s  OUT %s" % (self.position_text(a), self.position_text(b)), 3)
+            self.say("IN %s  OUT %s   (SHIFT + PUSH KNOB 9: UNDO)" % (self.position_text(a), self.position_text(b)), 3)
         else:
-            self.say("NO IN/OUT POINTS", 2)
+            self.say("NO IN/OUT POINTS (TURN ON TO MAKE THEM)", 2)
 
     def sweep_undo(self):
         """SHIFT + push knob 9: the in and out points as they were before the last sweep, and the playhead
@@ -733,7 +733,7 @@ class Transport:
         if e and self.synced and not self.playing:
             e.rec_ready = not e.rec_ready
             if e.rec_ready:
-                self.say("REC READY", 6)
+                self.say("REC READY: PRESS PLAY ON THE OP-XY", 6)
             return
         if e and self.linked and not self.playing:
             e.rec_ready = True                    # recording starts with the tape, on Link's next bar
@@ -1160,7 +1160,7 @@ class Transport:
         if name == "SELECT":
             if e.sel_anchor is None:
                 e.begin_selection()
-                self.say("SELECTING", 30)
+                self.say("SELECTING: MOVE TO TAKE MORE PIECES, THEN COPY OR CUT", 30)
             else:
                 e.end_selection()
                 self.say("SELECTION CANCELLED", 2)
@@ -1325,7 +1325,7 @@ class Transport:
         names = ",".join(str(t + 1) for t in sources)
         if self.bounce_pending != (tuple(sources), dest):
             self.bounce_pending = (tuple(sources), dest)
-            self.say("BOUNCE TRACK%s %s INTO TRACK %d?" % ("S" if len(sources) > 1 else "", names, dest + 1), 8)
+            self.say("BOUNCE TRACK%s %s INTO TRACK %d? PRESS AGAIN TO DO IT" % ("S" if len(sources) > 1 else "", names, dest + 1), 8)
             return
         self.bounce_pending = None
         beats = e.bounce(sources, dest)

@@ -112,6 +112,7 @@ class Song:
 
     def knob(self, number, delta):
         if not self.rows:
+            self.T.say("PRESS STEP BUTTON 1 TO ADD A ROW", 2)
             return
         row = self.rows[self.pick]
         way = knobgate.gate(("song", number), delta, False)   # a few clicks a choice

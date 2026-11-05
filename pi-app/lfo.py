@@ -4,7 +4,7 @@ came from, after that they're separate).
 
   DEST   which setting it moves (a number setting of the instrument; a list or mode isn't moved)
   WAVE   SINE, TRIANGLE, SAW UP, SAW DOWN, SQUARE, RANDOM (a new random value each cycle)
-  SPEED  how long one cycle is: 8 bars down to 1/8 of a beat, in time with the tempo
+  SPEED  how long one cycle is: 8 bars down to 1/8 of a beat, in time with the tempo; RND: a new one each cycle
   DEPTH  how far it swings each way, -100..+100 % of the setting's range
   PHASE  where in the cycle it starts
   MODE   FREE (runs on with the song) or TRIG (starts again at the pattern's first step)
@@ -20,8 +20,26 @@ WAVES = ["SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "RANDOM"]
 SPEEDS = [("8BAR", 32.0), ("4BAR", 16.0), ("2BAR", 8.0), ("1BAR", 4.0), ("1/2", 2.0), ("1/4", 1.0),
           ("1/8", 0.5), ("1/16", 0.25), ("1/32", 0.125),
           # triplets (added later: songs store the place, so new ones go at the end; SPEED_ORDER is the knob's order)
-          ("1/2T", 4 / 3), ("1/4T", 2 / 3), ("1/8T", 1 / 3), ("1/16T", 1 / 6)]
-SPEED_ORDER = sorted(range(len(SPEEDS)), key=lambda i: -SPEEDS[i][1])    # slow to fast: 1/4, 1/4T, 1/8...
+          ("1/2T", 4 / 3), ("1/4T", 2 / 3), ("1/8T", 1 / 3), ("1/16T", 1 / 6),
+          ("RND", None)]                       # every cycle a new speed, 1/16 to 1 bar, in time (rnd_phase)
+RND = len(SPEEDS) - 1
+SPEED_ORDER = sorted(range(RND), key=lambda i: -SPEEDS[i][1]) + [RND]   # slow to fast: 1/4, 1/4T, 1/8... then RND
+RND_LENGTHS = [4.0, 2.0, 1.0, 0.5, 0.25]       # the beats a RND cycle can last
+
+
+def rnd_phase(beats, seed):
+    """SPEED RND: each bar is cut into cycles of random lengths (1 bar down to 1/16), each starting on a multiple
+    of its own length, so it stays in time. The same bar always cuts the same way (no state to lose)."""
+    bar = int(math.floor(beats / 4.0))
+    pos, n, at = 0.0, 0, beats - bar * 4.0
+    while True:
+        r = random.Random(hash((seed, bar, n)) & 0xFFFFFFFF)
+        fits = [ln for ln in RND_LENGTHS if pos % ln == 0 and pos + ln <= 4.0]
+        ln = r.choice(fits)
+        if at < pos + ln or pos + ln >= 4.0:
+            return bar * 64 + n + (at - pos) / ln          # (the whole part: a new one each cycle, for WAVE RANDOM)
+        pos += ln
+        n += 1
 
 
 def next_speed(speed, way):
@@ -167,7 +185,10 @@ class Runner:
                 else:                                       # not playing: a clock of its own (TRIG has no pattern start to wait for)
                     frame = time.monotonic() * getattr(e, "rate", 44100)
                 beats = frame / fpb
-                ph = beats / SPEEDS[l["speed"]][1] + l["phase"] / 100.0
+                if l["speed"] == RND:
+                    ph = rnd_phase(beats, (k, j)) + l["phase"] / 100.0
+                else:
+                    ph = beats / SPEEDS[l["speed"]][1] + l["phase"] / 100.0
                 lock = (l.get("steps") or {}).get(int(math.floor(beats * 4)) % STEPS)
                 shape, depth = l["wave"], l["depth"]
                 if lock:

@@ -251,7 +251,8 @@ story += [
          "its two insert effects (shown I1 / I2 and the setting's name, e.g. I1 CUTOFF). Choose the effect first."),
         ("Knob 2  WAVE", "Sine, triangle, saw up / down, square, random."),
         ("Knob 3  SPEED", "8 bars down to 1/32 of a beat, in time with the tempo, with triplet speeds (1/2T, "
-         "1/4T, 1/8T, 1/16T) after their straight ones."),
+         "1/4T, 1/8T, 1/16T) after their straight ones. Last: <b>RND</b>, a new speed every cycle (1 bar down "
+         "to 1/16), still in time."),
         ("Knob 4  DEPTH", "How far it swings, -100 to +100 %."),
         ("Knob 5  PHASE", "Where in the cycle it starts."),
         ("Knob 6  MODE", "FREE (runs with the song) or TRIG (restarts at the pattern's first step)."),

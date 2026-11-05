@@ -331,7 +331,7 @@ class Menu:
         if what == "UPDATE":
             return self.update_text()
         if what == "SCREEN":
-            return "  PUSH: SHOW ITS QR CODE"
+            return ""
         if what == "WIFI":
             ssid = wifi.current()
             return "%s  \u00b7  PLAY FOR NETWORKS" % (ssid if ssid else "NOT CONNECTED")

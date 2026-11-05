@@ -82,14 +82,22 @@ class SampleBrowser:
         self.which, self.stage = which, "files"
         self.param = sampler.sample_param(self.voice, which)
         self.orig = self.drums.get_param(self.param)
+        self.blend = sampler.BLEND + self.voice          # while browsing, hear only the sample being chosen
+        self.blend_orig = self.drums.get_param(self.blend)
+        self.drums.set_param(self.blend, 127 if which else 0)
         self.folder = self.root                        # always from the top of the samples
         self._list()
         self.pick = 0
+
+    def _unsolo(self):
+        if self.stage == "files" and getattr(self, "blend", None) is not None:
+            self.drums.set_param(self.blend, self.blend_orig)
 
     def close(self, keep):
         self._cancel()
         if not keep and self.stage == "files":
             self.drums.set_param(self.param, self.orig)
+        self._unsolo()
         self.active = False
 
     # ------------------------------------------------------------ controls
@@ -118,8 +126,11 @@ class SampleBrowser:
         else:
             self._cancel()
             self.drums.set_param(self.param, val)
+            self._unsolo()
             self.T.engine.hit(self.voice, 110)
             self.active = False
+            if self.which and self.blend_orig == 0:
+                self.T.say("SAMPLE 2 IN. BLEND (KNOB 8) IS ALL ON SAMPLE 1: TURN IT TO HEAR IT", 4)
 
     def back(self):
         if self.stage == "which":
@@ -129,6 +140,7 @@ class SampleBrowser:
         else:                                          # the top of the samples: back to SAMPLE 1 / 2
             self._cancel()
             self.drums.set_param(self.param, self.orig)
+            self._unsolo()
             self.stage = "which"
             self._which_list()
             self.pick = self.which

@@ -19,6 +19,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 
 PORT = int(os.environ.get("CONSOLE_SCREEN_PORT", "8080"))
+# this start's colour family (picked at random when Console starts): the external screen's shades, and HELLO on the pads
+FAMILY = __import__("random").choice(["ORANGE", "GREEN", "YELLOW", "TEAL", "PURPLE"])
+PAD_COLOUR = {"ORANGE": 3, "GREEN": 11, "YELLOW": 8, "TEAL": 15, "PURPLE": 22}      # (the Move's colour numbers)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 _T = None                 # console.Transport
@@ -701,7 +704,8 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         try:
             if path in ("/", "/index.html"):
-                self._send(open(os.path.join(HERE, "screenview.html"), "rb").read(), "text/html; charset=utf-8")
+                page = open(os.path.join(HERE, "screenview.html"), "rb").read().replace(b"%%FAMILY%%", FAMILY.encode())
+                self._send(page, "text/html; charset=utf-8")
             elif path == "/manifest.json":
                 self._send(json.dumps({"name": "Console", "short_name": "Console", "display": "fullscreen",
                                        "orientation": "landscape", "start_url": "/", "background_color": "#0b0c0e",

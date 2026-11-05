@@ -46,7 +46,7 @@ function family(name) {
   const [h, sat] = FAMILIES[name], L = [0.62, 0.48, 0.72, 0.55, 0.67, 0.44, 0.59, 0.77], SS = [1, 1, 0.85, 1, 0.9, 0.95, 1, 0.8];
   return L.map((l, i) => hsl(((h + (i - 3.5) * 2.2) % 360 + 360) % 360, sat * SS[i], l));
 }
-const FAMILY = Object.keys(FAMILIES)[Math.floor(Math.random() * 5)];
+const FAMILY = "%%FAMILY%%" in FAMILIES ? "%%FAMILY%%" : Object.keys(FAMILIES)[Math.floor(Math.random() * 5)];   // (the Move's, this start)
 const COLORS = family(FAMILY), ACC = COLORS[0];
 let SEQ = null, SEQ_ID = "", seqWant = "";
 let S = null, got = 0, waves = {}, want = {}, fails = 0, dpr = 1, W = 0, H = 0, screenImg = null, screenKey = "";

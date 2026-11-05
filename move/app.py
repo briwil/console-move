@@ -291,6 +291,41 @@ def pattern_seq(T):
 
 # ---------------------------------------------------------------- lights
 
+# HELLO on the pads at start-up: the letters stand across the 8 columns (a letter's top at the left) and slide
+# down the 4 rows, one colour picked at random each start
+_ALL = set(range(8))
+HELLO_ROWS = ([_ALL, {4}, {4}, {4}, _ALL, set(),                    # H
+               _ALL, {0, 4, 7}, {0, 4, 7}, set(),                    # E
+               _ALL, {7}, {7}, set(),                                # L
+               _ALL, {7}, {7}, set(),                                # L
+               set(range(1, 7)), {0, 7}, {0, 7}, {0, 7}, set(range(1, 7))])   # O
+HELLO_RATE = 8.0                                                     # rows a second
+HELLO_COLOURS = [3, 11, 8, 15, 22]                                   # (orange, green, yellow, teal, purple)
+HELLO = {"start": None, "colour": None}
+
+
+def hello_frame(now):
+    """The 32 pad lights of the HELLO animation now, or None once it has gone by."""
+    if HELLO["start"] is None:
+        import random
+        try:                                                         # the external screen's colour family, this start
+            import screenview
+            colour = screenview.PAD_COLOUR[screenview.FAMILY]
+        except Exception:                                            # noqa: BLE001
+            colour = random.choice(HELLO_COLOURS)
+        HELLO["start"], HELLO["colour"] = now, colour
+    k = int((now - HELLO["start"]) * HELLO_RATE)
+    if k - 3 >= len(HELLO_ROWS):
+        return None
+    out = [0] * 32
+    for p in range(32):
+        r, c = divmod(p, 8)                                          # r: 0 = the bottom row
+        i = k - 3 + r                                                # the top row shows the newest
+        if 0 <= i < len(HELLO_ROWS) and c in HELLO_ROWS[i]:
+            out[p] = HELLO["colour"]
+    return out
+
+
 class Lights:
     """Sends a light's state only when it changes."""
 
@@ -380,6 +415,12 @@ class Lights:
                     else:                                      # the chromatic pads: another set (pastels), roots white
                         k = r * 4 + c - 4
                         out[p] = WHITE if k % 12 == 0 else NOTE_COLOURS[k]
+        if not HELLO.get("done"):
+            h = hello_frame(time.monotonic())                # start-up: HELLO slides down the pads first
+            if h is None:
+                HELLO["done"] = True
+            else:
+                out = h
         for p in range(32):
             self.note(68 + p, out[p])
         # the icons under the step buttons: lit only while Shift is held (as on the Move's own software), on a synth's sound page
@@ -534,7 +575,7 @@ def main():
                 try:                                         # console/stepdim: another colour for an empty step, to try
                     import sequencer as _sq
                     path = os.path.join(os.path.dirname(stress.FLAG), "stepdim")
-                    _sq.STEP_IDLE = int(open(path).read().split()[0]) if os.path.exists(path) else 118
+                    _sq.STEP_IDLE = int(open(path).read().split()[0]) if os.path.exists(path) else 119
                 except (OSError, ValueError, IndexError):
                     pass
                 try:

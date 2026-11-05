@@ -35,7 +35,7 @@ RATE_ORDER = sorted(range(len(RATES)), key=lambda i: RATES[i][1])
 # .trip follows it when its pattern next comes round (or at once while stopped).
 TRIPLETS = False
 TRIP_SPEED = 0.75
-STEP_IDLE = 118                                      # the Move: an empty step's light (dim white; 0: off). console/stepdim
+STEP_IDLE = 119                                      # the Move: an empty step's light (119: dark grey, the dimmest white). console/stepdim
                                                      # can hold another colour number to try (read while Console runs)                                    # 3 steps in the time of 4
 
 

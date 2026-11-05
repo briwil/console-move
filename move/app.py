@@ -796,6 +796,12 @@ def handle(name, T, m, e):
     elif name == "HOME" and T.fx_page in ("song1", "song2") and not (m.open or m.kits.open):
         fp.open(T.songfx(0 if T.fx_page == "song1" else 1))   # push the wheel on SONG INSERT 1 / 2: choose it
         return
+    if isinstance(name, tuple) and name[0] == "PICK_LANE" and sb.active and e and e.drums:
+        lv = getattr(e.drums, "lane_voice", ())          # another drum's pad: its sample list (the old one is put back)
+        voice = lv[name[1]] if name[1] < len(lv) else sb.voice
+        if voice != sb.voice:
+            sb.close(False)
+            sb.open(e.drums, voice)
     if sb.active:                                      # the sample browser has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
             sb.turn(name[2])

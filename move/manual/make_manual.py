@@ -182,6 +182,11 @@ story += [
         ("Left button 4 / Back", "Back to the tape."),
     ]),
 
+    p("Page names", H2),
+    p("Going to another page (left button 1's INSTRUMENT, SEQUENCER, AUTOMATION, ARP; left button 3's REVERB, "
+      "DELAY, SONG INSERT 1 and 2; the instruments list, song mode, the tape), its name slides in on a black screen "
+      "for about 3/4 of a second, on the Move and the phone. Any button, knob or pad cuts it short.", BODY),
+
     p("Instruments", H2),
     p("Left button 1 opens the INSTRUMENTS page: 8 slots, each a drum machine or a synth. Recording an "
       "instrument onto the tape uses the zoomed track's input (knob 2).", BODY),

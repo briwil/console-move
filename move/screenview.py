@@ -190,6 +190,7 @@ def state():
         "song": e.song or "", "song_mode": bool(song is not None and song.on and song.rows),
         "message": T.message if T.message and time.monotonic() < T.message_until else "",
         "popup": popup.current(T),
+        "pagefx": T.pagefx.phone() if getattr(T, "pagefx", None) is not None else None,
         "tracks": tracks,
         "screen": _screen_b64(),
     }

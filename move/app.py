@@ -77,6 +77,7 @@ import movelfo                    # noqa: E402
 import moveauto                   # noqa: E402
 import samplebrowse              # noqa: E402
 import fxpicker                  # noqa: E402
+import pagefx                    # noqa: E402
 import knobgate                   # noqa: E402
 import moveupdater                # noqa: E402
 import updater                    # noqa: E402
@@ -528,6 +529,7 @@ def main():
     board = MoveBoard(keys, T)
     T.shift_held = lambda: board.shift
     T.mseq = moveseq.MoveSeq(T)
+    T.pagefx = pagefx.PageFX()                       # the page change card (the page's name sliding in)
     T.msyn = movesynth.MoveSynth(T)
     T.mlfo = movelfo.MoveLFO(T)
     T.auto = moveauto.Auto(T)                        # the AUTOMATION page (left button 1 after the sequencer)
@@ -586,6 +588,7 @@ def main():
                     if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and name[2]:
                         icon_k = (icon_k + (1 if name[2] > 0 else -1)) % 16
                     continue
+                T.pagefx.cancel()                         # any control cuts the page card short
                 handle(name, T, m, e)
             if m.restart and not quit_now:          # a software update was installed: start the new version
                 frame.clear()
@@ -648,6 +651,7 @@ def main():
                     T.live_rec = False                        # recording into the pattern ends at Stop, or when you leave the page
                     T.say("PATTERN RECORDING OFF", 2)
                 T._rec_was_playing = bool(e.playing)
+                T.pagefx.update(T, m)
                 pages.draw(frame, T, m)
                 if screenview is not None:
                     screenview.frame(frame)                   # (a copy for the big screen, if one is open)

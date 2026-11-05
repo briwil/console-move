@@ -67,6 +67,11 @@ def draw(f, T, menu=None):
         f.clear()
         f.text(1, 1, "SCREEN ERROR")
         f.small(1, 12, str(ex)[:31])
+    card = T.pagefx.state() if getattr(T, "pagefx", None) is not None else None
+    if card is not None:                              # a page change: its name slides in over everything
+        import pagefx
+        pagefx.draw(f, card)
+        return
     message(f, T)
 
 

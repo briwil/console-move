@@ -196,6 +196,30 @@ function draw() {
   }
   if (bottom && !popupShown) text(bottom.slice(0, 90), pad, fy + sh - 34 * u, 40 * u, "#9aa0ab", 500, "left", null, 0.04);
   drawPopup(u);
+  drawPageFx(u);
+}
+
+// ------------------------------------------------------------------ the page change card (as on the Move: the old
+// page's name slides off to the left, the new one's in from the right; any control on the Move cuts it short)
+const PF_HOLD_OLD = 0.15, PF_SLIDE = 0.2, PF_HOLD_NEW = 0.4;
+let pfId = null, pfStart = 0;
+function drawPageFx(u) {
+  const p = S.pagefx, now = performance.now();
+  if (!p) { pfId = null; return; }
+  if (p.id !== pfId) { pfId = p.id; pfStart = now - p.age * 1000; }
+  const age = (now - pfStart) / 1000;
+  if (age >= PF_HOLD_OLD + PF_SLIDE + PF_HOLD_NEW) return;
+  let t = Math.min(1, Math.max(0, (age - PF_HOLD_OLD) / PF_SLIDE));
+  t = t * t * (3 - 2 * t);
+  g.fillStyle = "#0b0c0e"; g.fillRect(0, 0, W, H);
+  const dx = t * W;
+  const name = (s, x0) => {
+    let size = 220 * u;
+    while (tw(s, size, 800, 0.06) > W * 0.86 && size > 40 * u) size -= 4 * u;
+    text(s, x0 + W / 2, H / 2, size, "#eceef1", 800, "center", null, 0.06);
+  };
+  if (dx < W) name(p.from, -dx);
+  name(p.to, W - dx);
 }
 
 // ------------------------------------------------------------------ a step setting's popup (pads, knob 1, held steps)

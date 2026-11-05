@@ -25,6 +25,7 @@ class SampleBrowser:
         self.param = 0
         self.orig = 0
         self._timer = None
+        self._off = None
         self.last_file = None      # and the file it was on
         self.last_folder = None    # where the last pick left off: the next one starts there
 
@@ -109,7 +110,10 @@ class SampleBrowser:
             self.last_file = self.entries[self.pick][2]
 
     def _unsolo(self):
-        if self.stage == "files" and hasattr(self.drums, "solo"):
+        if self._off:
+            self._off.cancel()
+            self._off = None
+        if hasattr(self.drums, "solo"):
             self.drums.solo(self.voice, None)
 
     def remove(self):
@@ -209,9 +213,27 @@ class SampleBrowser:
             self._timer.cancel()
             self._timer = None
 
+    def _hear(self, which):
+        if self.active and self.stage == "which":
+            self.drums.solo(self.voice, which)
+            self.T.engine.hit(self.voice, 110)
+            if self._off:
+                self._off.cancel()
+            self._off = threading.Timer(0.3, lambda: self.drums.solo(self.voice, None))   # (the hit has picked its sample by then)
+            self._off.daemon = True
+            self._off.start()
+
     def _preview(self):
         self._cancel()
         _l, kind, val = self.entries[self.pick]
+        if self.stage == "which":                      # rolling over a sample in the list: hear just that one
+            if kind == "which" and hasattr(self.drums, "solo"):
+                import sampler
+                if self.drums.get_param(sampler.sample_param(self.voice, val)):
+                    self._timer = threading.Timer(0.25, self._hear, (val,))
+                    self._timer.daemon = True
+                    self._timer.start()
+            return
         if kind != "file" or self.stage != "files":
             return
 

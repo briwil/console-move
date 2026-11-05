@@ -18,6 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
+import popup
+
 PORT = int(os.environ.get("CONSOLE_SCREEN_PORT", "8080"))
 # this start's colour family (picked at random when Console starts): the external screen's shades, and HELLO on the pads
 FAMILY = __import__("random").choice(["ORANGE", "GREEN", "YELLOW", "TEAL", "PURPLE"])
@@ -187,6 +189,7 @@ def state():
         "loop_on": bool(e.loop_on),
         "song": e.song or "", "song_mode": bool(song is not None and song.on and song.rows),
         "message": T.message if T.message and time.monotonic() < T.message_until else "",
+        "popup": popup.current(T),
         "tracks": tracks,
         "screen": _screen_b64(),
     }

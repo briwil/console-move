@@ -194,7 +194,37 @@ function draw() {
     g.imageSmoothingEnabled = false;
     if (screenImg) g.drawImage(screenImg, W - pad - sw - 6 * u, H - pad - mh - 6 * u, sw, mh);
   }
-  if (bottom) text(bottom.slice(0, 90), pad, fy + sh - 34 * u, 40 * u, "#9aa0ab", 500, "left", null, 0.04);
+  if (bottom && !popupShown) text(bottom.slice(0, 90), pad, fy + sh - 34 * u, 40 * u, "#9aa0ab", 500, "left", null, 0.04);
+  drawPopup(u);
+}
+
+// ------------------------------------------------------------------ a step setting's popup (pads, knob 1, held steps)
+let popupId = null, popupAt = 0, popupShown = false;
+function drawPopup(u) {
+  const p = S.popup, now = performance.now();
+  if (p && p.id !== popupId) { popupId = p.id; popupAt = now; }
+  const age = (now - popupAt) / 1000;
+  popupShown = !!(p && p.id === popupId && age < 2.2);
+  if (!popupShown) return;
+  const a = Math.min(1, Math.min(age / 0.08, (2.2 - age) / 0.3));   // a quick fade in, a slower fade out
+  const w = 760 * u, h = (p.value ? (p.hint ? 470 : 420) : (p.hint ? 340 : 300)) * u, x = (W - w) / 2, y = (H - h) / 2;
+  g.globalAlpha = a;
+  rr(x, y, w, h, 32 * u); g.fillStyle = "#15171c"; g.fill();
+  g.strokeStyle = p.value === "OFF" ? "#5c616c" : "#49d17d"; g.lineWidth = 4 * u; g.stroke();
+  let cy = y + 74 * u;
+  text(p.top, W / 2, cy, 40 * u, "#9aa0ab", 600, "center", null, 0.08);
+  cy += 96 * u;
+  let size = 76 * u;
+  while (tw(p.label, size, 700, 0.06) > w - 60 * u && size > 30 * u) size -= 2 * u;
+  text(p.label, W / 2, cy, size, "#eceef1", 700, "center", null, 0.06);
+  if (p.value) {
+    cy += 130 * u;
+    let vs = 120 * u;
+    while (tw(p.value, vs, 800, 0.04) > w - 60 * u && vs > 40 * u) vs -= 2 * u;
+    text(p.value, W / 2, cy, vs, p.value === "OFF" ? "#5c616c" : "#49d17d", 800, "center", null, 0.04);
+  }
+  if (p.hint) text(p.hint, W / 2, y + h - 36 * u, 32 * u, "#5c616c", 600, "center", null, 0.1);
+  g.globalAlpha = 1;
 }
 
 // ------------------------------------------------------------------ the headline, the same on every page

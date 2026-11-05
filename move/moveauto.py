@@ -13,6 +13,7 @@ puts any of it back. A drum machine: tap a drum's pad to see its own. < > (or th
 import time
 
 import knobgate
+import popup
 import sequencer
 
 # the step settings, in the order the step-settings pads have them (moveseq.STEP_PADS)
@@ -269,7 +270,7 @@ class Auto:
                     return
             self._tap = False
             self.change(self.held, key, clicks, 1 if delta > 0 else -1)
-            self.T.say("STEP %d  %s  %s" % (self.held + 1, self.label(key), self.value_text(self.held, key)), 2)
+            popup.show(self.T, "STEP %d" % (self.held + 1), self.label(key), self.value_text(self.held, key))
             return
         way = knobgate.gate(("auto-pick",), delta, shift)          # (a list: a few clicks each)
         if not way:
@@ -287,7 +288,7 @@ class Auto:
                 if self._tap and key is not None and time.monotonic() - self._down_at < TAP_SECONDS \
                         and i in self.steps_with(key):
                     self.remove(i, key)                   # a tap on a lit step: it goes
-                    self.T.say("STEP %d: %s TAKEN OFF" % (i + 1, self.label(key)), 2)
+                    popup.show(self.T, "STEP %d" % (i + 1), self.label(key), "OFF")
                 self.held = None
                 self._snapped = None
                 self._tap = False
@@ -303,10 +304,10 @@ class Auto:
         self._down_at = time.monotonic()
         if i in self.steps_with(key):
             self.held, self._tap = i, True
-            self.T.say("STEP %d  %s  %s" % (i + 1, self.label(key), self.value_text(i, key)), 2)
+            popup.show(self.T, "STEP %d" % (i + 1), self.label(key), self.value_text(i, key))
         elif self.add(i, key):                            # an unlit step: it gets the setting (hold it: knob 1)
             self.held, self._tap = i, False
-            self.T.say("STEP %d  %s  %s  ADDED" % (i + 1, self.label(key), self.value_text(i, key)), 2)
+            popup.show(self.T, "STEP %d" % (i + 1), self.label(key), self.value_text(i, key), "ADDED")
         else:
             self.T.say("STEP %d: NO NOTE THERE" % (i + 1), 2)
 

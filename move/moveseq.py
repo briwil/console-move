@@ -15,6 +15,7 @@ It works through the Pi app's own SeqPage (T.seqp), so the pattern, undo and sav
 import time
 
 import knobgate
+import popup
 import seqpage
 import sequencer
 
@@ -179,10 +180,10 @@ class MoveSeq:
             self._pad_one(lane, j, p, key, off)
         if off:
             self.sel = None
-            self.T.say("%s  %s OFF" % (self.which(), label) if was_set else label, 2)
+            popup.show(self.T, self.which(), label, "OFF" if was_set else "")
         else:
             self.sel = p
-            self.T.say("%s  %s  %s  (KNOB 1)" % (self.which(), label, self.item_value(key)), 2)
+            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1")
         e.seq_changed()
 
     def which(self):
@@ -229,7 +230,7 @@ class MoveSeq:
         e.seq_changed()
         if not isinstance(key, str):
             sp.audition(lane, i)
-        self.T.say("%s  %s  %s" % (self.which(), label, self.item_value(key)), 2)
+        popup.show(self.T, self.which(), label, self.item_value(key))
 
     def _knob_one(self, lane, i, key, clicks, one):
         seq, e = self.seq, self.T.engine

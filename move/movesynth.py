@@ -17,6 +17,7 @@ import threading
 import time
 
 import knobgate
+import popup
 import notes as notes_mod
 import sequencer
 from sequencer import CHANCES, MAX_RATCHET
@@ -343,14 +344,14 @@ class MoveSynth:
                         else:
                             nt.locks.pop(key, None)
             self.sel = None
-            self.T.say("%s  %s OFF" % (self.which(), label) if was else label, 2)
+            popup.show(self.T, self.which(), label, "OFF" if was else "")
             self.T.engine.seq_changed()
         else:
             if key in PATH_ONLY and not self.kind:
                 self.T.say("%s: PER NOTE ONLY (KNOB 3 ON THE LANE PAGE)" % label, 3)
                 return
             self.sel = p
-            self.T.say("%s  %s  %s  (KNOB 1)" % (self.which(), label, self.item_value(key)), 2)
+            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1")
 
     def is_choice_knob(self, n):
         if self.selected:
@@ -396,7 +397,7 @@ class MoveSynth:
                     else:
                         nt.locks[key] = self.d.stepped(key, nt.locks.get(key, self.d.get_param(key)), clicks)
         e.seq_changed()
-        self.T.say("%s  %s  %s" % (self.which(), label, self.item_value(key)), 2)
+        popup.show(self.T, self.which(), label, self.item_value(key))
 
     # ------------------------------------------------------------ the knobs
 

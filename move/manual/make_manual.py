@@ -38,6 +38,17 @@ def p(text, style=BODY):
     return Paragraph(text, style)
 
 
+def phones(*pairs, width=3.15 * inch):
+    """Pictures of the external screen (4:3) side by side, with captions."""
+    cells = []
+    for name, cap in pairs:
+        img = Image(os.path.join(HERE, name + ".png"), width=width, height=width * 0.755)
+        cells.append([img, p(cap, SMALL)])
+    t = Table([[c[0] for c in cells], [c[1] for c in cells]], colWidths=[width + 8] * len(cells), hAlign="LEFT")
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    return t
+
+
 def table(rows, widths=(1.9 * inch, 4.6 * inch)):
     """Two columns: the control (bold), what it does."""
     data = [[p(a, KEY), p(b, CELL)] for a, b in rows]
@@ -85,7 +96,7 @@ story += [
     p("Console on the Move", H1),
     p("How to drive the Console app on an Ableton Move: an 8-track tape with OP-1-style editing, up to 8 "
       "instruments (drum machines and synths) and a step sequencer. This covers the controls as they are in "
-      "November 2026 (updated 3 November). Things still to come are listed at the end.", BODY),
+      "November 2026 (updated 4 November). Things still to come are listed at the end.", BODY),
 
     p("Starting and stopping", H2),
     table([
@@ -93,7 +104,13 @@ story += [
          "Console opens by itself after a few seconds. The menu item keeps the name RNBO."),
         ("Quit", "<b>Shift + Back</b>. Saves the song, quits and gives the Move back to its normal software."),
         ("If something goes wrong", "If the app ever crashes, the Move goes back to normal by itself. What it "
-         "printed is saved in /data/UserData/console/app.log."),
+         "printed is saved in /data/UserData/console/app.log, and every run keeps a log in "
+         "/data/UserData/console/crashes (running.log is the current run; a crash adds a crash-<date>.log with "
+         "the last buttons pressed and where it stopped). Send those when reporting a problem."),
+        ("Stress test", "To hunt for crashes and memory leaks, the app can run by itself for a while: "
+         "<font face='Courier'>ssh ableton@move.local \"echo 60 &gt; /data/UserData/console/stress\"</font> "
+         "(60 = minutes). It uses its own projects, so your songs aren't touched. The report is "
+         "/data/UserData/console/stress-report.txt. Shift + Back stops it early."),
         ("Update", "On the Move: Menu, SETTINGS, SOFTWARE UPDATE (push to check, push again to install; "
          "Console restarts). Or from the Mac: <font face='Courier'>ssh ableton@move.local \"python3 "
          "/data/UserData/console/move/move-update.py\"</font>."),
@@ -120,7 +137,7 @@ story += [
          "<b>Shift + Menu: export.</b>"),
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
-         "its sequencer; Shift: back).  2 Song mode.  3 FX (reverb, delay, "
+         "its sequencer, again: back to the instruments; Shift: back one step).  2 Song mode.  3 FX (reverb, delay, "
          "then off).  4 The recorder "
          "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
@@ -172,8 +189,13 @@ story += [
          "(SAMPLE, LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer."),
+        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer; again: back to this "
+         "page, and round again. (Shift + left button 1 steps back instead: sequencer or sound, then the "
+         "instruments, then the tape.)"),
     ]),
+    p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
+      "and flip a click at a time. A preset or kit setting turns one preset a click and stops at the last one.",
+      BODY),
     p("Recording the Move's input jack", H2),
     p("The zoomed track's input (knob 2) also offers <b>INPUT L</b> and <b>INPUT R</b>: whatever is plugged "
       "into the Move's audio input (a guitar, a mic). Pick one for a mono track, both for stereo. You hear it "
@@ -387,6 +409,33 @@ story += [
     ]),
     p("To copy the exports to the Mac's desktop:", BODY),
     p("scp -r \"ableton@move.local:/data/UserData/console/data/exports\" ~/Desktop/move-exports", CODE),
+
+    p("External screen (a phone or tablet)", H2),
+    p("The Move can show what it is doing on a bigger screen: the tape, the sequencer, the instrument's "
+      "sound pages and the arpeggiator, redrawn large and updating live. Nothing to install: it is a web page "
+      "the Move serves.", BODY),
+    table([
+        ("Open it", "Menu, SETTINGS, <b>EXTERNAL SCREEN</b>, push. The Move shows a QR code: scan it with the "
+         "phone's camera. Any button closes the code."),
+        ("Same network", "The phone and the Move must be on the same Wi-Fi. With the phone's own hotspot, join "
+         "the Move to the hotspot and scan the code (its address changes, so the QR code is the way in). "
+         "On a normal network the address <font face='Courier'>http://move.local:8080</font> also works."),
+        ("Browser", "Samsung Internet works. Chrome may refuse because it insists on https:// for new "
+         "addresses; open the page in another browser then."),
+        ("Tape", "Eight lanes with their waveforms, a bar and beat grid (sixteenths when zoomed right in) so you "
+         "can see where a splice lands, the loop, the playhead and the track's volume. ARM shows only on tracks "
+         "that really record (armed with Shift + a step button)."),
+        ("Instrument pages", "The sequencer (drum steps or a synth's piano roll) and the sound page with its "
+         "8 settings as vertical bars. On the instruments list and similar pages the title says INST and "
+         "the slot number instead of a track."),
+        ("Arp", "On the ARP page: a translucent panel over the sound page with every arp setting and all its "
+         "options. The picked option is white, the rest dim; GATE, GLIDE and BEND show their value, and the "
+         "16 rhythm steps are along the bottom."),
+        ("Colours", "Each session picks one colour family at random and uses its shades."),
+    ]),
+    phones(("phone-tape", "The tape on a tablet, with the bar and beat grid."),
+           ("phone-arp", "The arp panel over a sound page.")),
+    screens(("qr", "MENU, SETTINGS, EXTERNAL SCREEN: scan the code (the address shown is an example).")),
 
     p("Not on the Move yet", H2),
     p("The LFOs' parameter locks beyond depth and wave; "

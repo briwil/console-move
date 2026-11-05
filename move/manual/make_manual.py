@@ -297,7 +297,7 @@ story += [
     p("Step settings (OP-XY style)", H2),
     p("Hold Shift and tap one or more steps: they blink. Let go of Shift. <b>Knobs 1-8 are now the instrument's "
       "sound page</b> (as on the old Console): turn one and that setting is locked on the selected steps. "
-      "Left / Right or the wheel: its other sound pages. Shift + touch a knob: its lock off. A * on the screen: "
+      "It starts on the sound page you last had open. Left / Right or the wheel: its other sound pages. Shift + touch a knob: its lock off. A * on the screen: "
       "locked; a -: a setting that can't be locked.", BODY),
     p("The pads are the steps' settings too, "
       "bottom left first. Tap a pad: that setting is on and <b>knob 1</b> sets it. Tap the same pad again: "

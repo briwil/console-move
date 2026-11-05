@@ -341,6 +341,8 @@ class MoveSeq:
             elif i in self.selected:
                 self.selected.remove(i)
             else:
+                if not self.selected:                         # the knobs start on the sound page you were on
+                    self.knob_page = getattr(self.T, "drum_tab", 0)
                 self.selected.append(i)
                 self.sel = None
             return

@@ -294,7 +294,9 @@ def _extra_pages(T, out, base):
     if pos is not None:
         out["tab"] = base + lfo.COUNT + pos
         ins = T.insfx(None, pos)
-        out["voice"] = ins.name()
+        import catalog
+        fid = catalog.FX[ins.index - 1]["id"] if 0 < ins.index <= len(catalog.FX) else "none"
+        out["insert"] = {"name": ins.name(), "img": "fx." + fid}
         cards = []
         for i in range(8):
             label, shown = ins.text(i)
@@ -344,9 +346,13 @@ def arp_data(T):
 
 
 def image(mid):
-    """An instrument's picture (move/instimg/<id>.txt: 64 rows of 32 hex digits), as that text."""
+    """An instrument's picture (move/instimg/<id>.txt: 64 rows of 32 hex digits), as that text; "fx.<id>": an
+    insert effect's (move/fximg)."""
+    folder = "instimg"
+    if mid.startswith("fx."):
+        folder, mid = "fximg", mid[3:]
     try:
-        return open(os.path.join(HERE, "instimg", "%s.txt" % os.path.basename(mid))).read().encode()
+        return open(os.path.join(HERE, folder, "%s.txt" % os.path.basename(mid))).read().encode()
     except OSError:
         return b""
 

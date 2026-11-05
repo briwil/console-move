@@ -388,7 +388,18 @@ function drawSound(u, pad, y0, y1, D) {
   const pageName = D.pages[D.tab] || "";
   text("PAGE " + (D.tab + 1) + " OF " + D.pages.length + (D.octave ? "   ·   OCT " + (D.octave > 0 ? "+" : "") + D.octave : ""),
        W - pad, tY + 72 * u, 30 * u, "#5c616c", 600, "right", null, 0.22);
-  text(pageName, W - pad, tY + 128 * u, 80 * u, "#eceef1", 700, "right");
+  if (D.insert) {
+    // an INSERT page: the effect's picture, INSERT n, and the effect's name in the accent colour
+    const nm = D.insert.name, nmS = 64 * u, gapX = 30 * u;
+    text(nm, W - pad, tY + 132 * u, nmS, accent, 700, "right", null, 0.02);
+    const pnX = W - pad - tw(nm, nmS, 700, 0.02) - gapX;
+    text(pageName, pnX, tY + 128 * u, 80 * u, "#eceef1", 700, "right");
+    const ih = 104 * u, iw = ih * 2, ix = pnX - tw(pageName, 80 * u, 700) - 32 * u - iw, iy = tY + 128 * u - ih / 2 - 6 * u;
+    const fim = instImage(D.insert.img);
+    g.fillStyle = "#000000"; g.fillRect(ix, iy, iw, ih);
+    g.strokeStyle = "#eceef1"; g.lineWidth = 2 * u; g.strokeRect(ix, iy, iw, ih);
+    if (fim) { g.imageSmoothingEnabled = false; g.drawImage(fim, ix + 3 * u, iy + 3 * u, iw - 6 * u, ih - 6 * u); }
+  } else text(pageName, W - pad, tY + 128 * u, 80 * u, "#eceef1", 700, "right");
   // the tabs
   const tabY = tY + 230 * u;
   // the tabs fit the width (smaller type, then scrolled so the one you're on shows)

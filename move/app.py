@@ -175,7 +175,8 @@ class MoveBoard:
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
-            if (n - 1 in (ARP_ICON, PADS_ICON) and self.shift and T.drum_page and T.synth_shown()
+            if (n - 1 in (ARP_ICON, PADS_ICON) and self.shift and T.drum_page
+                    and (T.synth_shown() or (n - 1 == PADS_ICON and not T.seq_page))
                     and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
                 if val:
                     k.put("ARP_JUMP" if n - 1 == ARP_ICON else "PADS_JUMP")   # the icons: the arp page, the pads page
@@ -231,6 +232,8 @@ class MoveBoard:
             if vel:
                 self.keys.put(("STEP_PAD", p))
             return
+        if vel:
+            vel = pad_velocity(T, vel)                     # PADS page: touch (with a curve) or a fixed velocity
         r, c = divmod(p, 8)
         if c < 4:                                          # left 4 x 4: the drums, bottom left first
             lane = r * 4 + c
@@ -380,10 +383,12 @@ class Lights:
             self.note(68 + p, out[p])
         # the icons under the step buttons: lit only while Shift is held (as on the Move's own software), on a synth's sound page
         icons = {}
-        if board.shift and T.drum_page and not T.seq_page and T.synth_shown() and not (T.fx_page or T.inst_page or T.song_page):
-            on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
-            icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
-            icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20
+        if board.shift and T.drum_page and not T.seq_page and not (T.fx_page or T.inst_page or T.song_page):
+            if T.synth_shown():
+                on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
+                icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
+            if e and e.drums and e.slot is not None and e.slots[e.slot]:        # (a drum machine has PADS too)
+                icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20
         self.icons(icons)
 
 

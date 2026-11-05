@@ -555,7 +555,7 @@ def pads_page(f, T):
         x, y = col * 65, 13 + row * 14
         f.small(x + 1, y, "%d %s" % (i + 1, label))
         f.text(x + 1, y + 6, str(shown)[:10])
-    f.small(1, 57, "KEY, SCALE, OCTAVE, PAD FEEL")
+    f.small(1, 57, "KEY, SCALE, OCTAVE, PAD FEEL" if ml.has_arp() else "OCTAVE, PAD FEEL")
 
 
 def lfo_page(f, T):

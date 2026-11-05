@@ -270,8 +270,7 @@ def _extra_pages(T, out, base):
     ml = T.mlfo
     inserts = ml._inserts()
     extra = ["LFO %d" % (i + 1) for i in range(lfo.COUNT)] + ["INSERT %d" % (i + 1) for i in range(inserts)]
-    if ml.has_arp():
-        extra += ["ARP", "PADS"]
+    extra += ["ARP", "PADS"] if ml.has_arp() else ["PADS"]
     out["pages"] = out["pages"] + extra
     if not ml.active():
         return
@@ -280,12 +279,15 @@ def _extra_pages(T, out, base):
         out["knobs"] = []
         seq, vals = T.engine.seq, dict(ml.pads_values())
         oc, curve = getattr(T, "octave", 0), getattr(T, "pad_curve", 1)
-        out["panel"] = {"title": "PADS", "rows": [
-            {"n": 1, "label": "KEY", "options": list(notes_mod.NAMES), "at": seq.root},
-            {"n": 2, "label": "SCALE", "options": [n for n, _ in notes_mod.SCALES], "at": seq.scale},
-            {"n": 3, "label": "OCTAVE", "options": ["%+d" % o if o else "0" for o in range(-4, 5)], "at": oc + 4},
-            {"n": 4, "label": "VELOCITY", "text": vals["VELOCITY"]},
-            {"n": 5, "label": "CURVE", "options": ["SOFT", "NORMAL", "HARD"], "at": curve}]}
+        feel = [{"label": "OCTAVE", "options": ["%+d" % o if o else "0" for o in range(-4, 5)], "at": oc + 4},
+                {"label": "VELOCITY", "text": vals["VELOCITY"]},
+                {"label": "CURVE", "options": ["SOFT", "NORMAL", "HARD"], "at": curve}]
+        rows = ([{"label": "KEY", "options": list(notes_mod.NAMES), "at": seq.root},
+                 {"label": "SCALE", "options": [n for n, _ in notes_mod.SCALES], "at": seq.scale}]
+                if ml.has_arp() else []) + feel                 # (a drum machine: no key or scale)
+        for i, r in enumerate(rows):
+            r["n"] = i + 1
+        out["panel"] = {"title": "PADS", "rows": rows}
         return
     if ml.arp_on_page():                                 # (the arp's own panel goes over this)
         out["tab"] = base + extra.index("ARP") if "ARP" in extra else out["tab"]

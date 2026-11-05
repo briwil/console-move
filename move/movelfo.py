@@ -33,8 +33,9 @@ class MoveLFO:
         return lfo.COUNT + self._inserts() if self.has_arp() else None
 
     def last(self):
-        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's ARP."""
-        return lfo.COUNT + self._inserts() - 1 + (3 if self.has_arp() else 0)
+        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's
+        ARP, ARP 2 and PADS (a drum machine: just PADS)."""
+        return lfo.COUNT + self._inserts() - 1 + (3 if self.has_arp() else 1)
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
@@ -43,14 +44,14 @@ class MoveLFO:
         return None
 
     def pads_tab(self):
-        return self.arp_tab() + 2 if self.has_arp() else None
+        return self.arp_tab() + 2 if self.has_arp() else lfo.COUNT + self._inserts()
 
     def pads_on_page(self):
         """True on the PADS page (the hexagon icon): the pads' key, scale and octave."""
         return self.tab is not None and self.tab == self.pads_tab()
 
     def goto_pads(self):
-        if self.has_arp():
+        if True:                                     # (a synth's or a drum machine's)
             if self.pads_on_page():
                 self.tab = None
                 return
@@ -58,14 +59,24 @@ class MoveLFO:
             self.T.say("PADS", 2)
 
     def pads_values(self):
+        """[(label, text)]: a synth's KEY, SCALE, OCTAVE, VELOCITY, CURVE; a drum machine has no key or scale, so
+        its knobs 1-3 are OCTAVE (the chromatic pads), VELOCITY, CURVE."""
         seq, oc = self.T.engine.seq, getattr(self.T, "octave", 0)
         v = getattr(self.T, "pad_vel", 0)
+        feel = [("OCTAVE", "%+d" % oc if oc else "0"), ("VELOCITY", str(v) if v else "TOUCH"),
+                ("CURVE", ("SOFT", "NORMAL", "HARD")[getattr(self.T, "pad_curve", 1)])]
+        if not self.has_arp():
+            return feel
         return [("KEY", notes_mod.NAMES[seq.root]), ("SCALE", notes_mod.SCALES[seq.scale][0]),
                 ("OCTAVE", "%+d" % oc if oc else "0"), ("VELOCITY", str(v) if v else "TOUCH"),
                 ("CURVE", ("SOFT", "NORMAL", "HARD")[getattr(self.T, "pad_curve", 1)])]
 
     def pads_knob(self, number, delta, shift):
         T = self.T
+        if not self.has_arp():                       # a drum machine: knobs 1-3 are a synth's 3-5
+            if number > 3:
+                return
+            number += 2
         seq = T.engine.seq
         way = knobgate.gate(("pads", number), delta, shift)
         if not way:
@@ -88,7 +99,7 @@ class MoveLFO:
         else:
             return
         T.engine.seq_changed()
-        T.say("%s  %s" % self.pads_values()[number - 1], 2)
+        T.say("%s  %s" % self.pads_values()[number - (1 if self.has_arp() else 3)], 2)
 
     def arp_on_page(self):
         """True on the ARP page."""

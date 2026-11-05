@@ -358,6 +358,9 @@ story += [
       "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
       "as the synth sequencer's knobs 5 and 6. Knob 4 VELOCITY: TOUCH (the pads play and record how hard you hit them) or a fixed velocity (turn up from TOUCH: 100, then in fives). Knob 5 CURVE: SOFT (easier to play loud), NORMAL or HARD (needs a harder hit). Pattern recording now stores the velocity you played.", BODY),
+    p("A drum machine has a PADS page too (Shift + step button 2 on its sound pages, or Right past INSERT 2). "
+      "It has no key or scale: knob 1 OCTAVE (the right-hand pads, which play the picked drum a semitone a pad), "
+      "knob 2 VELOCITY and knob 3 CURVE, which work as on a synth for the drum pads too.", BODY),
     p("Arpeggiator (synths)", H2),
     p("A synth's last sound page is ARP (Right past INSERT 2; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
       "its sound pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "
@@ -428,7 +431,7 @@ story += [
         ("Instrument pages", "The sequencer (drum steps or a synth's piano roll) and the sound page with its "
          "8 settings as vertical bars. Its tabs go on past the instrument's own pages as the Move does: LFO 1, "
          "LFO 2, INSERT 1 and INSERT 2 with the same setting cards (an INSERT page also shows the effect's "
-         "picture and name), and on a synth ARP and PADS, each as a panel with all its options. On the "
+         "picture and name), then PADS (and on a synth ARP), each as a panel with all its options. On the "
          "instruments list the title says INST and the slot number instead of a track."),
         ("Arp and pads", "On the ARP or PADS page: a translucent panel over the sound page with every arp setting and all its "
          "options. The picked option is white, the rest dim; GATE, GLIDE, BEND and VELOCITY show their value, "

@@ -299,7 +299,7 @@ HELLO_ROWS = ([_ALL, {4}, {4}, {4}, _ALL, set(),                    # H
                _ALL, {7}, {7}, set(),                                # L
                _ALL, {7}, {7}, set(),                                # L
                set(range(1, 7)), {0, 7}, {0, 7}, {0, 7}, set(range(1, 7))])   # O
-HELLO_RATE = 8.0                                                     # rows a second
+HELLO_RATE = 12.0                                                    # rows a second
 HELLO_COLOURS = [3, 11, 8, 15, 22]                                   # (orange, green, yellow, teal, purple)
 HELLO = {"start": None, "colour": None}
 

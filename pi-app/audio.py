@@ -1011,6 +1011,7 @@ class Engine:
         self.save(wait=True)
         self._drop_if_empty()
         self._reset()
+        self.set_triplets(False)                      # a new project starts with triplets off
         with self.lock:
             self.song = name
             self.dirty = {-1}

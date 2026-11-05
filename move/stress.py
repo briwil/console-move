@@ -34,9 +34,9 @@ The start-up check ("startup", 8 minutes), for Console being busier for its firs
 
     ssh -i ~/.ssh/move_key ableton@move.local "echo startup > /data/UserData/console/stress"
 
-4 instruments play (no effects). Every 30 seconds: DSP load, the app's CPU and which threads use it. OB-Xd
-(slot 4): at 1:30 a second one joins in slot 5, at 3:00 the first is taken out, at 4:30 the second goes and a
-fresh one is loaded in slot 4 (its settings compared with the first's). Ends at 8:00.
+4 instruments play (no effects). Every 30 seconds: DSP load, the app's CPU and which threads use it. At 1:30
+every synth gets "all notes off" (stuck notes?); at 3:00 stop, OB-Xd reloaded while stopped, play; at 4:30
+OB-Xd reloaded while playing; at 6:00 stop and play with no reload. Ends at 8:00.
 """
 import os
 import random
@@ -381,7 +381,9 @@ class Stress:
             self.guarded("rewind", lambda: self.T.set_pos(0.0))
             self.press(85)
             self.replay_at = now + 2
-            self.say("  (the tape got to its end: back to the start, playing again)")
+            if now >= getattr(self, "replay_said", 0):           # (it can take a try or two: say it once)
+                self.say("  (the tape got to its end: back to the start, playing again)")
+                self.replay_said = now + 15
         try:
             if self.phase == "instruments":
                 self.sweep_instruments(now)
@@ -644,7 +646,7 @@ class Stress:
                 self.guarded("slot %d" % (k + 1), lambda k=k: (self._fill(k, "obxd") if k == 0 else e.set_slot(k, None)))
             self.guarded("open slot 1", lambda: e.open_slot(0))
             self.playing(True)
-            d = e.drums
+            d = self.machine("obxd") or e.drums
             idx = next((i for i, q in enumerate(getattr(d, "params", []))
                         if "voice" in ("%s %s" % (q.get("key", ""), q.get("label", ""))).lower()
                         and "var" not in ("%s %s" % (q.get("key", ""), q.get("label", ""))).lower()), None)
@@ -660,7 +662,7 @@ class Stress:
             return True
         if ob["i"] >= len(ob["settings"]):
             if ob["idx"] is not None:
-                self.guarded("voices back", lambda: e.drums.set_param(ob["idx"], ob["settings"][0]))
+                self.guarded("voices back", lambda: (self.machine("obxd") or e.drums).set_param(ob["idx"], ob["settings"][0]))
             self.release_all()
             self.say("  OB-XD: %s" % "   ".join("%s voices: pattern max %.0f%%, played hard max %.0f%% (dropouts %d)"
                                                  % r for r in ob["rows"]))
@@ -669,7 +671,7 @@ class Stress:
         v = ob["settings"][ob["i"]]
         if ob["phase"] == "set":
             if ob["idx"] is not None:
-                self.guarded("voices", lambda: e.drums.set_param(ob["idx"], v))
+                self.guarded("voices", lambda: (self.machine("obxd") or e.drums).set_param(ob["idx"], v))
             ob["phase"], ob["at"] = "wait", now + 3
             return True
         if ob["phase"] == "hard" and self.beat(now) and self.rng.random() < 0.5:
@@ -687,7 +689,7 @@ class Stress:
                 missed = max(0, int(round(expect - (core.cycles() - ob["c0"]))) - x.get("base_missed", 0))
             ob[ob["phase"]] = (max(ld) if ld else -1, missed)
         if ob["phase"] == "hard":
-            text = e.drums.value_text(ob["idx"], v) if ob["idx"] is not None else "?"
+            text = (self.machine("obxd") or e.drums).value_text(ob["idx"], v) if ob["idx"] is not None else "?"
             ob["rows"].append((text, ob["pattern"][0], ob["hard"][0], ob["hard"][1]))
             self.say("  %-4s voices   pattern: max %5.1f%%   played hard: max %5.1f%%  dropouts %d" % (
                 text, ob["pattern"][0], ob["hard"][0], ob["hard"][1]))
@@ -698,19 +700,22 @@ class Stress:
         x["loads"], ob["c0"], ob["t0"], ob["at"] = [], (core.cycles() if core else None), now, now + 8
         return True
 
+    def machine(self, mid):
+        """The running instrument mid (whichever slot is picked)."""
+        d = getattr(self.e, "drums", None)
+        return d.get(mid) if d is not None and hasattr(d, "get") else None
+
     def settings_of(self, k):
         """[(name, value as shown)] of every setting of the instrument in slot k."""
-        e = self.e
-        e.open_slot(k)
-        d = e.drums
-        out = [(str(q.get("key") or q.get("label")), str(d.value_text(i))) for i, q in enumerate(getattr(d, "params", []))]
-        e.open_slot(0)
-        return out
+        d = self.machine(self.e.slots[k])
+        if d is None:
+            return []
+        return [(str(q.get("key") or q.get("label")), str(d.value_text(i))) for i, q in enumerate(getattr(d, "params", []))]
 
     def startup(self, now):
         """Console's first minutes: 4 instruments playing, no effects. Every 30 s: DSP load, app CPU, threads.
-        OB-Xd: a second copy at 1:30, the first taken out at 3:00, a fresh one alone at 4:30 (is only the
-        first copy after a start the heavy one?)."""
+        Then: all notes off (1:30), OB-Xd reloaded while stopped (3:00) and while playing (4:30), stop + play
+        with no reload (6:00): which makes it heavy, loading while stopped or pressing Play?"""
         e = self.e
         x = getattr(self, "su", None)
         core = getattr(e, "core", None)
@@ -739,30 +744,43 @@ class Stress:
                 pass
         if self.beat(now) and self.rng.random() < 0.5:
             self.pad(self.rng.choice(PADS), self.rng.randint(60, 127), self.rng.uniform(0.05, 0.3))
-        steps = [(90, "add2"), (180, "drop1"), (270, "fresh")] if x["ob"] is not None else []
-        due = [st for st in steps if st[1] not in x.setdefault("done", []) and now - x["t0"] >= st[0]]
-        if due:
-            what, k, k2 = due[0][1], x["ob"], 4
-            x["done"].append(what)
-            if what == "add2":                               # a second OB-Xd beside the first
-                self.guarded("obxd 2", lambda: self._fill(k2, "obxd"))
-                self.say("  + a second OB-XD in slot %d (the first still in slot %d): does the load go up by a "
-                         "normal amount or by a lot?" % (k2 + 1, k + 1))
-            elif what == "drop1":                            # take out the first one only
-                self.guarded("obxd 1 out", lambda: e.set_slot(k, None))
-                self.say("  - the FIRST OB-XD taken out (slot %d); the second stays: if the load falls a lot, the "
-                         "first one was the heavy one" % (k + 1))
-            else:                                            # the second out, a fresh one back in slot 4
-                self.guarded("obxd 2 out", lambda: e.set_slot(k2, None))
-                self.guarded("obxd fresh", lambda: self._fill(k, "obxd"))
+        k = x["ob"]
+        steps = [(90, "alloff"), (180, "stop"), (183, "reload"), (186, "play"), (270, "reload"), (360, "stop"),
+                 (363, "play")] if k is not None else []
+        done = x.setdefault("done", 0)
+        if done < len(steps) and now - x["t0"] >= steps[done][0]:
+            what = steps[done][1]
+            x["done"] = done + 1
+            if what == "alloff":                             # every synth: let go of every note
+                n = 0
+                for mid in e.slots:
+                    m = self.machine(mid) if mid else None
+                    if m is not None and hasattr(m, "all_off"):
+                        self.guarded("all off %s" % mid, m.all_off)
+                        n += 1
+                self.say("  * ALL NOTES OFF on %d synths, still playing: if the load drops, notes were stuck on" % n)
+            elif what == "stop":
+                self.playing(False)
+                self.say("  * stopped")
+            elif what == "play":
+                self.playing(True)
+                self.say("  * playing again (from the start)%s" % ("" if x.get("reloaded_stopped") else
+                                                                  ": no reload; does pressing Play make it heavy?"))
+            elif what == "reload":
+                stopped = not self.e.playing
+                self.guarded("obxd out", lambda: e.set_slot(k, None))
+                self.guarded("obxd back", lambda: self._fill(k, "obxd"))
+                self.guarded("open slot 1", lambda: e.open_slot(0))
+                x["reloaded_stopped"] = stopped
                 second = self.settings_of(k)
                 a, b = dict(x["first"]), dict(second)
                 diff = [(n, a.get(n), b.get(n)) for n in list(a) + [n for n in b if n not in a] if a.get(n) != b.get(n)]
-                self.say("  = back to 4 instruments, a fresh OB-XD in slot %d (%s)" % (
-                    k + 1, ("%d settings differ: " % len(diff)) + "; ".join("%s %s -> %s" % d for d in diff[:40])
-                    if diff else "every setting the same as the first"))
-            self.guarded("open slot 1", lambda: e.open_slot(0))
-            x["th"], x["cpu0"], x["t"], x["loads"], x["next"] = _threads(), _status().get("cpu", 0), now, [], now + 30
+                self.say("  * OB-XD reloaded while %s (%s)" % (
+                    "STOPPED" if stopped else "PLAYING",
+                    ("%d settings differ: " % len(diff)) + "; ".join("%s %s -> %s" % d for d in diff[:20])
+                    if diff else "same settings"))
+            if what in ("alloff", "play") or (what == "reload" and self.e.playing):
+                x["th"], x["cpu0"], x["t"], x["loads"], x["next"] = _threads(), _status().get("cpu", 0), now, [], now + 30
             return
         if now < x["next"]:
             return

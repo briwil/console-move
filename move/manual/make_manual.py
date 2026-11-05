@@ -442,6 +442,10 @@ story += [
          "and the arp's 16 rhythm steps are along the bottom."),
         ("Reverb and delay", "Left button 3's REVERB and DELAY pages show as the same kind of panel: SIZE, TONE, "
          "LEVEL (reverb) or TIME, FEEDBACK, LEVEL (delay), and knob 4, the picked instrument's send."),
+        ("Menus and lists", "Whatever menu or list the Move has open shows as a panel too: the project menu, SETTINGS, "
+         "open / delete / rename project, naming, the instrument menu (presets, copy / paste / clear pattern), "
+         "the questions it asks, the sample browser, choosing an effect or an instrument (with its picture), "
+         "the instruments list and song mode. The picked row is lit; long lists scroll."),
         ("Colours", "Each session picks one colour family at random and uses its shades."),
     ]),
     phones(("phone-tape", "The tape on a tablet, with the bar and beat grid."),

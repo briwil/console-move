@@ -169,7 +169,8 @@ function draw() {
     bottom = drawTape(u, pad, topH, y1, P);
     if (S.message) bottom = S.message;
   }
-  if (S.fx && S.fx.rows) drawArp(u, pad, topH, y1, S.fx);   // left button 3: REVERB / DELAY over whatever is behind
+  if (S.menu) drawMenu(u, pad, topH, y1, S.menu);         // a menu or list the Move has open, over everything
+  else if (S.fx && S.fx.rows) drawArp(u, pad, topH, y1, S.fx);   // left button 3: REVERB / DELAY over whatever is behind
   // ---------------------------------------------------------------- the bottom: a line of text, the Move's own screen
   const fy = H - footH + 10 * u, sh = footH - 30 * u, sw = 440 * u, mh = 220 * u;
   rr(W - pad - sw - 12 * u, H - pad - mh - 12 * u, sw + 12 * u, mh + 12 * u, 16 * u); g.fillStyle = "#111317"; g.fill();
@@ -546,6 +547,108 @@ function drawArp(u, pad, y0, y1, A) {
     if (v === 1) g.fillRect(sx + 3 * u, sy + sz / 2, sz - 6 * u, sz / 2 - 3 * u);
     else if (v === 2) g.fillRect(sx + 3 * u, sy + 3 * u, sz - 6 * u, sz - 6 * u);
   });
+  g.restore();
+}
+
+// a menu, a list, a question or naming: the same translucent panel; the picked row white on a lit bar, the
+// others dim, values on the right; long lists scroll to keep the picked row in view
+function drawMenu(u, pad, y0, y1, A) {
+  const pw = Math.min(W - 2 * pad, 1760 * u), px = (W - pw) / 2, inner = 56 * u;
+  const rowS = 46 * u, rowH = 72 * u, fit = 9;
+  const rows = A.rows || [], img = A.img ? instImage(A.img) : null;
+  const imgW = A.img ? 440 * u : 0, imgH = imgW / 2;
+  const listR = px + pw - inner - (imgW ? imgW + 48 * u : 0);
+  let h = 200 * u;
+  if (A.name !== undefined) h += 170 * u;
+  if (A.lines) h += A.lines.length * 80 * u + 20 * u;
+  const shown = Math.min(fit, rows.length);
+  if (rows.length || A.empty) h += Math.max(rows.length ? shown * rowH : 80 * u, imgH) + 20 * u;
+  if (A.steps) h += 100 * u;
+  if (A.hint) h += 90 * u;
+  const py = y0 + Math.max(10 * u, (y1 - y0 - h) / 2);
+  g.save();
+  rr(px, py, pw, h, 56 * u); g.fillStyle = "rgba(8,9,11,0.95)"; g.fill();
+  g.strokeStyle = ACC + "aa"; g.lineWidth = 6 * u; g.stroke();
+  let title = A.title || "", ts = 88 * u;
+  while (tw(title, ts, 800, 0.02) > pw - 2 * inner - (A.right ? tw(A.right, 40 * u, 600, 0.14) + 40 * u : 0) && ts > 44 * u) ts -= 4 * u;
+  text(title, px + inner, py + 100 * u, ts, ACC, 800, "left", null, 0.02);
+  if (A.right) text(A.right, px + pw - inner, py + 100 * u, 40 * u, "#9aa0ab", 600, "right", null, 0.14);
+  let y = py + 190 * u;
+  if (A.name !== undefined) {                          // naming: the letters, the one at the cursor in a lit box
+    const cs = 96 * u, adv = tw("M", cs, 700) * 0.92;
+    const chars = Array.from(A.name), per = Math.max(8, Math.floor((pw - 2 * inner) / adv));
+    const first = Math.max(0, Math.floor(A.cursor / per) * per);
+    for (let i = 0; i <= Math.min(chars.length, first + per - 1) - first; i++) {
+      const k = first + i, cx = px + inner + i * adv;
+      if (k === A.cursor) { rr(cx - 6 * u, y + 10 * u, adv, 130 * u, 10 * u); g.fillStyle = ACC; g.fill(); }
+      if (k < chars.length) text(chars[k], cx + adv / 2 - 6 * u, y + 76 * u, cs, k === A.cursor ? "#0b0c0e" : "#ffffff", 700, "center");
+    }
+    y += 170 * u;
+  }
+  if (A.lines) {
+    A.lines.forEach((l, i) => {
+      let sz = i === 0 ? 64 * u : 40 * u;
+      while (tw(l, sz, 700) > pw - 2 * inner && sz > 26 * u) sz -= 2 * u;
+      text(l, px + inner, y + 40 * u, sz, i === 0 ? "#ffffff" : "#9aa0ab", i === 0 ? 800 : 600, "left", null, 0.02);
+      y += 80 * u;
+    });
+    y += 20 * u;
+  }
+  if (rows.length || A.empty) {
+    const top = y;
+    if (!rows.length) text(A.empty, px + inner, y + 40 * u, rowS, "#5c616c", 600, "left", null, 0.04);
+    const pick = A.pick === undefined ? 0 : A.pick;
+    const first = Math.max(0, Math.min(rows.length - shown, pick - Math.floor(shown / 2)));
+    for (let i = 0; i < shown; i++) {
+      const k = first + i, r = rows[k], on = k === pick, ry = y + i * rowH;
+      if (on) {
+        rr(px + inner - 20 * u, ry + 4 * u, listR - px - inner + 40 * u, rowH - 8 * u, 16 * u); g.fillStyle = "#1a1d23"; g.fill();
+        g.fillStyle = ACC; g.fillRect(px + inner - 20 * u, ry + 4 * u, 6 * u, rowH - 8 * u);
+      }
+      let lx = px + inner;
+      if (r.n) { text(String(r.n), lx, ry + rowH / 2, rowS, "#5c616c", 600, "left"); lx += 56 * u; }
+      const col = A.knobs ? "#9aa0ab" : on ? "#ffffff" : "#6b707a";
+      let lab = r.label, ls = rowS;
+      const room = listR - lx - (r.text ? tw(r.text, rowS, 700) + 40 * u : 0);
+      while (tw(lab, ls, on ? 800 : 600, 0.04) > room && ls > 26 * u) ls -= 2 * u;
+      text(lab, lx, ry + rowH / 2, ls, col, on || A.knobs ? 800 : 600, "left", null, 0.04);
+      if (r.text) {
+        const vcol = A.knobs ? "#ffffff" : on ? "#ffffff" : "#6b707a";
+        if (on && A.editing) {
+          const w = tw(r.text, rowS, 800) + 28 * u;
+          rr(listR - w + 14 * u, ry + 10 * u, w, rowH - 20 * u, 10 * u); g.fillStyle = ACC; g.fill();
+          text(r.text, listR, ry + rowH / 2, rowS, "#0b0c0e", 800, "right");
+        } else text(r.text, listR, ry + rowH / 2, rowS, vcol, 700, "right");
+      }
+    }
+    if (rows.length > shown) {                         // a hint of where you are in a long list
+      const sb = (shown * rowH) * shown / rows.length, sy = top + (shown * rowH - sb) * first / Math.max(1, rows.length - shown);
+      g.fillStyle = "#2a2e36"; g.fillRect(listR + 24 * u, top, 4 * u, shown * rowH);
+      g.fillStyle = "#9aa0ab"; g.fillRect(listR + 24 * u, sy, 4 * u, sb);
+    }
+    if (imgW) {
+      const ix = px + pw - inner - imgW, iy = top + 6 * u;
+      g.fillStyle = "#000000"; g.fillRect(ix, iy, imgW, imgH);
+      g.strokeStyle = "#eceef1"; g.lineWidth = 2 * u; g.strokeRect(ix, iy, imgW, imgH);
+      if (img) { g.imageSmoothingEnabled = false; g.drawImage(img, ix + 3 * u, iy + 3 * u, imgW - 6 * u, imgH - 6 * u); }
+    }
+    y += Math.max(rows.length ? shown * rowH : 80 * u, imgH) + 20 * u;
+  }
+  if (A.steps) {                                       // song mode: its rows, as the step buttons show them
+    text("ROWS", px + inner, y + 30 * u, 34 * u, "#5c616c", 600, "left", null, 0.14);
+    for (let i = 0; i < Math.min(16, A.steps); i++) {
+      const sx = px + inner + 140 * u + i * 60 * u, sz = 40 * u;
+      rr(sx, y + 10 * u, sz, sz, 8 * u);
+      g.fillStyle = i === A.step_at ? ACC : "#262a31"; g.fill();
+      if (i === A.step_playing) { g.strokeStyle = "#ffffff"; g.lineWidth = 3 * u; g.stroke(); }
+    }
+    y += 100 * u;
+  }
+  if (A.hint) {
+    let hs = 34 * u;
+    while (tw(A.hint, hs, 600, 0.06) > pw - 2 * inner && hs > 22 * u) hs -= 1 * u;
+    text(A.hint, px + inner, py + h - 56 * u, hs, "#9aa0ab", 600, "left", null, 0.06);
+  }
   g.restore();
 }
 

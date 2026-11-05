@@ -188,7 +188,7 @@ def _page(T):
     if getattr(T, "seq_page", False):
         return "seq"
     if getattr(T, "drum_page", False) and not getattr(T, "inst_page", False) \
-            and not T.sbrowse.active and (not T.mlfo.active() or T.mlfo.arp_on_page()):
+            and not T.sbrowse.active:                     # (the LFO / INSERT / ARP / PADS pages are its tabs too)
         return "sound"
     return "tape"
 
@@ -239,7 +239,8 @@ def sound_data(T):
                     except Exception:                    # noqa: BLE001
                         pass
         knobs.append(k)
-    out = {"title": title, "id": mid, "synth": synth, "slot": e.slot + 1, "pages": [n for n, _ in pages], "tab": tab,
+    page_names = [n for n, _ in pages]
+    out = {"title": title, "id": mid, "synth": synth, "slot": e.slot + 1, "pages": page_names, "tab": tab,
            "knobs": knobs, "octave": getattr(T, "octave", 0)}
     if not synth:
         names = list(getattr(d, "lane_names", None) or [])
@@ -252,7 +253,72 @@ def sound_data(T):
                        for i in range(min(16, len(names)))]
         vn = list(getattr(d, "names", None) or [])
         out["voice"] = vn[voice] if voice < len(vn) else ""
+    _extra_pages(T, out, len(page_names))
     return out
+
+
+def _card(n, label, text, frac=0.0, options=0, at=0, choice=False):
+    return {"n": n, "label": label, "text": text, "choice": choice, "options": options, "at": at,
+            "frac": round(max(0.0, min(1.0, frac)), 4), "turning": False}
+
+
+def _extra_pages(T, out, base):
+    """The pages after the instrument's own (right past the last one, as on the Move): LFO 1, LFO 2, INSERT 1,
+    INSERT 2, and a synth's ARP and PADS. On one of them the 8 cards are its settings."""
+    import lfo
+    import notes as notes_mod
+    ml = T.mlfo
+    inserts = ml._inserts()
+    extra = ["LFO %d" % (i + 1) for i in range(lfo.COUNT)] + ["INSERT %d" % (i + 1) for i in range(inserts)]
+    if ml.has_arp():
+        extra += ["ARP", "PADS"]
+    out["pages"] = out["pages"] + extra
+    if not ml.active():
+        return
+    if ml.pads_on_page():
+        out["tab"] = base + extra.index("PADS")
+        seq, vals = T.engine.seq, dict(ml.pads_values())
+        oc, v, curve = getattr(T, "octave", 0), getattr(T, "pad_vel", 0), getattr(T, "pad_curve", 1)
+        out["knobs"] = [
+            _card(1, "KEY", vals["KEY"], choice=True, options=12, at=seq.root),
+            _card(2, "SCALE", vals["SCALE"], choice=True, options=len(notes_mod.SCALES), at=seq.scale),
+            _card(3, "OCTAVE", vals["OCTAVE"], (oc + 4) / 8.0),
+            _card(4, "VELOCITY", vals["VELOCITY"], v / 127.0),
+            _card(5, "CURVE", vals["CURVE"], choice=True, options=3, at=curve)]
+        return
+    if ml.arp_on_page():                                 # (the arp's own panel goes over this)
+        out["tab"] = base + extra.index("ARP")
+        out["knobs"] = []
+        return
+    pos = ml.insert_pos()
+    if pos is not None:
+        out["tab"] = base + lfo.COUNT + pos
+        ins = T.insfx(None, pos)
+        out["voice"] = ins.name()
+        cards = []
+        for i in range(8):
+            label, shown = ins.text(i)
+            if not label:
+                continue
+            key, _l, lo, hi, _d, _s, opts = ins.params[i]
+            v = ins.values.get(key, 0)
+            if opts:
+                cards.append(_card(i + 1, label.upper(), shown, choice=True, options=len(opts), at=int(v)))
+            else:
+                cards.append(_card(i + 1, label.upper(), shown, (v - lo) / ((hi - lo) or 1)))
+        out["knobs"] = cards
+        return
+    if ml.tab is not None and ml.tab < lfo.COUNT:
+        out["tab"] = base + ml.tab
+        l = ml.lfos()[ml.tab]
+        vals = ml.values()
+        out["knobs"] = [
+            _card(1, "DEST", vals[0][1], choice=True),
+            _card(2, "WAVE", vals[1][1], choice=True, options=len(lfo.WAVES), at=l["wave"]),
+            _card(3, "SPEED", vals[2][1], choice=True, options=len(lfo.SPEEDS), at=l["speed"]),
+            _card(4, "DEPTH", vals[3][1], (l["depth"] + 100) / 200.0),
+            _card(5, "PHASE", vals[4][1], l["phase"] / 100.0),
+            _card(6, "MODE", vals[5][1], choice=True, options=len(lfo.MODES), at=l["mode"])]
 
 
 def arp_data(T):

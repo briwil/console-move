@@ -391,13 +391,26 @@ function drawSound(u, pad, y0, y1, D) {
   text(pageName, W - pad, tY + 128 * u, 80 * u, "#eceef1", 700, "right");
   // the tabs
   const tabY = tY + 230 * u;
-  let tx = pad;
+  // the tabs fit the width (smaller type, then scrolled so the one you're on shows)
+  let ts = 34 * u, tg = 52 * u;
+  const total = () => D.pages.reduce((a, n) => a + tw(n, ts, 600, 0.14) + tg, -tg);
+  while (total() > W - 2 * pad && ts > 26 * u) { ts -= 1 * u; tg = Math.max(30 * u, tg - 1.5 * u); }
+  let shift = 0;
+  if (total() > W - 2 * pad) {
+    let a = 0;
+    for (let i = 0; i < D.tab; i++) a += tw(D.pages[i], ts, 600, 0.14) + tg;
+    const w = tw(D.pages[D.tab] || "", ts, 600, 0.14);
+    shift = Math.max(0, Math.min(total() - (W - 2 * pad), a + w / 2 - (W - 2 * pad) / 2));
+  }
+  g.save(); g.beginPath(); g.rect(pad - 4 * u, tabY - 40 * u, W - 2 * pad + 8 * u, 90 * u); g.clip();
+  let tx = pad - shift;
   D.pages.forEach((name, i) => {
-    const w = tw(name, 34 * u, 600, 0.14);
-    text(name, tx, tabY, 34 * u, i === D.tab ? "#eceef1" : "#5c616c", 600, "left", null, 0.14);
+    const w = tw(name, ts, 600, 0.14);
+    text(name, tx, tabY, ts, i === D.tab ? "#eceef1" : "#5c616c", 600, "left", null, 0.14);
     if (i === D.tab) { g.fillStyle = accent; g.fillRect(tx, tabY + 34 * u, w, 6 * u); }
-    tx += w + 52 * u;
+    tx += w + tg;
   });
+  g.restore();
   g.fillStyle = "#1e2127"; g.fillRect(0, tabY + 40 * u, W, 2 * u);
   // the 8 settings, as the knobs: 1-4 on top, 5-8 under them
   const gy0 = tabY + 84 * u, gy1 = y1 - 140 * u, gap = 28 * u;

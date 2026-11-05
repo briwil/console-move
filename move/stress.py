@@ -29,6 +29,13 @@ The song inserts' load test ("songfx", about 15 minutes):
 4 instruments, then 8, play busy patterns; each insert effect in turn is SONG INSERT 1 (so every instrument runs
 a copy of it) while the sound core's DSP load is measured. The report ranks them and marks the ones that
 overload (the sound would break up), so they can be kept off the SONG INSERT list.
+
+The start-up check ("startup", 8 minutes), for Console being busier for its first minutes:
+
+    ssh -i ~/.ssh/move_key ableton@move.local "echo startup > /data/UserData/console/stress"
+
+4 instruments play (no effects). Every 30 seconds: DSP load, the app's CPU and which threads use it. At 2:00
+OB-Xd is loaded again and its settings compared with the first load's.
 """
 import os
 import random
@@ -46,6 +53,7 @@ BACKUP = os.path.join(HOME, "insert-fx.json.stress-backup")
 RANDOM_ONLY = False             # "60 random" in the file: straight to part 3
 INSERTS_FIRST = False           # "60 inserts": straight to part 2 (no instruments tried first)
 SONGFX = False                  # "songfx": only the song inserts' load test
+STARTUP = False                 # "startup": only the start-up check
 SONGFX_SET = ["lxr", "606", "braids", "obxd", "808", "plaits", "dexed", "wurl"]   # what plays (the first 4, then 8)
 
 # the Move's controls the test presses (see app.py). Not the volume knob, and never Shift + Back (that quits).
@@ -64,10 +72,14 @@ def prepare():
     if os.path.exists(FLAG):
         global RANDOM_ONLY, INSERTS_FIRST
         try:
-            global SONGFX
+            global SONGFX, STARTUP
             words = open(FLAG).read().split()
             low = [w.lower() for w in words]
             SONGFX = "songfx" in low
+            STARTUP = "startup" in low
+            if STARTUP:
+                words = [w for w in words if w.lower() != "startup"] or ["10"]      # (a limit: it ends itself at 8)
+                low = [w.lower() for w in words]
             if SONGFX:
                 words = [w for w in words if w.lower() != "songfx"] or ["25"]      # (a time limit only: it ends itself, in about 15)
                 low = [w.lower() for w in words]
@@ -178,7 +190,7 @@ class Stress:
         self.mem = []                         # [(seconds, rss kb)]
         self.loads = []                       # [(what, rss before, rss after)]
         self.finished = False
-        self.phase = "songfx" if SONGFX else "random" if RANDOM_ONLY else "inserts" if INSERTS_FIRST else "instruments"
+        self.phase = "startup" if STARTUP else "songfx" if SONGFX else "random" if RANDOM_ONLY else "inserts" if INSERTS_FIRST else "instruments"
         self.sfx = None                       # the song inserts' load test (see sweep_songfx)
         if RANDOM_ONLY:
             self.random_from = self.start
@@ -212,7 +224,7 @@ class Stress:
         except OSError:
             self.rep = None
         self.say("CONSOLE STRESS TEST  started %s, %s%d minutes (seed %d)" %
-                 (time.strftime("%Y-%m-%d %H:%M:%S"), "up to " if SONGFX else "", minutes, seed))
+                 (time.strftime("%Y-%m-%d %H:%M:%S"), "up to " if (SONGFX or STARTUP) else "", minutes, seed))
         self.say("%d instruments, %d insert effects to try" % (len(self.inst_list), self.fx_count - 1))
         self.say("")
         m.update_action = lambda: None         # (no software updates in the middle of the test)
@@ -368,6 +380,8 @@ class Stress:
                 self.sweep_inserts(now)
             elif self.phase == "songfx":
                 self.sweep_songfx(now)
+            elif self.phase == "startup":
+                self.startup(now)
             else:
                 self.monkey(now)
         except Exception:                                    # noqa: BLE001
@@ -619,7 +633,9 @@ class Stress:
             self.guarded("open slot 1", lambda: e.open_slot(0))
             self.playing(True)
             d = e.drums
-            idx = next((i for i, q in enumerate(getattr(d, "params", [])) if q.get("key") == "voice_count"), None)
+            idx = next((i for i, q in enumerate(getattr(d, "params", []))
+                        if "voice" in ("%s %s" % (q.get("key", ""), q.get("label", ""))).lower()
+                        and "var" not in ("%s %s" % (q.get("key", ""), q.get("label", ""))).lower()), None)
             settings = [None]                                # None: as it loads
             if idx is not None:
                 start = d.get_param(idx)
@@ -669,6 +685,75 @@ class Stress:
         ob["phase"] = "pattern" if ob["phase"] == "wait" else "hard"
         x["loads"], ob["c0"], ob["t0"], ob["at"] = [], (core.cycles() if core else None), now, now + 8
         return True
+
+    def settings_of(self, k):
+        """[(name, value as shown)] of every setting of the instrument in slot k."""
+        e = self.e
+        e.open_slot(k)
+        d = e.drums
+        out = [(str(q.get("key") or q.get("label")), str(d.value_text(i))) for i, q in enumerate(getattr(d, "params", []))]
+        e.open_slot(0)
+        return out
+
+    def startup(self, now):
+        """Console's first minutes: 4 instruments playing, no effects. Every 30 s: DSP load, app CPU, threads.
+        At 2:00 OB-Xd is loaded again and its settings compared with the first load's."""
+        e = self.e
+        x = getattr(self, "su", None)
+        core = getattr(e, "core", None)
+        if x is None:
+            want = [m for m in ("lxr", "606", "braids", "obxd") if m in self.inst_list]
+            self.playing(False)
+            for k in range(8):
+                self.guarded("slot %d" % (k + 1), lambda k=k: (self._fill(k, want[k]) if k < len(want) else e.set_slot(k, None)))
+            self.guarded("open slot 1", lambda: e.open_slot(0))
+            self.playing(True)
+            ob = want.index("obxd") if "obxd" in want else None
+            first = self.settings_of(ob) if ob is not None else []
+            self.su = x = {"t0": now, "next": now + 30, "th": _threads(), "cpu0": _status().get("cpu", 0), "t": now,
+                           "loads": [], "ob": ob, "first": first, "reloaded": ob is None}
+            self.say("START-UP CHECK  %s  (no effects; pads on slot 1)" % [s or "-" for s in e.slots])
+            if ob is not None:
+                vo = [(k, v) for k, v in first if "voice" in k.lower() or "unison" in k.lower() or "poly" in k.lower()]
+                self.say("  OB-XD at first load: %d settings; %s" % (len(first), ", ".join("%s %s" % kv for kv in vo) or "-"))
+            return
+        if core is not None:
+            try:
+                v = float(core.load())
+                if v >= 0:
+                    x["loads"].append(v)
+            except Exception:                                # noqa: BLE001
+                pass
+        if self.beat(now) and self.rng.random() < 0.5:
+            self.pad(self.rng.choice(PADS), self.rng.randint(60, 127), self.rng.uniform(0.05, 0.3))
+        if not x["reloaded"] and now - x["t0"] >= 120:
+            k = x["ob"]
+            self.guarded("obxd out", lambda: e.set_slot(k, None))
+            self.guarded("obxd back", lambda: self._fill(k, "obxd"))
+            self.guarded("open slot 1", lambda: e.open_slot(0))
+            second = self.settings_of(k)
+            a, b = dict(x["first"]), dict(second)
+            diff = [(n, a.get(n), b.get(n)) for n in list(a) + [n for n in b if n not in a] if a.get(n) != b.get(n)]
+            x["reloaded"] = True
+            if diff:
+                self.say("  OB-XD LOADED AGAIN: %d settings differ from the first load: %s" % (
+                    len(diff), "; ".join("%s %s -> %s" % d for d in diff[:40])))
+            else:
+                self.say("  OB-XD LOADED AGAIN: every setting the same as the first load")
+            return
+        if now < x["next"]:
+            return
+        th, dt = _threads(), max(0.001, now - x["t"])
+        tick = float(os.sysconf("SC_CLK_TCK")) if hasattr(os, "sysconf") else 100.0
+        use = sorted(((100.0 * (v[1] - x["th"][k][1]) / tick / dt, v[0]) for k, v in th.items() if k in x["th"]), reverse=True)
+        cpu = 100.0 * (_status().get("cpu", 0) - x["cpu0"]) / dt
+        ld = x["loads"]
+        self.say("  %4.1f min  dsp avg %5.1f%%  max %5.1f%%  app cpu %4.0f%%   %s" % (
+            (now - x["t0"]) / 60.0, sum(ld) / len(ld) if ld else -1, max(ld) if ld else -1, cpu,
+            "  ".join("%s %d%%" % (n, c) for c, n in use[:6] if c >= 1)))
+        x.update(th=th, cpu0=_status().get("cpu", 0), t=now, loads=[], next=now + 30)
+        if now - x["t0"] >= 480:
+            self.finish("finished")
 
     def probe(self, now, n):
         """Console was busy with no effect on: which threads use the CPU, then each instrument taken out in turn

@@ -521,7 +521,8 @@ def main():
         screenview = None
     st = stress.Stress(STRESS_MINUTES, T, m, e, board) if STRESS_MINUTES else None
     if st:
-        T.say(("SONG INSERT TEST: ABOUT 15 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.SONGFX else
+        T.say(("START-UP CHECK: 8 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.STARTUP else
+               "SONG INSERT TEST: ABOUT 15 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.SONGFX else
                "STRESS TEST: %g MINUTES. SHIFT + BACK STOPS IT" % STRESS_MINUTES), 5)
     elif crashed:
         T.say("CONSOLE CRASHED LAST TIME. SAVED IN CONSOLE/CRASHES: %s" % crashed.upper(), 6)

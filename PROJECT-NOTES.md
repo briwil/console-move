@@ -14,7 +14,8 @@ is set up, and what's still open. What each control does is in
 - Brian is a beginner at coding. Explain things plainly, give terminal commands **one at
   a time**, and don't assume he owns a tool (soldering gear, meters and so on). Ask him.
 - Check with him before building things he didn't ask for.
-- The project is just for him, so licences don't matter. Still keep the name "Console":
+- Planned open-source release under GPL-3.0 (LICENSE, THIRD-PARTY-NOTICES.md). Bundled
+  modules with no stated licence must be cleared or removed first. Keep the name "Console":
   no mention of the Thingstone Track8, which it's modelled on.
 - Changes are pushed straight to `main` on `briwil/console` (a private repo). The Pi
   updates itself from GitHub: **SETTINGS → SOFTWARE UPDATE**, PLAY to check, PLAY again

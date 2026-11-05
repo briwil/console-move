@@ -17,3 +17,9 @@ The libraries (synths, sound core, Link...) are compiled in the cloud by GitHub 
 (`.github/workflows/move-libs.yml`) and downloaded by the updater.
 
 *Originally this was a Raspberry Pi recorder; its history (including the KiCad control board) is in the git log.*
+
+## Licence and third-party work
+
+Console is free software under the GNU General Public License v3.0 ([LICENSE](LICENSE)). It bundles drum engines, effects and Schwung modules made by other people, each under its own licence; they are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Those modules belong to their authors. If you made one and want it credited differently, relicensed or removed, please open an issue on this repository and it will be dealt with promptly.
+
+"Erica Synths", "LXR" and "LXR-02" are trademarks of Erica Synths; "Ableton" and "Move" are trademarks of Ableton AG. Console is not affiliated with or endorsed by either company.

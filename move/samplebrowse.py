@@ -1,7 +1,7 @@
 """The SAMPLE BROWSER: choosing a sampler drum's sample by folders instead of one long list.
 
 Push the big wheel on a sampler drum's page to open it. It first asks which of the drum's samples: SAMPLE 1 and
-SAMPLE 2 (BLEND mixes them), then RANDOM (push: on / off). With RANDOM on, SAMPLES 3-5 too, and each hit plays
+SAMPLE 2 (BLEND mixes them), then RANDOM (push: on / off). With RANDOM on, SAMPLES 3-5 come in above RANDOM, and each hit plays
 one of them at random (BLEND off). Delete + push the wheel on a sample: take it out. Then: the wheel turns through the list, push the wheel to open a folder / choose
 a sample, "< UP" goes up, Back goes up a folder (from the top: back to SAMPLE 1 / 2, and Back again leaves).
 The highlighted sample is played as you land on it; leaving with Back puts the old sample back."""
@@ -69,9 +69,10 @@ class SampleBrowser:
         def row(w):
             name = d.sample_name(self.voice, w) if hasattr(d, "sample_name") else ""
             return ("SAMPLE %d  %s" % (w + 1, name if name != "EMPTY" else "-"), "which", w)
-        self.entries = [row(0), row(1), ("RANDOM  %s" % ("ON" if rnd else "OFF"), "random", None)]
+        self.entries = [row(0), row(1)]
         if rnd:
             self.entries += [row(w) for w in (2, 3, 4)]
+        self.entries.append(("RANDOM  %s" % ("ON" if rnd else "OFF"), "random", None))      # (always last)
 
     # ------------------------------------------------------------ opening and leaving
     def open(self, drums, voice):
@@ -140,6 +141,7 @@ class SampleBrowser:
             on = not self._random()
             self.drums.set_param(sampler.RANDOM + self.voice, 1 if on else 0)
             self._which_list()
+            self.pick = len(self.entries) - 1                  # (stay on the RANDOM row, now last)
             self.T.say("RANDOM %s" % ("ON: EACH HIT ONE OF THE SAMPLES, BLEND OFF" if on else "OFF: BLEND IS BACK"), 3)
             return
         if kind in ("up", "dir"):

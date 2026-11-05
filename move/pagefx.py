@@ -25,7 +25,7 @@ def label(T):
             pass
         return "INSTRUMENT"
     if T.inst_page:
-        return "INSTRUMENTS"
+        return "INSTRUMENT SELECTION"
     if getattr(T, "song_page", False):
         return "SONG"
     return "TAPE"

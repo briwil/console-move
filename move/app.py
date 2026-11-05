@@ -16,6 +16,7 @@ Controls (see MOVE-NOTES.md):
 """
 import faulthandler
 import os
+import re
 import queue
 import sys
 import time
@@ -85,7 +86,7 @@ FPS_SCREEN = 20
 
 # ---------------------------------------------------------------- the Move's controls -> the app's actions
 
-PRESS = {85: ("PLAY", "HOME"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_REGION"),
+PRESS = {85: ("PLAY", "REWIND"), 86: ("RECORD", "REC_MODE"), 58: ("LOOP", "CLEAR_REGION"),
          62: ("LEFT", "LOOP_IN"), 63: ("RIGHT", "LOOP_OUT"), 56: ("UNDO", "UNDO"),
          52: ("DROP", "DROP_INSERT"), 118: ("SPLICE", "SPLICE_ALL"), 88: ("MUTE", "SOLO"),
          50: ("FILE", "EXPORT"), 3: ("HOME", "HOME_PUSH_SHIFT"),
@@ -679,6 +680,13 @@ def handle(name, T, m, e):
     ms = T.mseq
     sb = T.sbrowse
     fp = T.fxpick
+    if name == "REWIND":                               # Shift + Play: back to the start (the loop's), from any page
+        if fp.active or sb.active or m.open or m.kits.open:
+            name = "HOME"                              # (in a list it still chooses, as before)
+        else:
+            start = e.loop_a / e.frames_per_beat() if (e and e.loop_on and e.loop_region()) else 0.0
+            T.set_pos(start if T.tape.pos > start + 1e-6 else 0.0)
+            return
     if fp.active:                                      # the effect picker has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
             fp.turn(name[2])
@@ -898,8 +906,47 @@ def handle(name, T, m, e):
         m.kits.show()
     elif name == "FILE":
         m.show()
-    else:
+    elif not tape_only_elsewhere(T, name):
         T.key(name)
+
+
+TAPE_EDITS = {"ARM_ALL", "MUTE", "SOLO", "VOL_UP", "VOL_DOWN", "PAN_LEFT", "PAN_RIGHT", "FOCUS", "INPUT",
+              "BAR_LEFT", "BAR_RIGHT", "LOOP_IN", "LOOP_OUT", "CLEAR_REGION", "HOME", "HOME_PUSH_SHIFT",
+              "GRID", "ZOOM_IN", "ZOOM_OUT", "ZOOM_RESET", "SWEEP_UNDO", "SELECT", "COPY", "CUT", "DROP",
+              "DROP_INSERT", "SPLICE", "SPLICE_ALL", "UNDO", "LEFT", "RIGHT"}
+
+
+def tape_only_elsewhere(T, name):
+    """True for a tape control pressed while you're not on the tape (an instrument's pages, the instruments list,
+    song mode, FX): it does nothing there. (Brian: no touching the tape unless you're in the tape section.) Play,
+    Record, Loop and overdub still work everywhere; a page's own use of a control is kept: the instruments list's
+    step buttons (mute a slot), the sequencer's Undo and arrows, a knob push on a sound page (its default)."""
+    if not (T.song_page or T.seq_page or T.drum_page or T.inst_page or T.fx_page):
+        return False                                           # on the tape: everything goes
+    inst = T.inst_page and not T.fx_page and not T.drum_page and not T.seq_page
+    if isinstance(name, tuple):
+        if name[0] in ("HOLD", "RELEASE"):
+            return name[0] == "HOLD"                             # Copy / Delete held: a tape selection
+        if name[0] == "KNOB":
+            n = name[1]
+            handled = (T.fx_page or T.inst_page or (T.seq_page and n <= 10) or (T.drum_page and n <= 9))
+            return not handled                                   # (else: the tape's volumes, zoom, grid, playhead)
+        return False
+    if re.match(r"^(TRACK|ARM)\d+$", name):
+        return not inst                                          # select / arm a tape track
+    if re.match(r"^(MUTE|SOLO)\d+$", name):                    # Shift + touch a knob
+        return not (inst or T.full_drum_page() or (T.seq_page and name == "MUTE1"))
+    if name in ("MUTE", "SOLO") and inst:
+        return False
+    if name == "UNDO" and T.seq_page:
+        return False                                             # the sequencer's own undo
+    if name in ("LEFT", "RIGHT") and T.seq_page:
+        return False                                             # the sequencer's box / rows
+    if name in ("LOOP_IN", "LOOP_OUT") and T.seq_page and T.synth_shown():
+        return False                                             # the synth sequencer: a row at a time
+    if name in ("HOME", "HOME_PUSH_SHIFT") and inst:
+        return False                                             # the instruments list: push the wheel
+    return name in TAPE_EDITS
 
 
 if __name__ == "__main__":

@@ -117,7 +117,11 @@ story += [
     ]),
 
     p("The Move's controls at a glance", H2),
-    p("Most buttons have a second job with <b>Shift</b> held. Each page below says what changes there.", BODY),
+    p("Most buttons have a second job with <b>Shift</b> held. Each page below says what changes there. "
+      "The tape's own controls (selecting, arming and muting tracks, track volumes, Copy / Delete / Capture / "
+      "Sample, moving the playhead) only work on the tape. On the instrument pages, song mode and FX they do "
+      "nothing, unless that page uses the control for its own job. Play, Record, Loop and Shift + Play (back to "
+      "the start) work everywhere.", BODY),
     table([
         ("Play", "Play / stop.  Shift: back to the start (or the loop's start)."),
         ("Record", "Record on the selected track (and any armed tracks).  Shift: switch between replacing the "

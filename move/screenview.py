@@ -146,8 +146,15 @@ def state():
             inst = T.instp.row + 1
         elif (getattr(T, "drum_page", False) or getattr(T, "seq_page", False)) and e.slot is not None:
             inst = e.slot + 1
+    arp_panel = None
+    if page == "sound":
+        try:
+            if T.mlfo.arp_on_page():
+                arp_panel = arp_data(T)
+        except Exception as ex:                          # noqa: BLE001
+            arp_panel = {"error": str(ex)[:80]}
     out = {
-        "page": page, "inst": inst, "seq_id": seq_id, "seq": seq_live, "sound": sound,
+        "page": page, "inst": inst, "arp": arp_panel, "seq_id": seq_id, "seq": seq_live, "sound": sound,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),
@@ -181,7 +188,7 @@ def _page(T):
     if getattr(T, "seq_page", False):
         return "seq"
     if getattr(T, "drum_page", False) and not getattr(T, "inst_page", False) \
-            and not T.sbrowse.active and not T.mlfo.active():
+            and not T.sbrowse.active and (not T.mlfo.active() or T.mlfo.arp_on_page()):
         return "sound"
     return "tape"
 
@@ -246,6 +253,27 @@ def sound_data(T):
         vn = list(getattr(d, "names", None) or [])
         out["voice"] = vn[voice] if voice < len(vn) else ""
     return out
+
+
+def arp_data(T):
+    """The arpeggiator's settings, all of them, for the panel over the sound page: each row with its options and
+    which one is picked."""
+    import arp
+    import sequencer
+    c = T.mlfo.cfg()
+    onoff = lambda v: 0 if v else 1                      # (ON is listed first)
+    rows = [
+        {"n": 1, "label": "ON", "options": ["ON", "OFF"], "at": onoff(c["on"])},
+        {"n": 2, "label": "MODE", "options": list(arp.MODES), "at": c["mode"]},
+        {"n": 3, "label": "OCTAVE", "options": ["1", "2", "3", "4"], "at": c["oct"] - 1},
+        {"n": 4, "label": "RATE", "options": [r[0] for r in sequencer.RATES], "at": c["rate"]},
+        {"n": 5, "label": "GATE", "text": "%d%%" % c["gate"]},
+        {"n": 6, "label": "HOLD", "options": ["ON", "OFF"], "at": onoff(c["hold"])},
+        {"n": 7, "label": "STYLE", "options": list(arp.STYLES), "at": c["style"]},
+        {"n": 0, "label": "GLIDE", "text": "%d%%" % c["glide"] if c["glide"] else "OFF"},
+        {"n": 0, "label": "BEND", "text": "%+d%%" % c["bend"] if c["bend"] else "OFF"},
+    ]
+    return {"rows": rows, "rhythm": list(c["rhythm"]), "on": bool(c["on"])}
 
 
 def image(mid):

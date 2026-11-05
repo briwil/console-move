@@ -163,6 +163,7 @@ function draw() {
     bottom = S.message || "";
   } else if (S.page === "sound" && S.sound && S.sound.knobs) {
     drawSound(u, pad, topH + 6 * u, y1, S.sound);
+    if (S.arp && S.arp.rows) drawArp(u, pad, topH, y1, S.arp);
   } else {
     bottom = drawTape(u, pad, topH, y1, P);
     if (S.message) bottom = S.message;
@@ -468,6 +469,57 @@ function stepNow(L, spb, length, straight, fallback) {
 function drawSeq(u, pad, y0, y1) {
   const L = S.seq;
   if (SEQ.kind === "drums") drawDrums(u, pad, y0, y1, L); else drawNotes(u, pad, y0, y1, L);
+}
+
+// the arpeggiator: a translucent rounded panel over the sound page, every setting with all its options;
+// the picked option is white, the others dim (a value like GATE just shows its number)
+function drawArp(u, pad, y0, y1, A) {
+  const pw = Math.min(W - 2 * pad, 1760 * u), px = (W - pw) / 2, inner = 56 * u;
+  const rowSize = 46 * u, lineH = 66 * u, labX = px + inner + 56 * u, optX = px + inner + 340 * u, optR = px + pw - inner;
+  // lay the rows out first (the options wrap), so the panel fits what it holds
+  const lines = [];
+  let h = 190 * u;
+  for (const r of A.rows) {
+    if (!r.options) { lines.push({ r, rows: [[]], h: lineH }); h += lineH + 14 * u; continue; }
+    const rowsOut = [[]]; let cx = optX;
+    r.options.forEach((o, i) => {
+      const w = tw(o, rowSize, i === r.at ? 800 : 500, 0.02) + 34 * u;
+      if (cx + w > optR + 34 * u && rowsOut[rowsOut.length - 1].length) { rowsOut.push([]); cx = optX; }
+      rowsOut[rowsOut.length - 1].push({ o, i, x: cx, w }); cx += w;
+    });
+    lines.push({ r, rows: rowsOut, h: rowsOut.length * lineH }); h += rowsOut.length * lineH + 14 * u;
+  }
+  h += 110 * u;                                       // the rhythm strip
+  const py = y0 + Math.max(10 * u, (y1 - y0 - h) / 2);
+  g.save();
+  rr(px, py, pw, h, 56 * u); g.fillStyle = "rgba(8,9,11,0.95)"; g.fill();
+  g.strokeStyle = ACC + "aa"; g.lineWidth = 6 * u; g.stroke();
+  text("ARP", px + inner, py + 104 * u, 104 * u, ACC, 800, "left", null, 0.02);
+  text(A.on ? "ON" : "OFF", px + pw - inner, py + 104 * u, 56 * u, A.on ? "#eceef1" : "#5c616c", 700, "right", null, 0.1);
+  let y = py + 190 * u;
+  for (const ln of lines) {
+    const r = ln.r;
+    if (r.n) text(String(r.n), px + inner, y + lineH / 2, rowSize, "#5c616c", 600, "left");
+    text(r.label, labX, y + lineH / 2, rowSize, "#9aa0ab", 700, "left", null, 0.08);
+    if (!r.options) {
+      text(r.text, optX, y + lineH / 2, rowSize, "#ffffff", 800, "left", null, 0.02);
+    } else {
+      ln.rows.forEach((row, ri) => {
+        for (const it of row) text(it.o, it.x, y + lineH / 2 + ri * lineH, rowSize, it.i === r.at ? "#ffffff" : "#4a4f59", it.i === r.at ? 800 : 500, "left", null, 0.02);
+      });
+    }
+    y += ln.h + 14 * u;
+  }
+  // the rhythm: rest an outline, note half full, accent full
+  text("STEPS", labX, y + 25 * u, 34 * u, "#5c616c", 600, "left", null, 0.14);
+  A.rhythm.forEach((v, i) => {
+    const sx = optX + i * 56 * u, sy = y + 6 * u, sz = 38 * u;
+    g.strokeStyle = "#4a4f59"; g.lineWidth = 3 * u; g.strokeRect(sx, sy, sz, sz);
+    g.fillStyle = "#ffffff";
+    if (v === 1) g.fillRect(sx + 3 * u, sy + sz / 2, sz - 6 * u, sz / 2 - 3 * u);
+    else if (v === 2) g.fillRect(sx + 3 * u, sy + 3 * u, sz - 6 * u, sz - 6 * u);
+  });
+  g.restore();
 }
 
 function seqTitle(u, pad, y0, title, sub, L, small) {

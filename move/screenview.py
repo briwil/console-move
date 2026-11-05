@@ -275,16 +275,17 @@ def _extra_pages(T, out, base):
     out["pages"] = out["pages"] + extra
     if not ml.active():
         return
-    if ml.pads_on_page() and "PADS" in extra:
+    if ml.pads_on_page() and "PADS" in extra:          # (a panel goes over this, like the arp's)
         out["tab"] = base + extra.index("PADS")
+        out["knobs"] = []
         seq, vals = T.engine.seq, dict(ml.pads_values())
-        oc, v, curve = getattr(T, "octave", 0), getattr(T, "pad_vel", 0), getattr(T, "pad_curve", 1)
-        out["knobs"] = [
-            _card(1, "KEY", vals["KEY"], choice=True, options=12, at=seq.root),
-            _card(2, "SCALE", vals["SCALE"], choice=True, options=len(notes_mod.SCALES), at=seq.scale),
-            _card(3, "OCTAVE", vals["OCTAVE"], (oc + 4) / 8.0),
-            _card(4, "VELOCITY", vals["VELOCITY"], v / 127.0),
-            _card(5, "CURVE", vals["CURVE"], choice=True, options=3, at=curve)]
+        oc, curve = getattr(T, "octave", 0), getattr(T, "pad_curve", 1)
+        out["panel"] = {"title": "PADS", "rows": [
+            {"n": 1, "label": "KEY", "options": list(notes_mod.NAMES), "at": seq.root},
+            {"n": 2, "label": "SCALE", "options": [n for n, _ in notes_mod.SCALES], "at": seq.scale},
+            {"n": 3, "label": "OCTAVE", "options": ["%+d" % o if o else "0" for o in range(-4, 5)], "at": oc + 4},
+            {"n": 4, "label": "VELOCITY", "text": vals["VELOCITY"]},
+            {"n": 5, "label": "CURVE", "options": ["SOFT", "NORMAL", "HARD"], "at": curve}]}
         return
     if ml.arp_on_page():                                 # (the arp's own panel goes over this)
         out["tab"] = base + extra.index("ARP") if "ARP" in extra else out["tab"]
@@ -342,7 +343,7 @@ def arp_data(T):
         {"n": 0, "label": "GLIDE", "text": "%d%%" % c["glide"] if c["glide"] else "OFF"},
         {"n": 0, "label": "BEND", "text": "%+d%%" % c["bend"] if c["bend"] else "OFF"},
     ]
-    return {"rows": rows, "rhythm": list(c["rhythm"]), "on": bool(c["on"])}
+    return {"title": "ARP", "rows": rows, "rhythm": list(c["rhythm"]), "on": bool(c["on"])}
 
 
 def image(mid):

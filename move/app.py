@@ -531,6 +531,7 @@ def main():
     T.auto = moveauto.Auto(T)                        # the AUTOMATION page (left button 1 after the sequencer)
     T.auto_page = False
     T.has_auto_page = True
+    T.list_is_top = True                             # left button 1 rounds an instrument's pages; Back: the list
     T.knob_recorded = lambda param: moveauto.record(T, param)   # recording into the pattern: knob moves too
     T.sbrowse = samplebrowse.SampleBrowser(T)
     T.fxpick = fxpicker.FxPicker(T)

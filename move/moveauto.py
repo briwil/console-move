@@ -5,8 +5,9 @@ sound page's knobs puts its value on the step playing, as a step lock (a drum: o
 on the notes that start there). The lock replaces one already there; the other steps keep theirs.
 
 The page: knob 1 goes through what has locks in this pattern (the step settings, VELOCITY, CHANCE, MULTIPLY...,
-then the sound's), the step buttons light where it is set. Hold a lit step: its value, and knob 1 changes it
-while you hold it. Delete + step: that step's one goes. Shift + Delete, twice: it goes from every step. Undo
+then the sound's), the step buttons light where it is set. Tap a lit step: it goes from that step. Tap an unlit
+step that plays: it gets the setting (the value of the lit step before it). Hold a lit step: its value, and knob 1
+changes it while you hold it. Delete + step: that step's one goes. Shift + Delete, twice: it goes from every step. Undo
 puts any of it back. A drum machine: tap a drum's pad to see its own. < > (or the wheel): steps 17-32...
 """
 import time
@@ -22,6 +23,7 @@ STEP_LABELS = dict(STEP_KEYS)
 RATCHETS = [1, 2, 3, 4, 5, 6, 7, 8, 0]
 COLOURS = [127, 3, 8, 11, 15, 22]       # the step lights per setting: red, orange, yellow, green, teal, purple
 CONFIRM_SECONDS = 4.0
+TAP_SECONDS = 0.35                      # a step let go sooner than this (knob 1 not turned): a tap
 
 
 def record(T, param):
@@ -66,6 +68,8 @@ class Auto:
         self.page = 0                 # which 16 steps the buttons show
         self.confirm_until = 0.0      # Shift + Delete once: asking; again before this: clear it everywhere
         self._snapped = None          # (step, key) the held step's undo was kept for
+        self._down_at = 0.0           # when the held step went down
+        self._tap = False             # the held step could still be a tap (lit when pressed, knob 1 not turned)
 
     # ------------------------------------------------------------ what's shown
     def active(self):
@@ -204,6 +208,39 @@ class Auto:
         self._snapped = None
         self.T.engine.seq_changed()
 
+    @staticmethod
+    def _copy(src, dst, key):
+        if key in ("vel", "chance", "ratchet"):
+            setattr(dst, key, getattr(src, key))
+        elif key == "nudge" and "nudge" not in src.comp and hasattr(src, "nudge"):
+            dst.nudge = src.nudge
+        elif isinstance(key, str):
+            dst.comp[key] = src.comp[key]
+        else:
+            dst.locks[key] = src.locks[key]
+
+    def add(self, i, key):
+        """Put the setting on step i, with the value of the lit step before it (round from the end).
+        False when nothing plays on the step (a lock only counts where a note plays)."""
+        lit = sorted(self.steps_with(key))
+        if not lit:
+            return False
+        before = [k for k in lit if k < i]
+        src_i = before[-1] if before else lit[-1]
+        with self.seq.lock:
+            ok = any(self.has(u, key) for u in self.units(src_i)) and \
+                any(self.synth() or getattr(u, "on", False) for u in self.units(i))
+        if not ok:
+            return False
+        self.seq.snapshot()
+        with self.seq.lock:
+            src = next(u for u in self.units(src_i) if self.has(u, key))
+            for u in [u for u in self.units(i) if self.synth() or getattr(u, "on", False)]:
+                self._copy(src, u, key)
+        self._snapped = (i, key)
+        self.T.engine.seq_changed()
+        return True
+
     def clear_key(self, key):
         self.seq.snapshot()
         with self.seq.lock:
@@ -230,6 +267,7 @@ class Auto:
                 clicks = knobgate.gate(("step", key), delta, shift)
                 if not clicks:
                     return
+            self._tap = False
             self.change(self.held, key, clicks, 1 if delta > 0 else -1)
             self.T.say("STEP %d  %s  %s" % (self.held + 1, self.label(key), self.value_text(self.held, key)), 2)
             return
@@ -245,8 +283,14 @@ class Auto:
         i = self.page * 16 + n - 1
         if not down:
             if self.held == i:
+                key = self.key()
+                if self._tap and key is not None and time.monotonic() - self._down_at < TAP_SECONDS \
+                        and i in self.steps_with(key):
+                    self.remove(i, key)                   # a tap on a lit step: it goes
+                    self.T.say("STEP %d: %s TAKEN OFF" % (i + 1, self.label(key)), 2)
                 self.held = None
                 self._snapped = None
+                self._tap = False
             return
         key = self.key()
         if i >= self.length() or key is None:
@@ -256,9 +300,15 @@ class Auto:
                 self.remove(i, key)
                 self.T.say("STEP %d: %s TAKEN OFF" % (i + 1, self.label(key)), 2)
             return
-        self.held = i
+        self._down_at = time.monotonic()
         if i in self.steps_with(key):
+            self.held, self._tap = i, True
             self.T.say("STEP %d  %s  %s" % (i + 1, self.label(key), self.value_text(i, key)), 2)
+        elif self.add(i, key):                            # an unlit step: it gets the setting (hold it: knob 1)
+            self.held, self._tap = i, False
+            self.T.say("STEP %d  %s  %s  ADDED" % (i + 1, self.label(key), self.value_text(i, key)), 2)
+        else:
+            self.T.say("STEP %d: NO NOTE THERE" % (i + 1), 2)
 
     def clear(self):
         """Shift + Delete: asks first; again (within a few seconds): this setting off every step."""

@@ -186,7 +186,8 @@ story += [
     p("Left button 1 opens the INSTRUMENTS page: 8 slots, each a drum machine or a synth. Recording an "
       "instrument onto the tape uses the zoomed track's input (knob 2).", BODY),
     table([
-        ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it)."),
+        ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it). Left button 1 does "
+         "nothing here."),
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
          "(the ones without a picture yet show their name). Push to choose."),
         ("SAMPLER", "A drum machine of 16 drums, each with two .wav samples from the Move's sample folders. "
@@ -196,9 +197,8 @@ story += [
          "morph between the two, even while a sample rings. Older songs and presets: sample 2 empty, BLEND left."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer; again: its AUTOMATION "
-         "page; again: back to this page, and round again. (Shift + left button 1 steps back instead: automation "
-         "to sequencer, sequencer or sound to the instruments, then the tape.)"),
+        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then the sound "
+         "again. Back (or Shift + left button 1), from any of them: this page."),
     ]),
     p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
       "and flip a click at a time. A preset or kit setting turns one preset a click and stops at the last one.",
@@ -380,8 +380,9 @@ story += [
         ("Knob 1", "Go through the settings that are set on some step: the step settings (VELOCITY, CHANCE, "
          "MULTIPLY, PULSE...) first, then the sound's (BLEND, CUTOFF...). Each has its own colour on the step "
          "buttons, so you can see you've switched."),
-        ("Step buttons", "Lit: that setting is on the step. Hold a lit step: its value shows, and knob 1 changes it "
-         "while you hold the step."),
+        ("Step buttons", "Lit: that setting is on the step. Tap a lit step: it comes off that step. Tap an unlit "
+         "step that plays a note: it gets the setting, with the value of the lit step before it. Hold a step: its "
+         "value shows, and knob 1 changes it while you hold the step."),
         ("Delete + step", "Take that setting off the step."),
         ("Shift + Delete", "Take that setting off every step: it asks first (Shift + Delete again: yes)."),
         ("Undo", "Puts back what you took off or changed."),

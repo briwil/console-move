@@ -367,8 +367,9 @@ class Transport:
         elif name in ("LEFT", "RIGHT", "BAR_LEFT", "BAR_RIGHT"):
             self.move(-1 if name.endswith("LEFT") else 1, tape.BEATS_PER_BAR if name.startswith("BAR") else t.step)
         elif self.inst_page and not self.fx_page and name in ("HOME", "HOME_PUSH_SHIFT"):
-            # the INSTRUMENTS page: knob 11 turns through the list, push it: change / remove a loaded slot, or choose (SHIFT + push: open it)
-            self.instp.wheel_push() if name == "HOME" else self.instp.push()
+            # the INSTRUMENTS page: knob 11 turns through the list, push it: open a loaded slot, or choose for an empty one
+            # (SHIFT + push on a loaded slot: change or remove it)
+            self.instp.push() if name == "HOME" else self.instp.wheel_push()
         elif name in ("HOME", "HOME_PUSH_SHIFT"):
             start = e.loop_a / e.frames_per_beat() if (e and e.loop_on and e.loop_region()) else 0.0
             self.set_pos(start if t.pos > start + 1e-6 else 0.0)
@@ -467,6 +468,17 @@ class Transport:
             self.fx_page = None
             if self.drum_page or self.inst_page:
                 return
+        if self.drum_page and getattr(self, "list_is_top", False):
+            # (the Move) round the instrument's own pages: sound -> sequencer -> automation -> sound; Back: the list
+            if not self.seq_page:
+                self.seq_page = True
+            elif getattr(self, "has_auto_page", False) and not getattr(self, "auto_page", False):
+                self.auto_page = True
+            else:
+                self.auto_page = self.seq_page = False
+            self.seqp.held = {}
+            self.synthp.held = {}
+            return
         if self.drum_page:
             if self.seq_page and getattr(self, "has_auto_page", False) and not getattr(self, "auto_page", False):
                 self.auto_page = True         # the sequencer, pressed again: its AUTOMATION page (the Move)
@@ -480,7 +492,8 @@ class Transport:
             self.synthp.held = {}
             return
         if self.inst_page:
-            self.instp.push()
+            if not getattr(self, "list_is_top", False):  # (the Move: on the list it does nothing; push the wheel)
+                self.instp.push()
             return
         if not e or not e.drums:
             import drums
@@ -498,9 +511,10 @@ class Transport:
         if self.fx_page:
             self.fx_page = None
             return
-        if getattr(self, "auto_page", False):     # (the Move) the automation page: back to its sequencer
+        if getattr(self, "auto_page", False):     # (the Move) the automation page: back to the instruments list
             self.auto_page = False
-            return
+            if not getattr(self, "list_is_top", False):
+                return
         if self.drum_page:
             self.drum_page = self.seq_page = False
             self.seqp.held = {}

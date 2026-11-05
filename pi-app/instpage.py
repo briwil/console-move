@@ -83,7 +83,7 @@ class InstPage:
             self.start_pick()
 
     def wheel_push(self):
-        """Push the big wheel: on a loaded slot, change or remove it (the page 1 button opens it); otherwise as push."""
+        """SHIFT + push the wheel (the Move): on a loaded slot, change or remove it; otherwise as push."""
         e = self.e
         if not self.mode and e and e.drums and e.slots[self.row]:
             self.shift_push()

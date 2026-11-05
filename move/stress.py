@@ -512,10 +512,24 @@ class Stress:
             self.playing(True)
             self.say("")
             self.say("%d INSTRUMENTS  %s" % (n, [s or "-" for s in e.slots]))
-            x["stage"], x["at"], x["fx"] = "settle", now + 3, 0
+            # warm up first: right after a start or an update the app is busy (loading, first-run work) and the
+            # first numbers came out higher with 4 instruments than with 8. Wait at least 20 s and until the
+            # app's own CPU has calmed down (90 s at most).
+            x["stage"], x["at"], x["fx"] = "warmup", now + 20, 0
+            x["until"], x["wcpu"], x["wt"] = now + 90, _status().get("cpu", 0), now
             return
         if self.beat(now) and self.rng.random() < 0.5:       # someone playing the pads too
             self.pad(self.rng.choice(PADS), self.rng.randint(60, 127), self.rng.uniform(0.05, 0.3))
+        if x["stage"] == "warmup":
+            if now - x["wt"] < 5:
+                return
+            cpu = 100.0 * (_status().get("cpu", 0) - x["wcpu"]) / max(0.001, now - x["wt"])
+            x["wcpu"], x["wt"] = _status().get("cpu", 0), now
+            if now < x["at"] or (cpu > 110 and now < x["until"]):
+                return
+            self.say("  (warmed up: app cpu %d%%%s)" % (cpu, ", still busy: numbers may run high" if cpu > 110 else ""))
+            x["stage"], x["at"] = "settle", now
+            return
         if x["stage"] == "settle":
             if now < x["at"]:
                 return
@@ -573,7 +587,20 @@ class Stress:
         rows = {k: v for k, v in rows.items() if not k.startswith("(")}
         bad = [name for name, r in rows.items() if any(v[3] in ("OVERLOAD", "FAILED TO START") for v in r.values())]
         heavy = [name for name, r in rows.items() if name not in bad and any(v[3] == "HEAVY" for v in r.values())]
+        base = x.get("rows", {}).get("(no song insert)", {})
+        if len(counts) > 1 and all(c in base for c in counts) and base[counts[0]][1] > base[counts[-1]][1] + 10:
+            self.say("")
+            self.say("  NOTE: with no effect, %d instruments loaded the Move more than %d did (max %.0f%% vs %.0f%%):"
+                     % (counts[0], counts[-1], base[counts[0]][1], base[counts[-1]][1]))
+            self.say("  something else was busy during the first part. Trust the %d-instrument numbers, or run it again."
+                     % counts[-1])
+        import insertfx
+        import catalog
+        off = {f["title"].upper() for f in catalog.FX if f["id"] in insertfx.SONG_SKIP}
         self.say("")
+        self.say("  ALREADY OFF THE SONG INSERT LIST: %s" % (", ".join(sorted(off)) or "none"))
+        bad = [b for b in bad if b not in off]
+        heavy = [h for h in heavy if h not in off]
         self.say("  TO KEEP OFF THE SONG INSERT LIST (overload or don't start): %s" % (", ".join(bad) or "none"))
         self.say("  HEAVY (fine with fewer instruments): %s" % (", ".join(heavy) or "none"))
 

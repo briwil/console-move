@@ -16,6 +16,10 @@ import modules
 import store
 
 CHOICES_NONE = "NONE"
+# Not offered as SONG INSERT 1 / 2 (still fine as an instrument's own insert): with a copy on every instrument they
+# glitched or came close to it in the song insert load test (Nov 2026, 8 instruments: Tape Echo 2 and Dissolver
+# dropped out, Dragonfly Hall and Cloudseed peaked near 90% and Cloudseed's copies took ~140 MB).
+SONG_SKIP = {"tape-echo2", "dissolver", "dragonfly-hall", "cloudseed"}
 
 
 def _params(folder, jsonname):

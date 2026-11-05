@@ -406,7 +406,9 @@ story += [
          "the effect (the same picture picker); knobs 1-8 are its settings. A copy each means a compressor or "
          "limiter works on each instrument on its own, not on the mix as a whole; character effects (tape, "
          "saturation, filters, lo-fi) work as you'd expect. Each copy uses the effect's CPU, so heavy effects on "
-         "many instruments add up. The Move's input jack doesn't get them. Saved with the project."),
+         "many instruments add up. Tape Echo 2, Dissolver, Dragonfly Hall and Cloudseed aren't offered here (with a copy on "
+         "every instrument they were too heavy in the load test); they are still there as an instrument's own inserts. "
+         "The Move's input jack doesn't get them. Saved with the project."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
         ("INSERT 1 / 2", "The last two sound pages of an instrument (after LFO 2; wheel or arrows). Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "

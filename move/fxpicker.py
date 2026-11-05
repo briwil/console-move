@@ -14,9 +14,14 @@ class FxPicker:
 
     def open(self, ins):
         import catalog
+        import insertfx
         self.ins = ins
-        self.choices = [("none", "NO EFFECT")] + [(f["id"], f["title"].upper()) for f in catalog.FX]
-        self.pick = ins.index if 0 <= ins.index < len(self.choices) else 0
+        song = getattr(ins, "slot", 0) == -1                 # a song insert: not the effects too heavy for it
+        skip = insertfx.SONG_SKIP if song else ()
+        # (id, title, its number in the catalog): the list can leave some out, so the number is kept with each
+        self.choices = [("none", "NO EFFECT", 0)] + [(f["id"], f["title"].upper(), i)
+                                                     for i, f in enumerate(catalog.FX, 1) if f["id"] not in skip]
+        self.pick = next((k for k, c in enumerate(self.choices) if c[2] == ins.index), 0)
         self.active = True
 
     def turn(self, delta):
@@ -25,7 +30,7 @@ class FxPicker:
 
     def push(self):
         ins = self.ins
-        ins.choose(self.pick)
+        ins.choose(self.choices[self.pick][2])
         self.active = False
         song = getattr(ins, "slot", 0) == -1                 # SONG INSERT 1 / 2: its copies start on every instrument
         if song:

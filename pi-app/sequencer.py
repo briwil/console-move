@@ -34,7 +34,9 @@ RATE_ORDER = sorted(range(len(RATES)), key=lambda i: RATES[i][1])
 # the dark buttons are kept (they come back when it's off). TRIPLETS is what was asked for; each sequencer's own
 # .trip follows it when its pattern next comes round (or at once while stopped).
 TRIPLETS = False
-TRIP_SPEED = 0.75                                    # 3 steps in the time of 4
+TRIP_SPEED = 0.75
+STEP_IDLE = 118                                      # the Move: an empty step's light (dim white; 0: off). console/stepdim
+                                                     # can hold another colour number to try (read while Console runs)                                    # 3 steps in the time of 4
 
 
 def dark(i, trip):

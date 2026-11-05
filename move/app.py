@@ -531,6 +531,12 @@ def main():
             e.inst_view = e.inst_view or T.song_page         # the instruments play on the song page too
             if now >= next_icon_check:
                 next_icon_check = now + 0.5
+                try:                                         # console/stepdim: another colour for an empty step, to try
+                    import sequencer as _sq
+                    path = os.path.join(os.path.dirname(stress.FLAG), "stepdim")
+                    _sq.STEP_IDLE = int(open(path).read().split()[0]) if os.path.exists(path) else 118
+                except (OSError, ValueError, IndexError):
+                    pass
                 try:
                     T.songfx_sync()                          # the song inserts: a copy on every loaded instrument
                 except Exception as ex:                      # noqa: BLE001

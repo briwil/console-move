@@ -512,7 +512,7 @@ class MoveSynth:
                     on = self.lane in pat.at(i)
                 else:
                     on = bool(pat.at(i))
-                v = 120 if on else 0
+                v = 127 if on else sequencer.STEP_IDLE         # notes red, an empty step dim white (as the drums)
                 if at is not None and i == at:
                     v = 20 if on else 60
             out.append(v)

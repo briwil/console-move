@@ -399,7 +399,7 @@ class MoveSeq:
                 v = 127 if int(time.monotonic() * 4) % 2 else 0
             else:
                 on = ln.steps[i].on
-                v = 127 if on else 0
+                v = 127 if on else sequencer.STEP_IDLE         # (an empty step: dim white, so a dark one shows)
                 if at is not None and i == at:
                     v = 20 if on else 60                  # the playhead: on steps dim, off steps glow
             out.append(v)

@@ -261,6 +261,8 @@ story += [
     p("The drum sequencer", H2),
     p("The steps live on the 16 step buttons, the screen shows what the knobs do. Each drum (lane) has its "
       "own length, up to 64 steps, and its own speed.", BODY),
+    p("On every sequencer the step buttons inside the pattern light dim white, the steps with something on them "
+      "red, and steps past the pattern's end are off.", BODY),
     p("<b>Triplets:</b> Menu, SETTINGS, <b>TRIPLETS</b> (below TIME SIG, saved with the project) turns every 4th "
       "step off: steps 4, 8, 12 and 16 go dark, do nothing when pressed and show as a dash, and the other steps "
       "play 3 in the time of 4. So a 1/16 lane plays 1/8 triplets, 1/8 plays 1/4 triplets and 1/32 plays 1/16 "

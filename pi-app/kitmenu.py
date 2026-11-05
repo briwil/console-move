@@ -232,7 +232,7 @@ class KitMenu(menu.Menu):
                     os.remove(kit_path(old, self.drums.machine))        # "kit 1" replacing "Kit 1": one file, the new spelling
             tmp = kit_path(name, self.drums.machine) + ".tmp"
             with open(tmp, "w") as f:
-                json.dump({"name": name, "machine": self.drums.machine, "values": self.drums.kit()}, f)
+                json.dump(self._preset_data(name), f)
             os.replace(tmp, kit_path(name, self.drums.machine))
         except OSError as err:
             self.say("COULDN'T SAVE: %s" % str(err).upper())
@@ -241,22 +241,78 @@ class KitMenu(menu.Menu):
         self.close()
         self.transport.say("PRESET SAVED: %s" % name.upper(), 3)
 
+    def _preset_data(self, name):
+        """What a preset keeps: the instrument's settings; the sampler's samples by file too (so adding samples
+        later doesn't move them); and the instrument's INSERT 1 and 2 with their settings."""
+        d = self.drums
+        data = {"name": name, "machine": d.machine, "values": d.kit()}
+        if d.machine == "sampler":
+            import sampler
+            files, values = list(getattr(d, "files", [])), data["values"]
+            data["samples"] = {str(v): files[values[v * sampler.PER] - 1]
+                               for v in range(sampler.LANES)
+                               if v * sampler.PER < len(values) and 0 < values[v * sampler.PER] <= len(files)}
+        slot = getattr(self.engine, "slot", None)
+        T = self.transport
+        if slot is not None and hasattr(T, "insfx") and getattr(self.engine, "core", None) is not None:
+            try:
+                data["inserts"] = [T.insfx(slot, p).to_json() for p in (0, 1)]
+            except Exception:                        # noqa: BLE001
+                pass
+        return data
+
     def load(self):
         if not self.kits:
             return
         name = self.kits[self.pick]
         try:
             with open(kit_path(name, self.drums.machine)) as f:
-                values = json.load(f)["values"]
+                data = json.load(f)
+            values = list(data["values"])
         except (OSError, ValueError, KeyError, TypeError) as err:
             self.say("COULDN'T LOAD %s: %s" % (name.upper(), str(err).upper()[:40]))
             return
         e = self.engine
+        missing = 0
+        samples = data.get("samples") if isinstance(data, dict) else None
+        if samples and self.drums.machine == "sampler":      # find each sample by its file, wherever it is in the list now
+            import sampler
+            files = list(getattr(self.drums, "files", []))
+            by_name = {}
+            for i, f in enumerate(files):
+                by_name.setdefault(os.path.basename(f).lower(), i)
+            for v, path in samples.items():
+                k = int(v) * sampler.PER
+                if not 0 <= k < len(values):
+                    continue
+                if path in files:
+                    values[k] = files.index(path) + 1
+                elif os.path.basename(path).lower() in by_name:      # moved to another folder: the same file name
+                    values[k] = by_name[os.path.basename(path).lower()] + 1
+                else:
+                    values[k] = 0
+                    missing += 1
         self.drums.load_kit(values)
+        inserts = data.get("inserts") if isinstance(data, dict) else None
+        slot = getattr(e, "slot", None)
+        T = self.transport
+        if isinstance(inserts, list) and slot is not None and hasattr(T, "insfx") and getattr(e, "core", None) is not None:
+            try:                                     # (a preset saved before presets kept inserts: these stay as they are)
+                for p in (0, 1):
+                    saved = inserts[p] if p < len(inserts) else None
+                    ins = T.insfx(slot, p)
+                    if saved and saved.get("fx"):
+                        ins.from_json(saved)
+                    elif ins.index:
+                        ins.choose(0)
+                T._insfx_save()
+            except Exception as err:                 # noqa: BLE001
+                print("preset inserts:", err)
         with e.lock:
             e.dirty.add(-1)                         # the song keeps the kit it's using
         self.close()
-        self.transport.say("PRESET LOADED: %s" % name.upper(), 3)
+        self.transport.say("PRESET LOADED: %s%s" % (name.upper(), "  (%d SAMPLE%s MISSING)" % (
+            missing, "" if missing == 1 else "S") if missing else ""), 3)
 
     def item_y(self, item):
         """Where a menu item sits: the drums menu's 7 rows, evenly spaced."""

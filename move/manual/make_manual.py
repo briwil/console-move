@@ -227,8 +227,8 @@ story += [
     p("Press File (or Menu) on an instrument's sound page. Presets are the old \"kits\": a sound saved for that one "
       "instrument (a Dexed patch, a drum kit, a Braids sound) and kept with it.", BODY),
     table([
-        ("SAVE PRESET", "Name it on the naming screen (below). It is saved for this instrument only."),
-        ("LOAD PRESET", "A list of that instrument's presets: turn the wheel to pick, push to load."),
+        ("SAVE PRESET", "Name it on the naming screen (below). It is saved for this instrument only, with its INSERT 1 and 2 effects and their settings. A SAMPLER preset remembers each drum's sample by its file, so adding samples later doesn't change it."),
+        ("LOAD PRESET", "A list of that instrument's presets: turn the wheel to pick, push to load. Its inserts come back too (presets saved before November 2026 leave the inserts as they are). A SAMPLER sample that has gone from the Move's folders is left empty, and the screen says how many."),
         ("COPY / PASTE PATTERN", "Copy the pattern and paste it onto another pattern or another instrument of the same kind."),
         ("CLEAR PATTERN / CLEAR LOCKS", "Empty the pattern, or only the step settings. Both ask ARE YOU SURE? first."),
     ]),

@@ -25,6 +25,7 @@ class SampleBrowser:
         self.param = 0
         self.orig = 0
         self._timer = None
+        self.last_folder = None    # where the last pick left off: the next one starts there
 
     # ------------------------------------------------------------ the folders
     def _build(self, files):
@@ -95,7 +96,7 @@ class SampleBrowser:
         self.orig = self.drums.get_param(self.param)
         if hasattr(self.drums, "solo"):
             self.drums.solo(self.voice, which)            # while browsing, hear only the sample being chosen
-        self.folder = self.root                        # always from the top of the samples
+        self.folder = self.last_folder if self.last_folder in (self._tree or {}) else self.root   # (where the last pick left off)
         self._list()
         self.pick = 0
 
@@ -116,6 +117,8 @@ class SampleBrowser:
         self.T.say("DRUM %d: SAMPLE %d TAKEN OUT" % (self.voice + 1, w + 1), 2)
 
     def close(self, keep):
+        if self.stage == "files":
+            self.last_folder = self.folder
         self._cancel()
         if not keep and self.stage == "files":
             self.drums.set_param(self.param, self.orig)
@@ -161,7 +164,10 @@ class SampleBrowser:
             self.drums.set_param(self.param, val)
             self._unsolo()
             self.T.engine.hit(self.voice, 110)
-            self.active = False
+            self.last_folder = self.folder
+            self.stage = "which"                       # (back to SAMPLE 1 / 2 ..., not out to the instrument)
+            self._which_list()
+            self.pick = next((k for k, (_l, kind, v) in enumerate(self.entries) if kind == "which" and v == self.which), 0)
             import sampler
             if self.which == 1 and not self._random() and self.drums.get_param(sampler.BLEND + self.voice) == 0:
                 self.T.say("SAMPLE 2 IN. BLEND (KNOB 8) IS ALL ON SAMPLE 1: TURN IT TO HEAR IT", 4)
@@ -172,6 +178,7 @@ class SampleBrowser:
         elif self.folder != self.root:
             self.folder_up()
         else:                                          # the top of the samples: back to SAMPLE 1 / 2
+            self.last_folder = None
             self._cancel()
             self.drums.set_param(self.param, self.orig)
             self._unsolo()

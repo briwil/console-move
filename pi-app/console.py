@@ -447,6 +447,8 @@ class Transport:
             order = [None, "reverb", "delay"]                # (the inserts are pages of each instrument's sound)
             if self.insert_fx_available():
                 order += ["song1", "song2"]                  # ... and the song's two (a copy on every instrument)
+            if self.fx_page and getattr(self, "list_is_top", False):
+                order.remove(None)                           # (the Move) round the FX pages; Back leaves them
             self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)

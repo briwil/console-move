@@ -423,7 +423,7 @@ story += [
     p("FX", H2),
     p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: off."),
+        ("Left button 3", "Reverb page, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: reverb. Back: off."),
         ("SONG INSERT 1 / 2", "One effect for the whole song. The tape records each instrument on its own track, so every "
          "loaded instrument gets its own copy of it (after its own INSERT 1 and 2), all following the settings on "
          "this page, and it is recorded with each instrument, as the reverb and delay are. Push the wheel to choose "

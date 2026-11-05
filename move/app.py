@@ -983,6 +983,8 @@ def handle(name, T, m, e):
             m.key("FILE")
         elif m.kits.open:
             m.kits.key("FILE")
+        elif T.fx_page:
+            T.fx_page = None                         # the FX pages: back to the page under them
         elif T.inst_page and T.instp.mode:
             T.instp.cancel()
         elif T.inst_page and not (T.seq_page or T.drum_page):

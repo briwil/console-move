@@ -442,7 +442,6 @@ class MoveSynth:
                 self.T.say("TYPE: %s" % TYPES[seq.move_type], 2)
         elif what == "lane":
             if self.lane is None:
-                self.T.say("TAP A PAD (TYPE PER NOTE) FIRST", 2)
                 return
             v = seq.change_lane_length(self.lane, delta)
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)

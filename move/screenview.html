@@ -151,7 +151,8 @@ function draw() {
   text(S.position, x, cyT + 2 * u, 68 * u, "#eceef1", 600, "left", null, 0.04); x += tw(S.position, 68 * u, 600, 0.04) + 44 * u;
   const meta = S.bpm.toFixed(S.bpm % 1 ? 1 : 0) + " BPM · " + S.sig[0] + "/" + S.sig[1] + (S.loop_on && S.loop ? " · LOOP" : "") + (S.song_mode ? " · SONG" : "");
   text(meta, x, cyT + 2 * u, 44 * u, "#9aa0ab", 500, "left", null, 0.04);
-  const right = (S.seq && S.page !== "tape" ? "PATTERN " + S.seq.pattern + "    " : "");
+  const right = (S.seq && S.page !== "tape" ? "PATTERN " + S.seq.pattern + "    " :
+                 S.auto && S.page === "auto" ? "PATTERN " + S.auto.pattern + "    " : "");
   text(S.song || "NEW PROJECT", W - pad, cyT + 2 * u, 44 * u, S.song ? "#eceef1" : "#5c616c", 600, "right", null, 0.04);
   if (right) text(right, W - pad - tw(S.song || "NEW PROJECT", 44 * u, 600, 0.04), cyT + 2 * u, 44 * u, "#9aa0ab", 500, "right", null, 0.04);
   g.fillStyle = "#1e2127"; g.fillRect(0, topH, W, 2 * u);
@@ -160,6 +161,9 @@ function draw() {
   let bottom = "";
   if (S.page === "seq" && SEQ && S.seq) {
     drawSeq(u, pad, topH, y1);
+    bottom = S.message || "";
+  } else if (S.page === "auto" && S.auto && S.auto.rows) {
+    drawAuto(u, pad, topH, y1, S.auto);
     bottom = S.message || "";
   } else if (S.page === "sound" && S.sound && S.sound.knobs) {
     drawSound(u, pad, topH + 6 * u, y1, S.sound);
@@ -660,6 +664,56 @@ function seqTitle(u, pad, y0, title, sub, L, small) {
                        title, ACC, sub, small, big, L.queued ? ACC : "#eceef1");
   g.fillStyle = "#1e2127"; g.fillRect(0, y + 40 * u, W, 2 * u);
   return y + 40 * u;
+}
+
+// the AUTOMATION page: one row per setting locked on some step (the Move's knob 1 picks one: its row is lit),
+// each step's value in that setting's colour (the same colours as the Move's step buttons)
+const AUTO_COLOURS = ["#ff5a4e", "#ff9a3c", "#f5d33f", "#49d17d", "#3fd0c9", "#b48ae6"];
+function drawAuto(u, pad, y0, y1, A) {
+  const n = A.rows.length, pick = A.pick, col = pick >= 0 ? AUTO_COLOURS[pick % AUTO_COLOURS.length] : ACC;
+  const cur = pick >= 0 ? A.rows[pick] : null;
+  const big = A.held != null && A.held_value ? "STEP " + (A.held + 1) + "  " + A.held_value :
+              cur ? Object.keys(cur.steps).length + " STEPS" : "";
+  const top0 = titleBlock(u, pad, y0, "AUTOMATION · INSTRUMENT " + A.slot + (A.name ? " · " + A.name : ""),
+                          cur ? cur.label : "NO AUTOMATION", col, A.title, pick >= 0 ? "SETTING " + (pick + 1) + " OF " + n : "",
+                          big, A.held != null ? "#ffffff" : col);
+  if (!n) {
+    text("Press Record and turn the sound page's knobs while it plays, or set steps with Shift + steps on the sequencer.",
+         pad, top0 + 80 * u, 40 * u, "#9aa0ab", 500, "left", null, 0.02);
+    return;
+  }
+  const gutter = 272 * u, X0 = pad + gutter + 28 * u, X1 = W - pad, cols = Math.max(16, A.length), cw = (X1 - X0) / cols;
+  const numY = top0 + 50 * u, gTop = numY + 36 * u, gap = 12 * u;
+  const rh = Math.max(40 * u, Math.min(150 * u, (y1 - 60 * u - gTop - (n - 1) * gap) / n));
+  for (let i = 0; i < cols; i += 4) text(String(i + 1), X0 + i * cw + 8 * u, numY, 30 * u, "#5c616c", 600, "left", null, 0.14);
+  const shown = (A.first != null) ? [A.first, Math.min(A.first + 16, A.length)] : [0, A.length];
+  A.rows.forEach((r, ri) => {
+    const y = gTop + ri * (rh + gap), isSel = ri === pick, rc = AUTO_COLOURS[ri % AUTO_COLOURS.length];
+    if (y + rh > y1 + 10 * u) return;
+    rr(pad, y, gutter, rh, 18 * u); g.fillStyle = isSel ? "#17191e" : "#111317"; g.fill();
+    if (isSel) { g.save(); rr(pad, y, gutter, rh, 18 * u); g.clip(); g.fillStyle = rc; g.fillRect(pad, y, 6 * u, rh); g.restore(); }
+    let nsz = 32 * u; while (tw(r.label, nsz, 600, 0.12) > gutter - 50 * u && nsz > 16 * u) nsz -= 2 * u;
+    text(r.label, pad + 32 * u, y + rh / 2, nsz, isSel ? "#eceef1" : "#9aa0ab", 600, "left", null, 0.12);
+    if (isSel) { rr(X0 + shown[0] * cw - 2 * u, y - 6 * u, (shown[1] - shown[0]) * cw + 4 * u, rh + 12 * u, 18 * u);
+      g.strokeStyle = rc + "88"; g.lineWidth = 4 * u; g.stroke(); }
+    for (let i = 0; i < A.length; i++) {
+      const x = X0 + i * cw, bx = x + 4 * u, bw = cw - 8 * u, v = r.steps[String(i)];
+      rr(bx, y, bw, rh, Math.min(12 * u, bw / 4));
+      if (A.dark && i % 4 === 3) { g.strokeStyle = "#1e2127"; g.lineWidth = 2 * u; g.stroke(); continue; }
+      if (v != null) {
+        g.globalAlpha = isSel ? 1 : 0.55; g.fillStyle = rc; g.fill(); g.globalAlpha = 1;
+        let vs = Math.min(26 * u, rh * 0.36); while (tw(v, vs, 700) > bw - 6 * u && vs > 10 * u) vs -= 1 * u;
+        text(v, bx + bw / 2, y + rh / 2, vs, "#0b0c0e", 700, "center");
+      } else { g.fillStyle = "#15171c"; g.fill(); }
+      if (isSel && A.held === i) { rr(bx - 4 * u, y - 4 * u, bw + 8 * u, rh + 8 * u, 14 * u); g.strokeStyle = "#ffffff"; g.lineWidth = 6 * u; g.stroke(); }
+      if (A.at === i) { rr(bx - 2 * u, y - 2 * u, bw + 4 * u, rh + 4 * u, 14 * u); g.strokeStyle = "#ffffffaa"; g.lineWidth = 3 * u; g.stroke(); }
+    }
+  });
+  if (A.confirm && cur) {
+    const msg = "TAKE " + cur.label + " OFF " + Object.keys(cur.steps).length + " STEPS?  SHIFT + DELETE AGAIN: YES";
+    rr(pad, y1 - 70 * u, W - 2 * pad, 64 * u, 16 * u); g.fillStyle = "#2a1414"; g.fill();
+    text(msg, W / 2, y1 - 38 * u, 34 * u, "#ff9a8c", 700, "center", null, 0.06);
+  }
 }
 
 function drawDrums(u, pad, y0, y1, L) {

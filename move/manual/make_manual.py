@@ -387,6 +387,8 @@ story += [
         ("Undo", "Puts back what you took off or changed."),
         ("Pads (drum machines)", "Tap a drum's pad to see its own automation; lit pads have some."),
         ("Left / Right, the wheel", "Steps 17-32 and on."),
+        ("External screen", "Every locked setting as a row, each step's value in it, in the same colours as the "
+         "step buttons; the one knob 1 is on outlined, the held step framed white."),
     ]),
 
     p("Pads: key and scale (synths)", H2),

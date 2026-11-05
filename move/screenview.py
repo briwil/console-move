@@ -137,6 +137,12 @@ def state():
                 _seq_cache.pop(next(iter(_seq_cache)))
         except Exception as ex:                          # noqa: BLE001
             page, seq_live = "tape", {"error": str(ex)[:80]}
+    auto = None
+    if page == "auto":
+        try:
+            auto = auto_data(T)
+        except Exception as ex:                          # noqa: BLE001
+            page, auto = "tape", {"error": str(ex)[:80]}
     sound = None
     if page == "sound":
         try:
@@ -170,6 +176,7 @@ def state():
         inst = 0                                         # (the panel says where you are)
     out = {
         "page": page, "inst": inst, "arp": arp_panel, "fx": fx_panel, "menu": menu, "seq_id": seq_id, "seq": seq_live, "sound": sound,
+        "auto": auto,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),
@@ -200,6 +207,8 @@ def _page(T):
     e = T.engine
     if not (e and e.drums and e.slot is not None and e.slots[e.slot]):
         return "tape"
+    if getattr(T, "seq_page", False) and getattr(T, "auto", None) is not None and T.auto.active():
+        return "auto"
     if getattr(T, "seq_page", False):
         return "seq"
     if getattr(T, "drum_page", False) and not getattr(T, "inst_page", False) \
@@ -568,6 +577,40 @@ def image(mid):
         return open(os.path.join(HERE, folder, "%s.txt" % os.path.basename(mid))).read().encode()
     except OSError:
         return b""
+
+
+def auto_data(T):
+    """The AUTOMATION page: every setting locked on some step of this pattern (the one knob 1 is on picked), with
+    its value on each step; the held step; the playhead."""
+    a = T.auto
+    e = T.engine
+    seq = e.seq
+    mid = e.slots[e.slot]
+    try:
+        import instpage
+        title = dict(instpage.machines()).get(mid) or mid
+    except Exception:                                    # noqa: BLE001
+        title = mid
+    if T.synth_shown():
+        name = ""
+    else:
+        names = list(getattr(e.drums, "lane_names", None) or [])
+        lane = T.seqp.lane
+        name = names[lane] if lane < len(names) else "LANE %d" % (lane + 1)
+        if name == "EMPTY":
+            name = "DRUM %d" % (lane + 1)
+    keys = a.keys()
+    pick = a.key()
+    rows = []
+    for k in keys:
+        on = sorted(a.steps_with(k))
+        rows.append({"label": a.label(k), "steps": {str(i): a.value_text(i, k) for i in on}})
+    held = a.held
+    return {"title": str(title).upper(), "name": str(name).upper(), "slot": e.slot + 1, "pattern": seq.current + 1,
+            "length": a.length(), "rows": rows, "pick": keys.index(pick) if pick in keys else -1,
+            "held": held, "held_value": a.value_text(held, pick) if (held is not None and pick is not None) else "",
+            "first": a.page * 16, "at": a.playing_step(), "confirm": a.confirming(),
+            "dark": bool(__import__("sequencer").TRIPLETS)}
 
 
 def seq_data(T):

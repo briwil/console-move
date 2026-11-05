@@ -114,6 +114,26 @@ def _cleanup():
         pass
 
 
+def _threads():
+    """{thread id: (name, CPU ticks so far)} for every thread of this program: Python's own threads by their
+    names, the rest (the sound server's, the instruments' workers) by the system's name for them."""
+    import threading
+    py = {getattr(t, "native_id", None): t.name for t in threading.enumerate()}
+    out = {}
+    try:
+        tids = os.listdir("/proc/self/task")
+    except OSError:
+        return out
+    for tid in tids:
+        try:
+            st = open("/proc/self/task/%s/stat" % tid).read()
+            rest = st[st.rindex(")") + 2:].split()              # (after the name, which may hold spaces)
+            out[int(tid)] = (py.get(int(tid)) or st[st.index("(") + 1:st.rindex(")")], int(rest[11]) + int(rest[12]))
+        except (OSError, ValueError, IndexError):
+            pass
+    return out
+
+
 def _status():
     out = {}
     try:
@@ -529,6 +549,12 @@ class Stress:
                 return
             self.say("  (warmed up: app cpu %d%%%s)" % (cpu, ", still busy: numbers may run high" if cpu > 110 else ""))
             x["stage"], x["at"] = "settle", now
+            if cpu > 110:                                    # still busy with no effect on: find out who
+                x["stage"], x["pr"] = "probe", {"step": "threads", "at": now + 5, "th": _threads(), "t": now, "k": 0}
+                self.say("  BUSY CHECK: what is using the CPU, with no effect on")
+            return
+        if x["stage"] == "probe":
+            self.probe(now, n)
             return
         if x["stage"] == "settle":
             if now < x["at"]:
@@ -573,6 +599,43 @@ class Stress:
             self.guarded("song insert %s" % catalog.FX[i - 1]["id"],
                          lambda: (T.songfx(0).choose(i), T.songfx_sync()))
             x["stage"], x["at"] = "settle", now + 2
+
+    def probe(self, now, n):
+        """Console was busy with no effect on: which threads use the CPU, then each instrument taken out in turn
+        (and put back) to see whose absence brings the load down."""
+        x, pr, e = self.sfx, self.sfx["pr"], self.e
+        if now < pr["at"]:
+            if pr["step"] == "measure":
+                self._sample()
+            return
+        if pr["step"] == "threads":
+            th, dt = _threads(), max(0.001, now - pr["t"])
+            tick = float(os.sysconf("SC_CLK_TCK")) if hasattr(os, "sysconf") else 100.0
+            use = sorted(((100.0 * (v[1] - pr["th"][k][1]) / tick / dt, v[0], k) for k, v in th.items()
+                          if k in pr["th"]), reverse=True)
+            self.say("    threads (cpu over %.0f s): %s" % (dt, "   ".join("%s %d%%" % (name, c) for c, name, _k in use[:8]
+                                                                         if c >= 1) or "none busy"))
+            pr["step"] = "out"
+        elif pr["step"] == "out":                            # take instrument k out for a few seconds
+            if pr["k"] >= n:
+                x["stage"], x["at"] = "settle", now + 3
+                self.say("    (all back: the measurements go on)")
+                return
+            pr["mid"] = e.slots[pr["k"]]
+            self.guarded("probe out %d" % (pr["k"] + 1), lambda: e.set_slot(pr["k"], None))
+            pr["step"], pr["at"] = "start", now + 2
+        elif pr["step"] == "start":
+            x["loads"], pr["cpu0"], pr["t"] = [], _status().get("cpu", 0), now
+            pr["step"], pr["at"] = "measure", now + 4
+        elif pr["step"] == "measure":
+            ld = x["loads"]
+            cpu = 100.0 * (_status().get("cpu", 0) - pr["cpu0"]) / max(0.001, now - pr["t"])
+            self.say("    without slot %d (%s): dsp avg %5.1f%%  max %5.1f%%  app cpu %4.0f%%" % (
+                pr["k"] + 1, pr["mid"], sum(ld) / len(ld) if ld else -1, max(ld) if ld else -1, cpu))
+            k, mid = pr["k"], pr["mid"]
+            self.guarded("probe back %d" % (k + 1), lambda: self._fill(k, mid))
+            pr["k"] += 1
+            pr["step"], pr["at"] = "out", now + 2
 
     def songfx_result(self):
         x = self.sfx or {}

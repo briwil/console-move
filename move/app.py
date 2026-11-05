@@ -926,6 +926,17 @@ def handle(name, T, m, e):
         return
     if name in ("DRUMS", "FX", "DRUMS_BACK"):
         T.song_page = False
+    if name == "DRUMS" and T.drum_page and not T.fx_page and not (m.open or m.kits.open):
+        # an instrument's pages round: sound -> sequencer -> automation -> (a synth with its arp on: ARP) -> sound
+        arp = bool(e and T.synth_shown() and getattr(e.seq, "arp_cfg", {}).get("on") and T.mlfo.has_arp())
+        if not T.seq_page and arp and T.mlfo.arp_on_page():
+            T.mlfo.tab = None                        # the ARP page (4th): back to the sound's settings
+            return
+        if T.seq_page and getattr(T, "auto_page", False):
+            T.auto_page = T.seq_page = False
+            T.seqp.held, T.synthp.held = {}, {}
+            T.mlfo.tab = T.mlfo.arp_tab() if arp else None
+            return
     if T.auto.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             T.auto.knob(name[1], name[2], name[3])

@@ -197,8 +197,8 @@ story += [
          "morph between the two, even while a sample rings. Older songs and presets: sample 2 empty, BLEND left."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then the sound "
-         "again. Back (or Shift + left button 1), from any of them: this page."),
+        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then (a synth "
+         "with its arp on) ARP, then the sound again. Back (or Shift + left button 1), from any of them: this page."),
     ]),
     p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
       "and flip a click at a time. A preset or kit setting turns one preset a click and stops at the last one.",

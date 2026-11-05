@@ -34,8 +34,9 @@ The start-up check ("startup", 8 minutes), for Console being busier for its firs
 
     ssh -i ~/.ssh/move_key ableton@move.local "echo startup > /data/UserData/console/stress"
 
-4 instruments play (no effects). Every 30 seconds: DSP load, the app's CPU and which threads use it. At 2:00
-OB-Xd is loaded again and its settings compared with the first load's.
+4 instruments play (no effects). Every 30 seconds: DSP load, the app's CPU and which threads use it. OB-Xd
+(slot 4): at 1:30 a second one joins in slot 5, at 3:00 the first is taken out, at 4:30 the second goes and a
+fresh one is loaded in slot 4 (its settings compared with the first's). Ends at 8:00.
 """
 import os
 import random
@@ -708,7 +709,8 @@ class Stress:
 
     def startup(self, now):
         """Console's first minutes: 4 instruments playing, no effects. Every 30 s: DSP load, app CPU, threads.
-        At 2:00 OB-Xd is loaded again and its settings compared with the first load's."""
+        OB-Xd: a second copy at 1:30, the first taken out at 3:00, a fresh one alone at 4:30 (is only the
+        first copy after a start the heavy one?)."""
         e = self.e
         x = getattr(self, "su", None)
         core = getattr(e, "core", None)
@@ -722,7 +724,7 @@ class Stress:
             ob = want.index("obxd") if "obxd" in want else None
             first = self.settings_of(ob) if ob is not None else []
             self.su = x = {"t0": now, "next": now + 30, "th": _threads(), "cpu0": _status().get("cpu", 0), "t": now,
-                           "loads": [], "ob": ob, "first": first, "reloaded": ob is None}
+                           "loads": [], "ob": ob, "first": first}
             self.say("START-UP CHECK  %s  (no effects; pads on slot 1)" % [s or "-" for s in e.slots])
             if ob is not None:
                 vo = [(k, v) for k, v in first if "voice" in k.lower() or "unison" in k.lower() or "poly" in k.lower()]
@@ -737,20 +739,30 @@ class Stress:
                 pass
         if self.beat(now) and self.rng.random() < 0.5:
             self.pad(self.rng.choice(PADS), self.rng.randint(60, 127), self.rng.uniform(0.05, 0.3))
-        if not x["reloaded"] and now - x["t0"] >= 120:
-            k = x["ob"]
-            self.guarded("obxd out", lambda: e.set_slot(k, None))
-            self.guarded("obxd back", lambda: self._fill(k, "obxd"))
+        steps = [(90, "add2"), (180, "drop1"), (270, "fresh")] if x["ob"] is not None else []
+        due = [st for st in steps if st[1] not in x.setdefault("done", []) and now - x["t0"] >= st[0]]
+        if due:
+            what, k, k2 = due[0][1], x["ob"], 4
+            x["done"].append(what)
+            if what == "add2":                               # a second OB-Xd beside the first
+                self.guarded("obxd 2", lambda: self._fill(k2, "obxd"))
+                self.say("  + a second OB-XD in slot %d (the first still in slot %d): does the load go up by a "
+                         "normal amount or by a lot?" % (k2 + 1, k + 1))
+            elif what == "drop1":                            # take out the first one only
+                self.guarded("obxd 1 out", lambda: e.set_slot(k, None))
+                self.say("  - the FIRST OB-XD taken out (slot %d); the second stays: if the load falls a lot, the "
+                         "first one was the heavy one" % (k + 1))
+            else:                                            # the second out, a fresh one back in slot 4
+                self.guarded("obxd 2 out", lambda: e.set_slot(k2, None))
+                self.guarded("obxd fresh", lambda: self._fill(k, "obxd"))
+                second = self.settings_of(k)
+                a, b = dict(x["first"]), dict(second)
+                diff = [(n, a.get(n), b.get(n)) for n in list(a) + [n for n in b if n not in a] if a.get(n) != b.get(n)]
+                self.say("  = back to 4 instruments, a fresh OB-XD in slot %d (%s)" % (
+                    k + 1, ("%d settings differ: " % len(diff)) + "; ".join("%s %s -> %s" % d for d in diff[:40])
+                    if diff else "every setting the same as the first"))
             self.guarded("open slot 1", lambda: e.open_slot(0))
-            second = self.settings_of(k)
-            a, b = dict(x["first"]), dict(second)
-            diff = [(n, a.get(n), b.get(n)) for n in list(a) + [n for n in b if n not in a] if a.get(n) != b.get(n)]
-            x["reloaded"] = True
-            if diff:
-                self.say("  OB-XD LOADED AGAIN: %d settings differ from the first load: %s" % (
-                    len(diff), "; ".join("%s %s -> %s" % d for d in diff[:40])))
-            else:
-                self.say("  OB-XD LOADED AGAIN: every setting the same as the first load")
+            x["th"], x["cpu0"], x["t"], x["loads"], x["next"] = _threads(), _status().get("cpu", 0), now, [], now + 30
             return
         if now < x["next"]:
             return

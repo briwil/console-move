@@ -373,6 +373,14 @@ class Stress:
         if now >= self.end:
             self.finish("finished")
             return False
+        if self.phase in ("songfx", "startup") and getattr(self, "want_play", False) and not self.e.playing \
+                and now >= getattr(self, "replay_at", 0):
+            # the tape got to its end (5 minutes) and stopped, and the patterns with it: the load numbers after
+            # that were of instruments sitting idle. Back to the start and on.
+            self.guarded("rewind", lambda: self.T.set_pos(0.0))
+            self.press(85)
+            self.replay_at = now + 2
+            self.say("  (the tape got to its end: back to the start, playing again)")
         try:
             if self.phase == "instruments":
                 self.sweep_instruments(now)
@@ -392,6 +400,9 @@ class Stress:
     # ------------------------------------------------------------ 1: every instrument
 
     def playing(self, on):
+        self.want_play = on
+        if on and not self.e.playing:                        # from the start: the tape is 5 minutes long, and
+            self.guarded("rewind", lambda: self.T.set_pos(0.0))   # at its end playing stops (patterns too)
         if bool(self.e.playing) != on:
             self.press(85)
 

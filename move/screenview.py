@@ -154,7 +154,7 @@ def state():
         except Exception as ex:                          # noqa: BLE001
             arp_panel = {"error": str(ex)[:80]}
     fx_panel = None
-    if getattr(T, "fx_page", None) in ("reverb", "delay"):
+    if getattr(T, "fx_page", None) in ("reverb", "delay", "song1", "song2"):
         try:
             fx_panel = fx_data(T)
         except Exception as ex:                          # noqa: BLE001
@@ -504,6 +504,19 @@ def fx_data(T):
     import effects
     e = T.engine
     which = T.fx_page
+    if which in ("song1", "song2"):                          # SONG INSERT 1 / 2: the effect, its settings, its picture
+        import catalog
+        sf = T.songfx(0 if which == "song1" else 1)
+        rows = []
+        for i in range(8):
+            label, shown = sf.text(i)
+            if label:
+                rows.append({"n": i + 1, "label": label.upper(), "text": shown})
+        fid = catalog.FX[sf.index - 1]["id"] if sf.index else "none"
+        return {"title": "SONG INSERT %d" % (sf.pos + 1), "right": sf.name(), "rows": rows, "pick": -1,
+                "knobs": True, "img": "fx." + fid, "empty": "NO EFFECT: PUSH THE WHEEL TO CHOOSE ONE",
+                "hint": (sf.error.upper() if sf.error else
+                         "ON EVERY INSTRUMENT (A COPY EACH), RECORDED WITH IT  ·  PUSH THE WHEEL: CHOOSE")}
     rows = []
     for i, (key, name) in enumerate(T.FX_KNOBS[which]):
         if key == "dly_time":

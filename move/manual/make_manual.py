@@ -142,7 +142,7 @@ story += [
         ("Back", "Back out of a menu or page.  <b>Shift + Back: save and quit.</b>"),
         ("Left buttons (top to bottom)", "1 Instruments (press again: the instrument's sound, again: "
          "its sequencer, again: back to the instruments; Shift: back one step).  2 Song mode.  3 FX (reverb, delay, "
-         "then off).  4 The recorder "
+         "song insert 1, song insert 2, then off).  4 The recorder "
          "(the tape; press again: the selected track zoomed. Shift: arm all tracks)."),
         ("Knobs 1-8", "Depend on the page (below). On the tape: the 8 tracks' volumes; Shift: pan."),
         ("Shift + touch a knob", "Pushes that knob (the Pi's knob push): on the tape it mutes that track."),
@@ -397,7 +397,14 @@ story += [
     p("FX", H2),
     p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([
-        ("Left button 3", "Reverb page, again: delay page, again: off. (Only reverb and delay: the inserts are on the instrument.)"),
+        ("Left button 3", "Reverb page, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: off."),
+        ("SONG INSERT 1 / 2", "One effect for the whole song. The tape records each instrument on its own track, so every "
+         "loaded instrument gets its own copy of it (after its own INSERT 1 and 2), all following the settings on "
+         "this page, and it is recorded with each instrument, as the reverb and delay are. Push the wheel to choose "
+         "the effect (the same picture picker); knobs 1-8 are its settings. A copy each means a compressor or "
+         "limiter works on each instrument on its own, not on the mix as a whole; character effects (tape, "
+         "saturation, filters, lo-fi) work as you'd expect. Each copy uses the effect's CPU, so heavy effects on "
+         "many instruments add up. The Move's input jack doesn't get them. Saved with the project."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
         ("Knob 4", "How much of the picked instrument goes to this effect."),
         ("INSERT 1 / 2", "The last two sound pages of an instrument (after LFO 2; wheel or arrows). Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "

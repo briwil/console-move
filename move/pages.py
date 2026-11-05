@@ -805,9 +805,34 @@ def song_page(f, T):
 
 # ------------------------------------------------------------------ effects
 
+def song_insert_page(f, T, p):
+    """SONG INSERT 1 / 2 (left button 3): the song's effect, on every instrument (a copy each), and its settings."""
+    if T.fxpick.active:
+        carousel(f, T.fxpick)
+        return
+    sf = T.songfx(p)
+    header(f, "SONG INSERT %d" % (p + 1))
+    f.text(2, 12, sf.name()[:21])
+    if not sf.params:
+        f.small(2, 24, "ON EVERY INSTRUMENT, A COPY EACH")
+        f.small(2, 31, "RECORDED WITH IT")
+    for i in range(8):
+        label, shown = sf.text(i)
+        if not label:
+            continue
+        col, row = divmod(i, 4)
+        x, y = col * 65, 24 + row * 9
+        f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
+        f.right(x + 62, y, shown[:6], small=True)
+    f.small(1, 59, (sf.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
+
+
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
+    if which in ("song1", "song2"):
+        song_insert_page(f, T, 0 if which == "song1" else 1)
+        return
     header(f, which.upper())
     for i, (k, name) in enumerate(T.FX_KNOBS[which]):
         y = 13 + i * 10

@@ -1386,7 +1386,11 @@ class Engine:
                 try:                                                  # each instrument's two insert effects, with the song
                     out = {}
                     for (k, pos), v in ins.items():
-                        out.setdefault(str(k), {})[str(pos)] = v.to_json()
+                        if pos < 2:                                   # (2-3: the song inserts' copies: below)
+                            out.setdefault(str(k), {})[str(pos)] = v.to_json()
+                    sfx = getattr(self, "song_fx", None)
+                    if sfx:
+                        out["song"] = [x.to_json() for x in sfx]      # SONG INSERT 1 / 2
                     meta["inserts"] = out
                 except Exception as ex:                               # noqa: BLE001
                     print("insert effects:", ex)

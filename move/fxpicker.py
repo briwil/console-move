@@ -27,8 +27,12 @@ class FxPicker:
         ins = self.ins
         ins.choose(self.pick)
         self.active = False
+        song = getattr(ins, "slot", 0) == -1                 # SONG INSERT 1 / 2: its copies start on every instrument
+        if song:
+            self.T.songfx_sync()
         self.T._insfx_save()
-        self.T.say("INSERT %d: %s%s" % (ins.pos + 1, ins.name(), (" (" + ins.error + ")") if ins.error else ""), 2)
+        self.T.say("%sINSERT %d: %s%s" % ("SONG " if song else "", ins.pos + 1, ins.name(),
+                                          (" (" + ins.error + ")") if ins.error else ""), 2)
 
     def back(self):
         self.active = False

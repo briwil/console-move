@@ -174,7 +174,8 @@ typedef struct {
     float pan[MAX_VOICES][2], rev[MAX_VOICES], dly[MAX_VOICES];
     float monitor;                            /* how loud it's heard (0: not heard) */
     void *frev, *fdly;                        /* its own effects, for the KIT inputs (NULL: none) */
-    void *ins_h[2];                           /* its two insert effects (NULL: none), in series: on the kit's direct sound, before the tape sees it */
+    void *ins_h[4];                           /* its insert effects (NULL: none), in series, on the kit's direct sound before the tape sees
+                                                 it: 0-1 its own INSERT 1 / 2, 2-3 its copy of the song's SONG INSERT 1 / 2 */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
 } Slot;
 static Slot slots[SLOTS];
@@ -370,7 +371,7 @@ static void slots_cycle(int n) {
                the tape records (KIT inputs) and what is heard */
             void (*ifx)(void *, float *, float *, int) = ins_fn;
             int has_ins = 0;
-            for (int k = 0; k < 2; k++) {
+            for (int k = 0; k < 4; k++) {
                 void *ih = sl->ins_h[k];
                 if (ifx && ih) { has_ins = 1; ifx(ih, kl, kr, n); }
             }
@@ -698,7 +699,7 @@ void core_set_sends(int s, int v, float rev, float dly) {
 void core_set_gain(int s, float g) { if (s >= 0 && s < MAX_SOURCES) sources[s].gain = g; }
 void core_set_master(float g) { master = g; }
 void core_slot_insert(int k, int pos, void *fn, void *h) {      /* fn: sh_fx_process; the same for every slot */
-    if (k < 0 || k >= SLOTS || pos < 0 || pos > 1) return;
+    if (k < 0 || k >= SLOTS || pos < 0 || pos > 3) return;    /* 0-1: the instrument's, 2-3: the song's (a copy each) */
     if (fn) ins_fn = (void (*)(void *, float *, float *, int))fn;
     slots[k].ins_h[pos] = h;
 }

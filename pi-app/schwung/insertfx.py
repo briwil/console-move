@@ -184,3 +184,91 @@ class Insert:
                 if k in self.values:
                     self.values[k] = v
                     self._send(k)
+
+
+class SongInsert:
+    """SONG INSERT 1 or 2 (left button 3, after REVERB and DELAY): one effect for the whole song. The tape records
+    each instrument on its own track, so every loaded instrument gets its own copy of it (insert place 2 or 3,
+    after its own two), all following the settings here: so it is recorded with each instrument, as the reverb
+    and delay are. sync() keeps a copy on every loaded instrument (and none on an empty slot)."""
+
+    def __init__(self, pos, get_copy):
+        self.pos = pos                      # 0: SONG INSERT 1, 1: SONG INSERT 2
+        self.slot = -1
+        self.get_copy = get_copy            # (slot, place 2 / 3) -> that instrument's Insert
+        self.index = 0
+        self.params, self.values = [], {}
+        self.error = ""
+        self._have = {}                     # slot -> the effect index its copy runs
+
+    @property
+    def h(self):
+        return self.index > 0 and not self.error
+
+    def name(self):
+        names = [CHOICES_NONE] + [f["title"].upper() for f in catalog.FX]
+        return names[self.index] if self.index < len(names) else CHOICES_NONE
+
+    def choose(self, index, slots=None):
+        index = max(0, min(len(catalog.FX), index))
+        self.index, self.error = index, ""
+        self.params, self.values = [], {}
+        if slots is not None:
+            self.sync(slots)
+
+    def sync(self, slots):
+        """slots: which of the 8 have an instrument. Starts / stops copies so each loaded one has this effect."""
+        for k in range(8):
+            want = self.index if slots[k] else 0
+            if self._have.get(k, 0) == want:
+                continue
+            ins = self.get_copy(k, 2 + self.pos)
+            ins.choose(want)
+            self._have[k] = want                       # (one that failed to start isn't tried again and again)
+            if ins.error:
+                self.error = ins.error
+            if want and ins.h:
+                if not self.params:                 # the first copy tells the settings (and their defaults)
+                    self.params = list(ins.params)
+                    self.values = dict(ins.values) if not self.values else self.values
+                for key, v in self.values.items():   # every copy follows the settings here
+                    if key in ins.values:
+                        ins.values[key] = v
+                        ins._send(key)
+        if self.index and not any(self._have.get(k) for k in range(8)) and not self.params:
+            self._load_params()
+
+    def _load_params(self):
+        """No instrument loaded yet: still show the effect's settings (from its module.json)."""
+        f = catalog.FX[self.index - 1]
+        folder = os.path.join(store.MODULES_DIR, f["id"])
+        self.params = _params(folder, f.get("json", "module.json"))[:8]
+        self.values = {p[0]: p[4] for p in self.params}
+
+    def copies(self):
+        return [self.get_copy(k, 2 + self.pos) for k, v in self._have.items() if v]
+
+    def knob(self, slot, delta):
+        if slot >= len(self.params):
+            return
+        key, _, lo, hi, _, step, _o = self.params[slot]
+        self.values[key] = max(lo, min(hi, round((self.values.get(key, lo) + delta * step) / step) * step))
+        for ins in self.copies():
+            if key in ins.values:
+                ins.values[key] = self.values[key]
+                ins._send(key)
+
+    text = Insert.text
+
+    def to_json(self):
+        return {"fx": catalog.FX[self.index - 1]["id"] if self.index else "", "values": self.values}
+
+    def from_json(self, d, slots):
+        ids = [f["id"] for f in catalog.FX]
+        self.choose(ids.index(d["fx"]) + 1 if d and d.get("fx") in ids else 0)
+        if self.index:
+            self._load_params()
+            for k, v in (d.get("values") or {}).items():
+                if k in self.values:
+                    self.values[k] = v
+        self.sync(slots)

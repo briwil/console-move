@@ -243,6 +243,7 @@ class Transport:
         self.instp = instpage.InstPage(self)
         self.engine.insert_boot = self.insfx_boot
         self.engine.insert_apply = self.insfx_apply
+        self._songfx = None                       # SONG INSERT 1 / 2 (left button 3), made when first used
         self._insfx_song = None                  # the opened song's insert effects, kept until the sound core is up
         screen.after["playhead"] = self.draw_page
         self._playing = False
@@ -443,6 +444,8 @@ class Transport:
             self.volume(self.armed, 0.05 if name == "VOL_UP" else -0.05)
         elif name == "FX":
             order = [None, "reverb", "delay"]                # (the inserts are pages of each instrument's sound)
+            if self.insert_fx_available():
+                order += ["song1", "song2"]                  # ... and the song's two (a copy on every instrument)
             self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
             if self.fx_page and not effects.AVAILABLE:
                 self.say(effects.PROBLEM or "EFFECTS AREN'T AVAILABLE", 4)
@@ -799,6 +802,22 @@ class Transport:
             ins.core = core
         return ins
 
+    def songfx(self, p):
+        """SONG INSERT 1 or 2 (p 0 / 1): one effect for the song, a copy of it on every loaded instrument."""
+        import insertfx
+        if self._songfx is None:
+            self._songfx = [insertfx.SongInsert(i, lambda k, pos: self.insfx(k, pos)) for i in (0, 1)]
+            self.engine.song_fx = self._songfx
+        return self._songfx[p]
+
+    def songfx_sync(self):
+        """Instruments loaded or taken out: each loaded one gets (or loses) its copies of the song inserts."""
+        if self._songfx is None or getattr(self.engine, "core", None) is None:
+            return
+        slots = [bool(m) for m in self.engine.slots]
+        for sf in self._songfx:
+            sf.sync(slots)
+
     def insfx_apply(self, data):
         """A song was opened: its insert effects replace the current ones (a slot the song has none for: none)."""
         if not isinstance(data, dict):
@@ -815,6 +834,11 @@ class Transport:
                     self.insfx(slot, pos).from_json(saved)
                 elif have is not None and have.h:
                     have.choose(0)
+        songs = data.get("song") or []                           # SONG INSERT 1 / 2 (none in older songs)
+        if songs or self._songfx is not None:
+            slots = [bool(m) for m in self.engine.slots]
+            for p in (0, 1):
+                self.songfx(p).from_json(songs[p] if p < len(songs) else None, slots)
         self._insfx_save()
 
     def insfx_boot(self):
@@ -841,7 +865,8 @@ class Transport:
         try:
             out = {}
             for (k, pos), v in self._insfx.items():
-                out.setdefault(str(k), {})[str(pos)] = v.to_json()
+                if pos < 2:                                        # (2-3: the song inserts' copies, saved as the song's)
+                    out.setdefault(str(k), {})[str(pos)] = v.to_json()
             json.dump({"slots": out}, open(self._insfx_path(), "w"))
         except OSError:
             pass
@@ -857,6 +882,11 @@ class Transport:
             ins = self.insfx()
             if number <= 8:
                 ins.knob(number - 1, delta)
+                self._insfx_save()
+            return
+        if self.fx_page in ("song1", "song2"):                   # SONG INSERT 1 / 2: knobs 1-8 its settings
+            if number <= 8:
+                self.songfx(0 if self.fx_page == "song1" else 1).knob(number - 1, delta)
                 self._insfx_save()
             return
         if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect, 4 the picked instrument's send

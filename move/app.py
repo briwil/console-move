@@ -532,6 +532,10 @@ def main():
             if now >= next_icon_check:
                 next_icon_check = now + 0.5
                 try:
+                    T.songfx_sync()                          # the song inserts: a copy on every loaded instrument
+                except Exception as ex:                      # noqa: BLE001
+                    print("song inserts:", ex)
+                try:
                     mode = open(ICONFILE).read().strip().lower() if os.path.exists(ICONFILE) else None
                 except OSError:
                     mode = None
@@ -702,6 +706,9 @@ def handle(name, T, m, e):
         return
     elif name == "HOME" and T.mlfo.active() and T.mlfo.insert_pos() is not None and not (m.open or m.kits.open):
         fp.open(T.insfx(None, T.mlfo.insert_pos()))    # push the wheel on an INSERT page: choose its effect
+        return
+    elif name == "HOME" and T.fx_page in ("song1", "song2") and not (m.open or m.kits.open):
+        fp.open(T.songfx(0 if T.fx_page == "song1" else 1))   # push the wheel on SONG INSERT 1 / 2: choose it
         return
     if sb.active:                                      # the sample browser has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:

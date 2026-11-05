@@ -126,7 +126,10 @@ class SampleBrowser:
     def turn(self, delta):
         if not self.entries:
             return
-        self.pick = (self.pick + (1 if delta > 0 else -1)) % len(self.entries)
+        if self.stage == "which":                          # (SAMPLE 1 ... RANDOM: stops at both ends)
+            self.pick = max(0, min(len(self.entries) - 1, self.pick + (1 if delta > 0 else -1)))
+        else:
+            self.pick = (self.pick + (1 if delta > 0 else -1)) % len(self.entries)
         self._preview()
 
     def push(self):

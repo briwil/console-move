@@ -261,14 +261,15 @@ def arp_data(T):
     import arp
     import sequencer
     c = T.mlfo.cfg()
-    onoff = lambda v: 0 if v else 1                      # (ON is listed first)
+    onoff = lambda v: 1 if v else 0                      # (OFF first, as the knob goes: OFF, then ON)
     rows = [
-        {"n": 1, "label": "ON", "options": ["ON", "OFF"], "at": onoff(c["on"])},
+        {"n": 1, "label": "ON", "options": ["OFF", "ON"], "at": onoff(c["on"])},
         {"n": 2, "label": "MODE", "options": list(arp.MODES), "at": c["mode"]},
         {"n": 3, "label": "OCTAVE", "options": ["1", "2", "3", "4"], "at": c["oct"] - 1},
-        {"n": 4, "label": "RATE", "options": [r[0] for r in sequencer.RATES], "at": c["rate"]},
+        {"n": 4, "label": "RATE", "options": [sequencer.RATES[i][0] for i in sequencer.RATE_ORDER],     # slowest to fastest, as the knob turns
+         "at": sequencer.RATE_ORDER.index(c["rate"]) if c["rate"] in sequencer.RATE_ORDER else 0},
         {"n": 5, "label": "GATE", "text": "%d%%" % c["gate"]},
-        {"n": 6, "label": "HOLD", "options": ["ON", "OFF"], "at": onoff(c["hold"])},
+        {"n": 6, "label": "HOLD", "options": ["OFF", "ON"], "at": onoff(c["hold"])},
         {"n": 7, "label": "STYLE", "options": list(arp.STYLES), "at": c["style"]},
         {"n": 0, "label": "GLIDE", "text": "%d%%" % c["glide"] if c["glide"] else "OFF"},
         {"n": 0, "label": "BEND", "text": "%+d%%" % c["bend"] if c["bend"] else "OFF"},

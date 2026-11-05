@@ -196,9 +196,9 @@ story += [
          "morph between the two, even while a sample rings. Older songs and presets: sample 2 empty, BLEND left."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer; again: back to this "
-         "page, and round again. (Shift + left button 1 steps back instead: sequencer or sound, then the "
-         "instruments, then the tape.)"),
+        ("Left button 1 again", "The picked instrument's sound page; again: its sequencer; again: its AUTOMATION "
+         "page; again: back to this page, and round again. (Shift + left button 1 steps back instead: automation "
+         "to sequencer, sequencer or sound to the instruments, then the tape.)"),
     ]),
     p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
       "and flip a click at a time. A preset or kit setting turns one preset a click and stops at the last one.",
@@ -362,13 +362,31 @@ story += [
          "<b>NUDGE</b> (a step early or late, -50 to +50 %), PULSE, HOLD, JUMP (PER NOTE type only), RANDOM, "
          "RAMP UP, RAMP DOWN (pitch), then the synth's own settings as parameter locks. "
          "Knob 1 sets the picked one."),
-        ("Record", "On a drum or synth sequencer page: the pads you play go into the pattern while it plays "
-         "(a synth note lasts as long as you hold the pad; chromatic drum pads keep their pitch). Press again to stop. "
-         "It doesn't touch the tape. Nothing is recorded into the pattern unless Record is on; it turns itself off at "
-         "Stop and when you leave the page."),
+        ("Record", "On an instrument's sound, sequencer or automation page: recording into the pattern while it "
+         "plays. The pads you play go in (a synth note lasts as long as you hold the pad; chromatic drum pads keep "
+         "their pitch), and so do the sound page's knobs: turning one puts its value on each step as it plays, as a "
+         "step lock (a drum: on the steps that have a hit; a synth: on the notes starting there), replacing what "
+         "was there. Press again to stop. It doesn't touch the tape. It turns itself off at Stop and when you "
+         "leave the instrument's pages."),
         ("Step settings colours", "Pads of tapped steps: yellow for the steps you picked, red for settings you changed, dim for the rest."),
         ("Stop", "Every sounding note is let go at Stop (Dexed and other synths too)."),
         ("Drums, by hand", "Hold a step button and press a right-half pad: the step turns on with that pitch."),
+    ]),
+
+    p("Automation page", H2),
+    p("Left button 1 after the sequencer: what is locked on this pattern's steps, one setting at a time. Recorded "
+      "knob moves show here, and so do step settings made with Shift + steps.", BODY),
+    table([
+        ("Knob 1", "Go through the settings that are set on some step: the step settings (VELOCITY, CHANCE, "
+         "MULTIPLY, PULSE...) first, then the sound's (BLEND, CUTOFF...). Each has its own colour on the step "
+         "buttons, so you can see you've switched."),
+        ("Step buttons", "Lit: that setting is on the step. Hold a lit step: its value shows, and knob 1 changes it "
+         "while you hold the step."),
+        ("Delete + step", "Take that setting off the step."),
+        ("Shift + Delete", "Take that setting off every step: it asks first (Shift + Delete again: yes)."),
+        ("Undo", "Puts back what you took off or changed."),
+        ("Pads (drum machines)", "Tap a drum's pad to see its own automation; lit pads have some."),
+        ("Left / Right, the wheel", "Steps 17-32 and on."),
     ]),
 
     p("Pads: key and scale (synths)", H2),

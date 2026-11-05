@@ -49,6 +49,8 @@ def draw(f, T, menu=None):
             input_popup(f, T)
         elif T.fx_page:                                   # left button 3: over the instrument's pages too
             fx_page(f, T)
+        elif T.seq_page and getattr(T, "auto", None) is not None and T.auto.active():
+            auto_page(f, T)
         elif T.seq_page:
             seq_page(f, T)
         elif T.drum_page:
@@ -699,6 +701,60 @@ def synth_seq_page(f, T):
         x, y = col * 65, 28 + row * 7
         f.small(x + 1, y, ("%d %s" % (i + 1, label))[:10])
         f.right(x + 62, y, str(value)[:5], small=True)
+
+
+def auto_page(f, T):
+    """AUTOMATION (left button 1 after the sequencer): one locked setting at a time (knob 1), the steps that
+    have it, a held step's value."""
+    a = T.auto
+    e = T.engine
+    d = e.drums
+    synth = T.synth_shown()
+    if synth:
+        name = (e.slots[e.slot] or "").upper() if e.slot is not None else ""
+    else:
+        names = getattr(d, "lane_names", None) or []
+        lane = T.seqp.lane
+        name = names[lane] if lane < len(names) else "LANE %d" % (lane + 1)
+        if name == "EMPTY":
+            name = "DRUM %d" % (lane + 1)
+    header(f, "AUTOMATION", str(name)[:12])
+    keys = a.keys()
+    key = a.key()
+    if key is None:
+        f.centre(64, 24, "NO AUTOMATION")
+        f.centre(64, 36, "RECORD + KNOBS WHILE PLAYING", small=True)
+        f.centre(64, 44, "OR SHIFT+STEPS ON THE SEQUENCER", small=True)
+        return
+    on = a.steps_with(key)
+    f.text(1, 12, ("1 %s" % a.label(key))[:16])
+    f.right(W - 2, 13, "%d/%d" % (a.pick + 1, len(keys)), small=True)
+    length, now = a.length(), a.playing_step()
+    for k in range(16):
+        i = a.page * 16 + k
+        x, y = 1 + k * 8, 23
+        if i >= length:
+            f.dot(x + 3, y + 3)
+            continue
+        if sequencer.dark(i, sequencer.TRIPLETS):
+            f.rect(x + 1, y + 3, 5, 1)
+            continue
+        (f.rect if i in on else f.frame)(x, y, 7, 7)
+        if i == a.held:
+            f.frame(x - 1, y - 1, 9, 9)
+        if now is not None and i == now:
+            f.rect(x + 2, y + 2, 3, 3, 0 if i in on else 1)
+    f.small(1, 33, "STEPS %d-%d OF %d   %d SET" % (a.page * 16 + 1, min(a.page * 16 + 16, length), length, len(on)))
+    if a.confirming():
+        f.frame(4, 40, 120, 17)
+        f.centre(64, 43, "TAKE %s OFF %d STEPS?" % (a.label(key)[:10], len(on)), small=True)
+        f.centre(64, 50, "SHIFT + DELETE AGAIN: YES", small=True)
+    elif a.held is not None and a.held in on:
+        f.frame(8, 40, 112, 17)
+        f.centre(64, 44, "STEP %d  %s" % (a.held + 1, a.value_text(a.held, key)))
+    else:
+        f.small(1, 43, "HOLD A LIT STEP: KNOB 1 SETS IT")
+        f.small(1, 50, "DEL+STEP: OFF  SHIFT+DEL: ALL")
 
 
 def seq_page(f, T):

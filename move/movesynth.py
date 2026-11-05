@@ -54,7 +54,7 @@ class MoveSynth:
 
     def active(self):
         T = self.T
-        return bool(T.seq_page and T.synth_shown() and T.engine and T.engine.drums)
+        return bool(T.seq_page and not getattr(T, "auto_page", False) and T.synth_shown() and T.engine and T.engine.drums)
 
     @property
     def seq(self):

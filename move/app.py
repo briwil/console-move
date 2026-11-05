@@ -74,6 +74,7 @@ import moveseq                    # noqa: E402
 import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
+import moveauto                   # noqa: E402
 import samplebrowse              # noqa: E402
 import fxpicker                  # noqa: E402
 import knobgate                   # noqa: E402
@@ -119,6 +120,7 @@ class MoveBoard:
         self.shift = False
         self.held = set()
         self.notes_down = {}               # pad -> the synth note it's playing
+        self.rec_sound = {}                # pad -> the note it is recording into the pattern (from the sound page)
 
     def __call__(self, msg):
         kind, num, val = msg[0] & 0xF0, msg[1], msg[2]
@@ -149,6 +151,8 @@ class MoveBoard:
             name = HOLD[num]
             if val and self.shift and name == "COPY":
                 k.put("SELECT")
+            elif val and self.shift and name == "CUT" and T.auto.active():
+                k.put("AUTO_CLEAR")                        # the automation page: this setting off every step
             elif val and not self.shift:
                 self.held.add(name)
                 k.put(("HOLD", name))
@@ -172,6 +176,9 @@ class MoveBoard:
             if getattr(T, "song_page", False) and not T.seq_page:
                 if val:
                     k.put(("ROW", n, "CUT" in self.held))  # song mode's rows (Delete + a row: take it out)
+                return
+            if T.seq_page and T.auto.active():
+                k.put(("AUTOSTEP", n, bool(val), "CUT" in self.held))   # hold: its value; Delete + step: off
                 return
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
@@ -221,9 +228,24 @@ class MoveBoard:
                     note = 48 + p
                 note = max(0, min(127, note + 12 * getattr(T, "octave", 0)))
                 self.notes_down[p] = note
+                if T.live_rec and e.playing and T.drum_page and not T.seq_page and seq is not None:
+                    frame = e._heard_frame()                   # recording into the pattern from the sound page
+                    try:
+                        i = seq.live_place(note, frame, e.frames_per_beat(), vel=vel)
+                        self.rec_sound[p] = (i, seq.pattern.notes[i][note], frame, seq)
+                        e.seq_changed()
+                    except Exception as ex:                    # noqa: BLE001
+                        print("pad recording:", ex)
                 (T.midi_note if T.drum_page else e.note_on)(note, vel)
             else:
                 note = self.notes_down.pop(p, None)
+                rec = self.rec_sound.pop(p, None)
+                if rec and e.playing:                          # a recorded note lasts as long as you held the pad
+                    i, nt, frame, seq = rec
+                    with seq.lock:
+                        step_frames = e.frames_per_beat() / seq.pattern.steps_per_beat(note)
+                        nt.length = max(1, min(64, round((e._heard_frame() - frame) / step_frames)))
+                    e.seq_changed()
                 if note is not None:
                     (T.midi_note if T.drum_page else lambda n, v: e.note_off(n))(note, 0)
             return
@@ -241,7 +263,7 @@ class MoveBoard:
             if lane >= d.lanes:
                 return
             if vel:
-                if T.live_rec and e.playing and T.seq_page:
+                if T.live_rec and e.playing and (T.seq_page or T.drum_page):
                     e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
                     e.seq_changed()
                 e.hit(lane, vel)
@@ -273,7 +295,7 @@ class MoveBoard:
                             st.locks.update(locks)
                 e.seq_changed()
                 T.say("STEP %s  PITCH %+d" % (",".join(str(i + 1) for i in sorted(ms.down)), semis), 2)
-            elif T.live_rec and e.playing and T.seq_page:      # recorded with its pitch: the step locks it
+            elif T.live_rec and e.playing and (T.seq_page or T.drum_page):   # recorded with its pitch: the step locks it
                 i = e.seq.live_place(lane, e._heard_frame(), e.frames_per_beat())
                 with e.seq.lock:
                     e.seq.step(lane, i).locks.update(locks)
@@ -355,7 +377,7 @@ class Lights:
     def update(self, T, board):
         e = T.engine
         self.cc(85, T.playing)
-        self.cc(86, T.recording or bool(T.live_rec and T.seq_page))
+        self.cc(86, T.recording or bool(T.live_rec and (T.seq_page or T.drum_page)))
         self.cc(58, bool(e and e.loop_on))
         self.cc(88, bool(e and not e.audible(T.armed - 1)))
         self.cc(49, board.shift)
@@ -365,8 +387,8 @@ class Lights:
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
         syn = T.msyn.active()
-        seq_lights = T.msyn.step_lights() if syn else T.mseq.step_lights() if T.mseq.active() else \
-            T.mlfo.step_lights() if T.mlfo.active() else None
+        seq_lights = T.auto.step_lights() if T.auto.active() else T.msyn.step_lights() if syn else \
+            T.mseq.step_lights() if T.mseq.active() else T.mlfo.step_lights() if T.mlfo.active() else None
         song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
         flash = getattr(T, "len_flash", None)
         if flash and (time.monotonic() > flash[0] or not (T.seq_page and seq_lights is not None)):
@@ -390,6 +412,8 @@ class Lights:
             for p in range(16):
                 pat = q.patterns[p]
                 out[p] = 127 if p == q.current else 20 if not pat.empty() else 0
+        elif T.auto.active() and not T.synth_shown():
+            out = T.auto.pad_lights()
         elif T.msyn.active():
             out = T.msyn.pad_lights()
         elif T.mseq.active() and T.mseq.held is not None:
@@ -504,6 +528,10 @@ def main():
     T.mseq = moveseq.MoveSeq(T)
     T.msyn = movesynth.MoveSynth(T)
     T.mlfo = movelfo.MoveLFO(T)
+    T.auto = moveauto.Auto(T)                        # the AUTOMATION page (left button 1 after the sequencer)
+    T.auto_page = False
+    T.has_auto_page = True
+    T.knob_recorded = lambda param: moveauto.record(T, param)   # recording into the pattern: knob moves too
     T.sbrowse = samplebrowse.SampleBrowser(T)
     T.fxpick = fxpicker.FxPicker(T)
     T.live_rec = False
@@ -613,7 +641,7 @@ def main():
             if now >= next_screen:
                 next_screen = now + 1 / FPS_SCREEN
                 menu_tick(m)
-                if T.live_rec and (not T.seq_page or (getattr(T, "_rec_was_playing", False) and not e.playing)):
+                if T.live_rec and (not (T.seq_page or T.drum_page) or (getattr(T, "_rec_was_playing", False) and not e.playing)):
                     T.live_rec = False                        # recording into the pattern ends at Stop, or when you leave the page
                     T.say("PATTERN RECORDING OFF", 2)
                 T._rec_was_playing = bool(e.playing)
@@ -692,6 +720,8 @@ def choice_knob(T, m, e, name):
         return T.mlfo.is_choice(n)
     if T.fx_page:
         return n == 1 and T.fx_page == "delay"                              # the delay's TIME steps through note lengths
+    if T.auto.active():
+        return True                                            # (the automation page counts its own clicks)
     ms = T.mseq
     if T.seq_page and ms.active():
         if ms.selected:
@@ -799,9 +829,10 @@ def handle(name, T, m, e):
             return
         if name in ("LEFT", "RIGHT"):
             name = ("KNOB", 9, 1 if name == "RIGHT" else -1, False)
-    if name == "RECORD" and T.seq_page and not menus_open(m) and (ms.active() or T.msyn.active()):
-        T.live_rec = not T.live_rec                  # on a sequencer page: the pads you play go into the pattern
-        T.say("RECORDING INTO THE PATTERN: PLAY PADS" if T.live_rec else "PATTERN RECORDING OFF", 2)
+    if (name == "RECORD" and (T.seq_page or T.drum_page) and not menus_open(m) and e and e.drums
+            and e.slot is not None and not (T.fx_page or T.inst_page)):
+        T.live_rec = not T.live_rec                  # on an instrument's pages: pads and knob moves go into the pattern
+        T.say("RECORDING INTO THE PATTERN: PADS AND KNOBS" if T.live_rec else "PATTERN RECORDING OFF", 2)
         return
     if name == "RECORD" and e and not T.recording and not e.record_tracks():
         T.say("ARM A TRACK FIRST: SHIFT + STEP BUTTON", 3)
@@ -826,6 +857,14 @@ def handle(name, T, m, e):
             if not way:
                 return
             name = ("KNOB", name[1], way, True)          # one choice (as with Shift: no speeding up)
+    if isinstance(name, tuple) and name[0] == "AUTOSTEP":
+        if T.auto.active():
+            T.auto.step(name[1], name[2], name[3])
+        return
+    if name == "AUTO_CLEAR":
+        if T.auto.active():
+            T.auto.clear()
+        return
     if isinstance(name, tuple) and name[0] == "STEP":
         if ms.active():
             ms.step(name[1], name[2], name[3])
@@ -848,8 +887,11 @@ def handle(name, T, m, e):
         return
     if isinstance(name, tuple) and name[0] == "PICK_LANE":
         if ms.held is None and e and e.drums and name[1] < e.drums.lanes:
+            changed = T.seqp.lane != name[1]
             T.seqp.lane = name[1]
             T.drum_voice = T.seqp.voice()
+            if changed and T.auto.active():
+                T.auto.lane_changed()
         return
     if isinstance(name, tuple) and name[0] == "PATTERN":
         q = pattern_seq(T)
@@ -883,6 +925,18 @@ def handle(name, T, m, e):
         return
     if name in ("DRUMS", "FX", "DRUMS_BACK"):
         T.song_page = False
+    if T.auto.active() and not (m.open or m.kits.open) and T.fx_page is None:
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            T.auto.knob(name[1], name[2], name[3])
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
+            way = knobgate.gate(("wheel-pages",), name[2], False, 1)
+            if way:
+                T.auto.arrows(way)
+            return
+        if name in ("LEFT", "RIGHT"):
+            T.auto.arrows(-1 if name == "LEFT" else 1)
+            return
     if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and (T.msyn.active() or ms.active())
             and not (m.open or m.kits.open) and T.fx_page is None):
         way = knobgate.gate(("wheel-pages",), name[2], False, 1)       # the big wheel: the 16-step pages

@@ -468,7 +468,11 @@ class Transport:
             if self.drum_page or self.inst_page:
                 return
         if self.drum_page:
-            if self.seq_page:                 # the sequencer, pressed again: round to the instrument list
+            if self.seq_page and getattr(self, "has_auto_page", False) and not getattr(self, "auto_page", False):
+                self.auto_page = True         # the sequencer, pressed again: its AUTOMATION page (the Move)
+                return
+            if self.seq_page:                 # the sequencer (or automation), pressed again: round to the instrument list
+                self.auto_page = False
                 self.back_key()
                 return
             self.seq_page = True              # the sound -> its sequencer
@@ -493,6 +497,9 @@ class Transport:
         """SHIFT+MIDI, back: the drum page or sequencer -> INSTRUMENTS -> the tape."""
         if self.fx_page:
             self.fx_page = None
+            return
+        if getattr(self, "auto_page", False):     # (the Move) the automation page: back to its sequencer
+            self.auto_page = False
             return
         if self.drum_page:
             self.drum_page = self.seq_page = False
@@ -618,6 +625,12 @@ class Transport:
             return
         param = params[number - 1]
         e.change_drum(param, self.knob_clicks(number, delta, shift))
+        rec = getattr(self, "knob_recorded", None)               # (the Move) recording into the pattern: a lock
+        if rec:
+            try:
+                rec(param)
+            except Exception as ex:                              # noqa: BLE001
+                print("knob recording:", ex)
         self.drumpage.edited[number] = time.monotonic()        # lime, with its value, for a moment
         self.say("%s  %s  %s" % (e.drums.names[self.drum_voice], e.drums.label(param), e.drums.value_text(param)), 2)
 

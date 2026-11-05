@@ -490,8 +490,9 @@ function stepNow(L, spb, length, straight, fallback) {
   // the playing step, worked out here between the Move's updates (only for steps played in order)
   if (!S.playing || L.clock === null || L.clock === undefined || !straight || !length) return fallback;
   const beats = L.clock + Math.min(0.5, (performance.now() - got) / 1000) * S.bpm / 60;
-  const k = Math.floor((beats - L.anchor) * spb + 1e-6);
-  return ((k % length) + length) % length;
+  const trip = SEQ && SEQ.trip, n = trip ? length - Math.floor(length / 4) : length;   // (triplets: 3 in the time of 4)
+  const k = Math.floor((beats - L.anchor) * spb * (trip ? 0.75 : 1) + 1e-6), a = ((k % n) + n) % n;
+  return trip ? a + Math.floor(a / 3) : a;
 }
 function drawSeq(u, pad, y0, y1) {
   const L = S.seq;
@@ -684,6 +685,10 @@ function drawDrums(u, pad, y0, y1, L) {
       const st = ln.steps[i], x = X0 + i * cw;
       if (ln.group && i % ln.group === 0 && i) { g.fillStyle = "#2b2f37"; g.fillRect(x - 1 * u, y - 8 * u, 2 * u, rh + 16 * u); }
       const bx = x + 4 * u, bw = cw - 8 * u;
+      if (SEQ.dark && i % 4 === 3) {                 // TRIPLETS: every 4th step is off
+        rr(bx, y, bw, rh, Math.min(14 * u, bw / 4)); g.strokeStyle = "#1e2127"; g.lineWidth = 2 * u; g.stroke();
+        continue;
+      }
       rr(bx, y, bw, rh, Math.min(14 * u, bw / 4));
       if (st[0]) {
         g.globalAlpha = 0.45 + 0.55 * (st[1] ? st[1] / 127 : 0.8); g.fillStyle = col; g.fill(); g.globalAlpha = 1;
@@ -729,13 +734,14 @@ function drawNotes(u, pad, y0, y1, L) {
     if (bar || beat) { g.fillStyle = bar ? "#2b2f37" : "#1b1e23"; g.fillRect(x - 1 * u, top, bar ? 3 * u : 2 * u, y1 - top); }
   }
   g.fillStyle = ACC + "10"; g.fillRect(X0 + L.first * cw, top, Math.min(16, SEQ.length - L.first) * cw, y1 - top);
+  if (SEQ.dark) for (let i = 3; i < cols; i += 4) { g.fillStyle = "rgba(0,0,0,.6)"; g.fillRect(X0 + i * cw, top, cw, y1 - top); }
   if (SEQ.length < cols) { g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(X0 + SEQ.length * cw, top, (cols - SEQ.length) * cw, y1 - top); }
   for (const [step, note, len, vel, chance, ratchet, locks, comp] of notes) {
     if (note < lo || note > hi) continue;
     const x = X0 + step * cw + 3 * u, y = top + (hi - note) * rh + 3 * u, w = Math.max(8 * u, len * cw - 6 * u), h = Math.max(6 * u, rh - 6 * u);
     const shade = COLORS[((note % 12) * 5) % 8];
     rr(x, y, w, h, Math.min(10 * u, h / 3));
-    const faded = SEQ.per_note && L.lane !== null && L.lane !== undefined && L.lane !== note;
+    const faded = (SEQ.per_note && L.lane !== null && L.lane !== undefined && L.lane !== note) || (SEQ.dark && step % 4 === 3);
     g.globalAlpha = (faded ? 0.3 : 1) * (0.5 + 0.5 * (vel ? vel / 127 : 0.8)); g.fillStyle = shade; g.fill(); g.globalAlpha = 1;
     if ((L.selected || []).includes(step) || (L.down || []).includes(step)) { g.strokeStyle = "#eceef1"; g.lineWidth = 4 * u; g.stroke(); }
     const mark = chance ? "%" : ratchet !== 1 ? "×" + (ratchet || "?") : (!vel ? "?" : (locks || comp ? "◆" : ""));

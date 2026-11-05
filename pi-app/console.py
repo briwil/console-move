@@ -565,7 +565,7 @@ class Transport:
             placed = held.pop(note, None)
             if placed and e.playing:
                 step, at = placed
-                steps = round((e._heard_frame() - at) / (e.frames_per_beat() / e.seq.pattern.steps_per_beat()))
+                steps = round((e._heard_frame() - at) / (e.frames_per_beat() / (e.seq.pattern.steps_per_beat() * e.seq._tf())))
                 if steps > 1:
                     e.seq.change_note(step, note, "length", steps - 1)
                     e.seq_changed()

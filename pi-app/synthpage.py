@@ -135,7 +135,7 @@ class SynthPage:
         self.key_sound(n, False)
         if row in self.down:
             pitch, i, at = self.down.pop(row)
-            steps = round((heard_frame - at) / (e.frames_per_beat() / self.seq.pattern.steps_per_beat()))
+            steps = round((heard_frame - at) / (e.frames_per_beat() / (self.seq.pattern.steps_per_beat() * self.seq._tf())))
             if steps > 1:
                 self.seq.change_note(i, pitch, "length", steps - 1)
                 e.seq_changed()
@@ -363,7 +363,8 @@ class SynthPage:
             y = top + r * row_h
             pitch = shown[row]
             lane_len = p.lane_length(pitch)                  # this row's own length, or the pattern's
-            playing = raw % lane_len if raw is not None else None
+            playing = (sequencer.phys(raw % (sequencer.live_len(lane_len, seq.trip) or 1), seq.trip)
+                       if raw is not None else None)
             root = (pitch - seq.root) % 12 == 0
             tag = colour if root else tuple(round(c * 0.7) for c in colour)
             pygame.draw.rect(surf, tag, (20, y, 46, ch), border_radius=5)

@@ -28,11 +28,11 @@ SIZE_ON, SIZE_OFF = 28, 24
 LETTERS = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 MAX_NAME = 24
 CONFIRM = ("PLAY", "ENTER", "HOME")          # HOME is a push on the big knob
-SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "FORMAT", "UPDATE"]    # (no WI-FI, INPUT or OUTPUT: the Move handles those itself)
+SETTINGS = ["SYNC", "TEMPO", "TIMESIG", "TRIPLETS", "FORMAT", "UPDATE"]    # (no WI-FI, INPUT or OUTPUT: the Move handles those itself)
 ROWS = 7                                     # setting rows on screen at once (the layout's set_label1-7)
 PASSWORD_LETTERS = LETTERS + "!@#$%^&*()+=.,?:;'\"/<>[]{}|~`"
 MAX_PASSWORD = 63
-LABELS = {"DRUMS": "DRUM MACHINE", "WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
+LABELS = {"DRUMS": "DRUM MACHINE", "WIFI": "WI-FI", "SYNC": "SYNC", "TEMPO": "TEMPO", "TIMESIG": "TIME SIGNATURE", "TRIPLETS": "TRIPLETS", "FORMAT": "EXPORT FORMAT", "INPUT": "INPUT", "OUTPUT": "OUTPUT",
           "UPDATE": "SOFTWARE UPDATE", "SCREEN": "EXTERNAL SCREEN"}
 FORMAT_NAMES = {"wav": "WAV  (24-bit)", "aiff": "AIFF  (24-bit)", "flac": "FLAC  (24-bit, smaller)",
                 "m4a": "M4A  (AAC 256k, smallest)"}
@@ -213,7 +213,7 @@ class Menu:
             elif SETTINGS[self.row] == "WIFI":
                 self.mode, self.msg, self.confirm, self.pick = "wifi", "", None, 0
                 self.wifi.scan()
-            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "FORMAT", "INPUT", "OUTPUT", "DRUMS", "TEMPO"):
+            elif SETTINGS[self.row] in ("SYNC", "TIMESIG", "TRIPLETS", "FORMAT", "INPUT", "OUTPUT", "DRUMS", "TEMPO"):
                 self.editing = not self.editing            # push: turn its value, push again: back to the rows
         elif name == "FILE":
             if self.editing:
@@ -286,6 +286,9 @@ class Menu:
             e.set_time_sig(*sigs[(i + (1 if delta > 0 else -1)) % len(sigs)])
             tape.set_signature(*e.time_sig)
             self.msg = ""
+        elif what == "TRIPLETS":
+            e.set_triplets(delta > 0)                      # right: ON, left: OFF
+            self.msg = ""
         elif what == "TEMPO":
             if self.transport.synced:
                 self.say("THE TEMPO COMES FROM THE OP-XY (EXTERNAL SYNC)")
@@ -313,6 +316,8 @@ class Menu:
         if what == "TIMESIG":
             n, d = e.time_sig
             return "%d/%d%s" % (n, d, "  (%s beats of an eighth note)" % n if d == 8 else "")
+        if what == "TRIPLETS":
+            return "ON  (steps 4, 8, 12, 16 off)" if e.triplets else "OFF"
         if what == "FORMAT":
             return FORMAT_NAMES.get(e.export_format, e.export_format.upper())
         if what == "INPUT":

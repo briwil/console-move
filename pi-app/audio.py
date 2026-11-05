@@ -547,6 +547,7 @@ class Engine:
         self.levels = [None] * CHANNELS
         self.bpm = bpm
         self.time_sig = [4, 4]                  # beats in a bar, and which note is a beat (4/4, 6/8...)
+        self.triplets = False                   # SETTINGS > TRIPLETS: every 4th step dark, 3 in the time of 4
         self.link_nudge = 0                     # Link: frames to move the tape by each block to stay on its beat
         self.tape_beats = 0.0
         self.volumes = [0.8] * TRACKS
@@ -1196,6 +1197,16 @@ class Engine:
         for s in {id(x): x for x in list(self.seqs.values()) + [self.seq]}.values():
             s.set_bar_beats(self.bar_beats())
 
+    def set_triplets(self, on):
+        """SETTINGS > TRIPLETS (saved with the song): every sequencer follows when its pattern next comes round
+        (at once while stopped)."""
+        with self.lock:
+            self.triplets = bool(on)
+            sequencer.TRIPLETS = self.triplets
+            self.dirty.add(-1)
+        for s in {id(x): x for x in list(self.seqs.values()) + [self.seq]}.values():
+            s.follow_triplets(self.playing)
+
     def set_bpm(self, bpm):
         """Change the tempo (only while stopped). The audio stays put; the bar lines move."""
         with self.lock:
@@ -1229,6 +1240,8 @@ class Engine:
             self._set_beats_len()
         sig = meta.get("time_sig")
         self.time_sig = [int(sig[0]), int(sig[1])] if isinstance(sig, list) and len(sig) == 2 else [4, 4]
+        self.triplets = bool(meta.get("triplets", False))
+        sequencer.TRIPLETS = self.triplets            # (the sequencers made below start with it)
         self.volumes = [float(v) for v in meta.get("volumes", self.volumes)][:TRACKS]
         self.mutes = set(meta.get("mutes", []))
         self.solos = set(meta.get("solos", []))
@@ -1261,6 +1274,8 @@ class Engine:
         elif isinstance(self.seq, notes.NoteSequencer) != self.is_synth(machine):
             self.seq = self._new_seq(machine)
         self.seqs[machine] = self.seq
+        for sq in {id(x): x for x in list(self.seqs.values()) + [self.seq]}.values():
+            sq.follow_triplets(False)                  # (an opened song: its own TRIPLETS from the start)
         # the instrument slots (older songs: their drum machine in slot 1)
         saved_slots = meta.get("slots")
         if not isinstance(saved_slots, list):
@@ -1354,7 +1369,7 @@ class Engine:
                         todo[t] = self.tracks[t][:self._extent(self.tracks[t])].copy()
             changed = bool(self.dirty)
             self.dirty.clear()
-            meta = {"bpm": self.bpm, "time_sig": self.time_sig, "rate": self.rate, "volumes": self.volumes,
+            meta = {"bpm": self.bpm, "time_sig": self.time_sig, "triplets": self.triplets, "rate": self.rate, "volumes": self.volumes,
                     "pans": self.pans, "stereo": sorted(self.stereo), "inputs": self.inputs,
                     "mutes": sorted(self.mutes), "solos": sorted(self.solos), "loop": [self.loop_on, self.loop_a, self.loop_b],
                     "rec_mode": self.rec_mode, "regions": [[list(r) for r in rs] for rs in self.regions],

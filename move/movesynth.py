@@ -102,7 +102,8 @@ class MoveSynth:
             seq = self.seq
             if self.lane is not None and self.kind:
                 n = self.seq.pattern.lane_length(self.lane)
-                return seq.raw_step(e._heard_frame(), e.frames_per_beat(), self.lane) % n
+                k = seq.raw_step(e._heard_frame(), e.frames_per_beat(), self.lane)
+                return sequencer.phys(k % (sequencer.live_len(n, seq.trip) or 1), seq.trip)
             return seq.position(e._heard_frame(), e.frames_per_beat())[0]
         except Exception:
             return None
@@ -114,6 +115,8 @@ class MoveSynth:
 
     def step(self, n, down, shift=False):
         i = self.first() + n - 1
+        if sequencer.dark(i, sequencer.TRIPLETS):
+            return                                              # (TRIPLETS: every 4th step is off and does nothing)
         if shift:
             if not down:
                 return
@@ -496,7 +499,7 @@ class MoveSynth:
         blink = int(time.monotonic() * 4) % 2
         for k in range(PAGE):
             i = first + k
-            if i >= length:
+            if i >= length or sequencer.dark(i, sequencer.TRIPLETS):
                 v = 0
             elif i in self.selected:
                 v = 127 if blink else 0

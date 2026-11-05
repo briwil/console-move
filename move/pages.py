@@ -5,6 +5,8 @@ state (console.Transport, the engine, the menus) and draws it; nothing here chan
 """
 import time
 
+import sequencer
+
 import numpy as np
 
 import tape
@@ -665,6 +667,9 @@ def synth_seq_page(f, T):
         if i >= length:
             f.dot(x + 3, y + 3)
             continue
+        if sequencer.dark(i, sequencer.TRIPLETS):        # TRIPLETS: an off step, a dash
+            f.rect(x + 1, y + 3, 5, 1)
+            continue
         on = (ms.lane in ms.notes_at(i)) if (ms.lane is not None and ms.kind) else bool(ms.notes_at(i))
         (f.rect if on else f.frame)(x, y, 7, 7)
         if i in ms.down or i in ms.selected:
@@ -724,6 +729,9 @@ def seq_page(f, T):
         x, y = 1 + k * 8, 11
         if i >= ln.length:
             f.dot(x + 3, y + 3)
+            continue
+        if sequencer.dark(i, sequencer.TRIPLETS):        # TRIPLETS: an off step, a dash
+            f.rect(x + 1, y + 3, 5, 1)
             continue
         on = ln.steps[i].on
         (f.rect if on else f.frame)(x, y, 7, 7)
@@ -909,12 +917,17 @@ def settings_page(f, menu):
     white box and the wheel changes it; push again: back to the rows."""
     import menu as menu_mod
     names = {"TIMESIG": "TIME SIG", "FORMAT": "FORMAT", "UPDATE": "UPDATE", "SYNC": "SYNC", "TEMPO": "TEMPO",
-             "SCREEN": "EXTERNAL SCREEN"}
+             "SCREEN": "EXTERNAL SCREEN", "TRIPLETS": "TRIPLETS"}
     header(f, "SETTINGS", "TURN, PUSH: DONE" if menu.editing else "PUSH: CHANGE IT")
     rows = menu_mod.SETTINGS
     pitch = 9 if len(rows) <= 5 else 8                 # (six rows: a little closer together)
+    fit = 5 if pitch == 9 else 6                       # more than six: the list scrolls with the picked row
+    first = max(0, min(menu.row - fit + 1, len(rows) - fit)) if len(rows) > fit else 0
     for i, what in enumerate(rows):
-        y = 12 + i * 9 if pitch == 9 else 11 + i * 8
+        if not first <= i < first + fit:
+            continue
+        j = i - first
+        y = 12 + j * 9 if pitch == 9 else 11 + j * 8
         full = str(menu.setting_text(what) or "")
         short = full.split("  ")[0].split(": ")[0].upper()[:14]
         label = names.get(what, menu_mod.LABELS.get(what, what))

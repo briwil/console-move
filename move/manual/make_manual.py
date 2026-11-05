@@ -247,7 +247,8 @@ story += [
         ("Knob 1  DEST", "Which setting it moves (numbers only): the instrument's settings, then the number settings of "
          "its two insert effects (shown I1 / I2 and the setting's name, e.g. I1 CUTOFF). Choose the effect first."),
         ("Knob 2  WAVE", "Sine, triangle, saw up / down, square, random."),
-        ("Knob 3  SPEED", "8 bars down to 1/32 of a beat, in time with the tempo."),
+        ("Knob 3  SPEED", "8 bars down to 1/32 of a beat, in time with the tempo, with triplet speeds (1/2T, "
+         "1/4T, 1/8T, 1/16T) after their straight ones."),
         ("Knob 4  DEPTH", "How far it swings, -100 to +100 %."),
         ("Knob 5  PHASE", "Where in the cycle it starts."),
         ("Knob 6  MODE", "FREE (runs with the song) or TRIG (restarts at the pattern's first step)."),
@@ -260,6 +261,14 @@ story += [
     p("The drum sequencer", H2),
     p("The steps live on the 16 step buttons, the screen shows what the knobs do. Each drum (lane) has its "
       "own length, up to 64 steps, and its own speed.", BODY),
+    p("<b>Triplets:</b> Menu, SETTINGS, <b>TRIPLETS</b> (below TIME SIG, saved with the project) turns every 4th "
+      "step off: steps 4, 8, 12 and 16 go dark, do nothing when pressed and show as a dash, and the other steps "
+      "play 3 in the time of 4. So a 1/16 lane plays 1/8 triplets, 1/8 plays 1/4 triplets and 1/32 plays 1/16 "
+      "triplets. It works on every instrument's sequencer (drums and synths) at once; a pattern keeps its length "
+      "in bars, so everything stays lined up. Steps already on the dark buttons are kept, silent, and come back "
+      "when it's off. Turned on or off while playing, each pattern changes when it next comes round. The lane's "
+      "RATE choices are straight ones (1/1 to 1/32); a lane from an older song on 1/8T or 1/16T keeps it until "
+      "you turn its RATE. The arp keeps its own triplet rates.", BODY),
     screens(("seq-lane", "The drum's 16 steps (small, at the top) and the lane's settings."),
             ("seq-hold", "Shift + steps 1 and 5 tapped: they blink, and the pads are their settings.")),
     Spacer(1, 6),

@@ -18,7 +18,16 @@ import random
 
 WAVES = ["SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "RANDOM"]
 SPEEDS = [("8BAR", 32.0), ("4BAR", 16.0), ("2BAR", 8.0), ("1BAR", 4.0), ("1/2", 2.0), ("1/4", 1.0),
-          ("1/8", 0.5), ("1/16", 0.25), ("1/32", 0.125)]
+          ("1/8", 0.5), ("1/16", 0.25), ("1/32", 0.125),
+          # triplets (added later: songs store the place, so new ones go at the end; SPEED_ORDER is the knob's order)
+          ("1/2T", 4 / 3), ("1/4T", 2 / 3), ("1/8T", 1 / 3), ("1/16T", 1 / 6)]
+SPEED_ORDER = sorted(range(len(SPEEDS)), key=lambda i: -SPEEDS[i][1])    # slow to fast: 1/4, 1/4T, 1/8...
+
+
+def next_speed(speed, way):
+    """The knob's next speed (slow to fast, each triplet after its straight one)."""
+    at = SPEED_ORDER.index(speed) if speed in SPEED_ORDER else 0
+    return SPEED_ORDER[max(0, min(len(SPEED_ORDER) - 1, at + (1 if way > 0 else -1)))]
 MODES = ["FREE", "TRIG"]
 COUNT = 2
 STEPS = 16

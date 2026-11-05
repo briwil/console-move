@@ -123,10 +123,22 @@ class NoteSequencer:
         self.seed = random.randrange(1 << 30)
         self.undo_stack = []
         self.arp_cfg = arp.default()     # the instrument's arpeggiator (all its patterns)
+        self.trip = sequencer.TRIPLETS   # triplets as it plays now (see sequencer.TRIPLETS)
 
     @property
     def pattern(self):
         return self.patterns[self.current]
+
+    def _tf(self):
+        return sequencer.TRIP_SPEED if self.trip else 1.0
+
+    def follow_triplets(self, playing):
+        """TRIPLETS changed: stopped, take it now (playing: events() takes it when the pattern comes round)."""
+        with self.lock:
+            if not playing and self.trip != sequencer.TRIPLETS:
+                self.trip = sequencer.TRIPLETS
+                self._cyc.clear()
+                self._decided.clear()
 
     # ------------------------------------------------------------ the rows
     def degrees(self):
@@ -261,7 +273,7 @@ class NoteSequencer:
         """One row's own rate. Back at the pattern's rate, it follows the pattern again. Returns its rate (an index)."""
         with self.lock:
             p = self.pattern
-            r = next_rate(p.lane_rate.get(pitch, p.rate), delta)
+            r = sequencer.next_straight_rate(p.lane_rate.get(pitch, p.rate), delta)
             if r == p.rate:
                 p.lane_rate.pop(pitch, None)
             else:
@@ -275,16 +287,16 @@ class NoteSequencer:
             if what == "length":
                 p.length = max(1, min(MAX_STEPS, p.length + delta))
             elif what == "rate":                      # a pure speed change: the steps stay as they are
-                p.rate = next_rate(p.rate, delta)
+                p.rate = sequencer.next_straight_rate(p.rate, delta)
             return getattr(p, what)
 
     def live_place(self, note, tape_frame, frames_per_beat, length=1, vel=DEFAULT_VELOCITY):
         """A note played while recording: onto the nearest step. Returns the step."""
         with self.lock:
             p = self.pattern
-            step_frames = frames_per_beat / p.steps_per_beat(note)
+            step_frames = frames_per_beat / (p.steps_per_beat(note) * self._tf())
             k = round((tape_frame - self.anchor) / step_frames)
-            i = k % p.lane_length(note)
+            i = sequencer.phys(k % (sequencer.live_len(p.lane_length(note), self.trip) or 1), self.trip)
             p.notes.setdefault(i, {})[note] = Note(length, vel)
             if self.anchor + k * step_frames > tape_frame:
                 self._skip.add((note, k))
@@ -319,19 +331,21 @@ class NoteSequencer:
     # ------------------------------------------------------------ playing (the audio thread)
     def pattern_frames(self, frames_per_beat):
         p = self.pattern
-        return p.length * frames_per_beat / p.steps_per_beat()
+        return sequencer.live_len(p.length, self.trip) * frames_per_beat / (p.steps_per_beat() * self._tf())
 
     def events(self, start, frames, frames_per_beat):
         """The notes starting in [start, start + frames): [(offset, note, velocity, locks with "gate")]."""
         out = []
         with self.lock:
             end = start + frames
-            if self.queued is not None:
+            if self.queued is not None or self.trip != sequencer.TRIPLETS:
                 length = self.pattern_frames(frames_per_beat)
                 boundary = self.anchor + math.ceil((start - self.anchor) / length - 1e-9) * length
                 if boundary < end:
                     out += self._events(start, boundary, start, frames_per_beat)
-                    self.current, self.queued = self.queued, None
+                    if self.queued is not None:
+                        self.current, self.queued = self.queued, None
+                    self.trip = sequencer.TRIPLETS       # (triplets on / off: from the pattern's start)
                     self.anchor = boundary
                     self._decided.clear()
                     self._cyc.clear()
@@ -346,9 +360,10 @@ class NoteSequencer:
         """The pattern's rate, then each rate a row has chosen for itself (a row's own rate: its steps are longer
         or shorter than the pattern's)."""
         p = self.pattern
-        out = self._events_at(a, b, block_start, fpb, p.steps_per_beat(), lambda pitch: pitch not in p.lane_rate)
+        f = self._tf()
+        out = self._events_at(a, b, block_start, fpb, p.steps_per_beat() * f, lambda pitch: pitch not in p.lane_rate)
         for r in sorted(set(p.lane_rate.values())):
-            out += self._events_at(a, b, block_start, fpb, RATES[r][1], lambda pitch, r=r: p.lane_rate.get(pitch) == r)
+            out += self._events_at(a, b, block_start, fpb, RATES[r][1] * f, lambda pitch, r=r: p.lane_rate.get(pitch) == r)
         out.sort(key=lambda e: e[0])
         return out
 
@@ -375,13 +390,15 @@ class NoteSequencer:
                         hits.append((pitch, n, cycle))
             else:
                 own = set(p.lane_len) | set(p.lane_rate)
-                hits = [(pitch, n, k // p.length) for pitch, n in p.at(k % p.length).items()
+                trip = self.trip
+                L = sequencer.live_len(p.length, trip) or 1       # (triplets: the dark steps don't play)
+                hits = [(pitch, n, k // L) for pitch, n in p.at(sequencer.phys(k % L, trip)).items()
                         if pitch not in own and want(pitch)]
                 for pitch in own:                                  # a row with its own length or rate loops on its own
                     if not want(pitch):
                         continue
-                    ln = p.lane_length(pitch)
-                    n = p.at(k % ln).get(pitch)
+                    ln = sequencer.live_len(p.lane_length(pitch), trip) or 1
+                    n = p.at(sequencer.phys(k % ln, trip)).get(pitch)
                     if n is not None:
                         hits.append((pitch, n, k // ln))
             for pitch, n, loop in hits:
@@ -417,13 +434,14 @@ class NoteSequencer:
         """The step playing (one per pattern: [step], like the drum sequencer's per-lane list)."""
         with self.lock:
             p = self.pattern
-            return [math.floor((tape_frame - self.anchor) / (frames_per_beat / p.steps_per_beat())) % p.length]
+            k = math.floor((tape_frame - self.anchor) / (frames_per_beat / (p.steps_per_beat() * self._tf())))
+            return [sequencer.phys(k % (sequencer.live_len(p.length, self.trip) or 1), self.trip)]
 
     def raw_step(self, tape_frame, frames_per_beat, pitch=None):
         """How many steps have played since the pattern began (a row with its own length wraps it itself); at a
         row's own rate, when its pitch is given."""
         with self.lock:
-            return math.floor((tape_frame - self.anchor) / (frames_per_beat / self.pattern.steps_per_beat(pitch)))
+            return math.floor((tape_frame - self.anchor) / (frames_per_beat / (self.pattern.steps_per_beat(pitch) * self._tf())))
 
     # ------------------------------------------------------------ saving
     def to_json(self):

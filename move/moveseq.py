@@ -304,6 +304,8 @@ class MoveSeq:
         """Step button n (1-16). Shift + tap: select steps (they blink) to set them with the pads; tap any step
         (without Shift) to finish. Otherwise a tap turns the step on or off."""
         i = self.first() + n - 1
+        if sequencer.dark(i, sequencer.TRIPLETS):
+            return                                            # (TRIPLETS: every 4th step is off and does nothing)
         if not down:
             self.down.discard(i)
             return
@@ -391,7 +393,7 @@ class MoveSeq:
         out = []
         for k in range(PAGE):
             i = first + k
-            if i >= ln.length:
+            if i >= ln.length or sequencer.dark(i, sequencer.TRIPLETS):
                 v = 0
             elif i in self.selected:
                 v = 127 if int(time.monotonic() * 4) % 2 else 0

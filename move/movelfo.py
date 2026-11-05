@@ -326,7 +326,7 @@ class MoveLFO:
             elif k == 1:
                 l["wave"] = max(0, min(len(lfo.WAVES) - 1, l["wave"] + one))
             elif k == 2:
-                l["speed"] = max(0, min(len(lfo.SPEEDS) - 1, l["speed"] + one))
+                l["speed"] = lfo.next_speed(l["speed"], one)
             else:
                 l["mode"] = max(0, min(len(lfo.MODES) - 1, l["mode"] + one))
         elif k == 3:

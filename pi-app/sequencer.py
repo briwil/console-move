@@ -29,6 +29,51 @@ RATES = [("1/16", 4), ("1/16T", 6), ("1/8", 2), ("1/8T", 3), ("1/32", 8),
 RATE_ORDER = sorted(range(len(RATES)), key=lambda i: RATES[i][1])
 
 
+# TRIPLETS (SETTINGS, saved with the song): every 4th step is dark (steps 4, 8, 12, 16 don't play and can't be
+# set) and the others play 3 in the time of 4, so 1/16 sounds as 1/8T, 1/8 as 1/4T, 1/32 as 1/16T. The steps on
+# the dark buttons are kept (they come back when it's off). TRIPLETS is what was asked for; each sequencer's own
+# .trip follows it when its pattern next comes round (or at once while stopped).
+TRIPLETS = False
+TRIP_SPEED = 0.75                                    # 3 steps in the time of 4
+
+
+def dark(i, trip):
+    """A dark step (every 4th) while triplets are on."""
+    return bool(trip) and i % 4 == 3
+
+
+def live_len(length, trip):
+    """How many of a lane's steps play: all of them, or (triplets) all but every 4th."""
+    return length - length // 4 if trip else length
+
+
+def phys(a, trip):
+    """The a-th step that plays -> its step number (triplets: past the dark ones)."""
+    return a + a // 3 if trip else a
+
+
+def played(i, trip):
+    """A step number -> how many steps play before it (the inverse of phys, for a step that isn't dark)."""
+    return i - i // 4 if trip else i
+
+
+STRAIGHT = [i for i in RATE_ORDER if not RATES[i][0].endswith("T")]    # (the step sequencer's RATE choices)
+
+
+def next_straight_rate(rate, delta):
+    """The sequencer's RATE knob: straight rates only (TRIPLETS makes them triplets); a lane still on an old
+    triplet rate goes to the straight one next to it."""
+    if rate in STRAIGHT:
+        at = STRAIGHT.index(rate)
+        return STRAIGHT[max(0, min(len(STRAIGHT) - 1, at + (1 if delta > 0 else -1)))]
+    spb = RATES[rate][1]
+    if delta > 0:
+        faster = [i for i in STRAIGHT if RATES[i][1] > spb]
+        return faster[0] if faster else STRAIGHT[-1]
+    slower = [i for i in STRAIGHT if RATES[i][1] < spb]
+    return slower[-1] if slower else STRAIGHT[0]
+
+
 def next_rate(rate, delta):
     """The rate one step slower (delta < 0) or faster (delta > 0) than this one (an index into RATES)."""
     at = RATE_ORDER.index(rate) if rate in RATE_ORDER else RATE_ORDER.index(0)
@@ -155,10 +200,23 @@ class Sequencer:
         self.undo_stack = []                 # (pattern number, copy of it before an edit), newest last
         self._cyc = {}                       # lane -> [time round, its first slot, its path, previous start, path]
         self.seed = random.randrange(1 << 30)
+        self.trip = TRIPLETS                 # triplets as this sequencer plays them now (see TRIPLETS)
 
     @property
     def pattern(self):
         return self.patterns[self.current]
+
+    def spb(self, ln):
+        """A lane's steps per beat as it plays (triplets: 3 in the time of 4)."""
+        return ln.steps_per_beat() * (TRIP_SPEED if self.trip else 1.0)
+
+    def follow_triplets(self, playing):
+        """TRIPLETS changed: stopped, take it now (playing: events() takes it when the pattern comes round)."""
+        with self.lock:
+            if not playing and self.trip != TRIPLETS:
+                self.trip = TRIPLETS
+                self._cyc.clear()
+                self._decided.clear()
 
     # ------------------------------------------------------------ editing (from the screen's thread)
 
@@ -199,9 +257,9 @@ class Sequencer:
         Returns the step number."""
         with self.lock:
             ln = self.lane(lane)
-            step_frames = frames_per_beat / ln.steps_per_beat()
+            step_frames = frames_per_beat / self.spb(ln)
             k = round((tape_frame - self.anchor) / step_frames)
-            i = k % ln.length
+            i = phys(k % live_len(ln.length, self.trip), self.trip)
             ln.steps[i].on = True
             if self.anchor + k * step_frames > tape_frame:
                 self._skip.add((lane, k))    # it's just ahead: you've played it already, don't play it twice
@@ -262,7 +320,7 @@ class Sequencer:
                 if ln.hits:
                     self._fill(ln)
             elif what == "rate":                      # a pure speed change: the steps stay as they are
-                ln.rate = next_rate(ln.rate, delta)
+                ln.rate = next_straight_rate(ln.rate, delta)
             elif what == "hits":
                 ln.hits = max(0, min(ln.length, ln.hits + (1 if delta > 0 else -1)))
                 self._fill(ln)
@@ -275,8 +333,9 @@ class Sequencer:
     @staticmethod
     def _fill(ln):
         """Euclidean fill: turn the lane's steps on and off (velocities and locks stay on their steps)."""
-        for i, on in enumerate(euclid(ln.hits, ln.length, ln.rotate)):
-            ln.steps[i].on = bool(on)
+        n = live_len(ln.length, TRIPLETS)                 # (triplets: spread over the steps that play)
+        for a, on in enumerate(euclid(ln.hits, n, ln.rotate)):
+            ln.steps[phys(a, TRIPLETS)].on = bool(on)
 
     def choose_pattern(self, n, playing):
         """Pick pattern n: straight away when stopped, else at the end of the current one."""
@@ -302,7 +361,7 @@ class Sequencer:
     # ------------------------------------------------------------ playing (from the audio thread)
 
     def pattern_frames(self, frames_per_beat):
-        return max(ln.length * frames_per_beat / ln.steps_per_beat() for ln in self.pattern.lanes)
+        return max(live_len(ln.length, self.trip) * frames_per_beat / self.spb(ln) for ln in self.pattern.lanes)
 
     def events(self, start, frames, frames_per_beat):
         """The hits whose time falls in [start, start + frames) tape frames:
@@ -310,12 +369,14 @@ class Sequencer:
         out = []
         with self.lock:
             end = start + frames
-            if self.queued is not None:
+            if self.queued is not None or self.trip != TRIPLETS:
                 length = self.pattern_frames(frames_per_beat)
                 boundary = self.anchor + math.ceil((start - self.anchor) / length - 1e-9) * length
                 if boundary < end:
                     out += self._events(start, boundary, start, frames_per_beat)
-                    self.current, self.queued = self.queued, None
+                    if self.queued is not None:
+                        self.current, self.queued = self.queued, None
+                    self.trip = TRIPLETS                 # (triplets on / off: from the pattern's start)
                     self.anchor = boundary
                     self._decided.clear()
                     self._cyc.clear()
@@ -331,9 +392,14 @@ class Sequencer:
     def _path(self, li, ln, cycle):
         """One time round the lane: [(step, plays)]. Random choices are the same for the same time round."""
         L = ln.length
+        trip = getattr(self, "trip", False)
         rng = random.Random(hash((self.seed, li, cycle)))
         path, i, used = [], 0, set()
-        while i < L and len(path) < 4 * L:
+        while True:
+            while dark(i, trip):                         # (triplets: the dark steps are passed over)
+                i += 1
+            if not (i < L and len(path) < 4 * L):
+                break
             c = ln.steps[i].comp
             path.append((i, True))
             if "pulse" in c:
@@ -362,9 +428,11 @@ class Sequencer:
     def _slot(self, li, ln, k):
         """Slot k (counting from PLAY) of a lane: (step, plays, time round the lane)."""
         L = ln.length
+        trip = getattr(self, "trip", False)
         if not any(ln.steps[i].comp.keys() & {"pulse", "hold", "jump"} for i in range(L)):
             self._cyc.pop(li, None)
-            return k % L, True, k // L
+            n = live_len(L, trip) or 1
+            return phys(k % n, trip), True, k // n
         st = self._cyc.get(li)
         if st and st[3] is not None and st[3] <= k < st[1]:
             i, plays = st[4][k - st[3]]
@@ -384,7 +452,7 @@ class Sequencer:
     def _events(self, a, b, block_start, fpb):
         out = []
         for li, ln in enumerate(self.pattern.lanes):
-            step_frames = fpb / ln.steps_per_beat()
+            step_frames = fpb / self.spb(ln)
             first = math.floor((a - self.anchor) / step_frames)
             last = math.floor((b - self.anchor) / step_frames)
             for k in range(first - 1, last + 2):        # (a nudged step can land in a neighbour's time)
@@ -431,8 +499,9 @@ class Sequencer:
         with self.lock:
             out = []
             for li, ln in enumerate(self.pattern.lanes):
-                k = math.floor((tape_frame - self.anchor) / (frames_per_beat / ln.steps_per_beat()))
-                out.append(self._slot(li, ln, k)[0] if k >= 0 else k % ln.length)
+                k = math.floor((tape_frame - self.anchor) / (frames_per_beat / self.spb(ln)))
+                n = live_len(ln.length, self.trip) or 1
+                out.append(self._slot(li, ln, k)[0] if k >= 0 else phys(k % n, self.trip))
             return out
 
     # ------------------------------------------------------------ saving

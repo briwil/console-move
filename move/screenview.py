@@ -332,7 +332,8 @@ def _extra_pages(T, out, base):
         out["knobs"] = [
             _card(1, "DEST", vals[0][1], choice=True),
             _card(2, "WAVE", vals[1][1], choice=True, options=len(lfo.WAVES), at=l["wave"]),
-            _card(3, "SPEED", vals[2][1], choice=True, options=len(lfo.SPEEDS), at=l["speed"]),
+            _card(3, "SPEED", vals[2][1], choice=True, options=len(lfo.SPEEDS),
+                  at=lfo.SPEED_ORDER.index(l["speed"]) if l["speed"] in lfo.SPEED_ORDER else 0),
             _card(4, "DEPTH", vals[3][1], (l["depth"] + 100) / 200.0),
             _card(5, "PHASE", vals[4][1], l["phase"] / 100.0),
             _card(6, "MODE", vals[5][1], choice=True, options=len(lfo.MODES), at=l["mode"])]
@@ -587,7 +588,7 @@ def seq_data(T):
                   "root": notes.NAMES[seq.root], "scale": notes.SCALES[seq.scale][0],
                   "degrees": [(seq.root + d) % 12 for d in seq.degrees()],
                   "per_note": bool(getattr(seq, "move_type", 0)), "bar_beats": seq.bar_beats,
-                  "spb": pat.steps_per_beat(),
+                  "spb": pat.steps_per_beat(), "trip": bool(seq.trip), "dark": bool(sequencer.TRIPLETS),
                   "straight": not any(n.comp for d in pat.notes.values() for n in d.values())}
         live.update({"shown": shown, "lane": ms.lane, "first": ms.first(), "page_len": ms.length(),
                      "down": sorted(ms.down), "selected": sorted(ms.selected),
@@ -607,7 +608,8 @@ def seq_data(T):
                       "group": sequencer.group_steps(ln.steps_per_beat(), tuple(getattr(e, "time_sig", (4, 4)))),
                       "straight": not any(st.comp for st in ln.steps[:ln.length]),     # (plays its steps in order)
                       "steps": steps})
-    static = {"kind": "drums", "title": title, "slot": e.slot + 1, "lanes": lanes, "chances": sequencer.CHANCES}
+    static = {"kind": "drums", "title": title, "slot": e.slot + 1, "lanes": lanes, "chances": sequencer.CHANCES,
+              "trip": bool(seq.trip), "dark": bool(sequencer.TRIPLETS)}
     try:
         at = seq.position(e._heard_frame(), fpb) if playing else None
     except Exception:                                    # noqa: BLE001

@@ -1,4 +1,5 @@
-"""The LFO pages on the Move: after the last settings page of an instrument (Right past it), LFO 1, LFO 2, INSERT 1 and INSERT 2.
+"""The LFO pages on the Move: after the last settings page of an instrument (Right past it), LFO 1, LFO 2, INSERT 1, INSERT 2
+and SENDS (knobs 1-4: its REVERB and DELAY sends, how much of SONG INSERT 1 and 2 it hears).
 Step buttons: tap = that step of the LFO rests, hold + knob 2/4 = its own WAVE/DEPTH. Knobs 1-6: DEST, WAVE, SPEED, DEPTH, PHASE, MODE (see pi-app/lfo.py). Each pattern has its own."""
 import arp
 import knobgate
@@ -29,13 +30,19 @@ class MoveLFO:
         """A synth has an arpeggiator page, the last one."""
         return bool(self.T.synth_shown())
 
+    def sends_tab(self):
+        return lfo.COUNT + self._inserts()
+
+    def sends_on_page(self):
+        return self.tab is not None and self.tab == self.sends_tab()
+
     def arp_tab(self):
-        return lfo.COUNT + self._inserts() if self.has_arp() else None
+        return self.sends_tab() + 1 if self.has_arp() else None
 
     def last(self):
-        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then a synth's
-        ARP, ARP 2 and PADS (a drum machine: just PADS)."""
-        return lfo.COUNT + self._inserts() - 1 + (3 if self.has_arp() else 1)
+        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then SENDS, then
+        a synth's ARP, ARP 2 and PADS (a drum machine: just PADS)."""
+        return self.sends_tab() + (3 if self.has_arp() else 1)
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
@@ -44,7 +51,7 @@ class MoveLFO:
         return None
 
     def pads_tab(self):
-        return self.arp_tab() + 2 if self.has_arp() else lfo.COUNT + self._inserts()
+        return self.arp_tab() + 2 if self.has_arp() else self.sends_tab() + 1
 
     def pads_on_page(self):
         """True on the PADS page (the hexagon icon): the pads' key, scale and octave."""
@@ -117,6 +124,37 @@ class MoveLFO:
                 return
             self.tab = self.arp_tab()
             self.T.say("ARP", 2)
+
+    # ------------------------------------------------------------ SENDS
+    def sends_values(self):
+        """[(label, text)]: REVERB, DELAY (this instrument's sends), SONG INSERT 1, 2 (how much of each it hears)."""
+        T, e = self.T, self.T.engine
+        out = []
+        for kind in ("reverb", "delay"):
+            v = e.inst_send(kind)
+            out.append((kind.upper(), "%d%%" % round(v * 100) if v is not None else "OWN FX"))
+        if self._inserts():
+            slot = e.slot if e.slot is not None else 0
+            for p in (0, 1):
+                sf = T.songfx(p)
+                out.append(("SONG INS %d" % (p + 1), "%d%%" % sf.amount(slot) if sf.index else "NONE"))
+        return out
+
+    def sends_knob(self, number, delta):
+        T, e = self.T, self.T.engine
+        if number in (1, 2):
+            kind = "reverb" if number == 1 else "delay"
+            v = e.change_inst_sends(kind, delta * 0.02)
+            T.say("%s SEND  %s" % (kind.upper(), "%d%%" % round(v * 100) if v is not None else "OWN FX"), 2)
+        elif number in (3, 4) and self._inserts():
+            sf = T.songfx(number - 3)
+            if not sf.index:
+                T.say("SONG INSERT %d IS EMPTY (LEFT BUTTON 3)" % (number - 2), 2)
+                return
+            slot = e.slot if e.slot is not None else 0
+            v = sf.set_amount(slot, sf.amount(slot) + 2 * delta)
+            T._insfx_save()
+            T.say("SONG INSERT %d  %d%%" % (number - 2, v), 2)
 
     def cfg(self):
         return self.T.engine.seq.arp_cfg
@@ -197,7 +235,7 @@ class MoveLFO:
         if self.arp_on_page():
             self.arp_step(n, down)
             return
-        if self.insert_pos() is not None:
+        if self.insert_pos() is not None or self.sends_on_page():
             return
         """A step button (1-16): a tap mutes / unmutes that step of the LFO; hold it and turn DEPTH (knob 4) or WAVE
         (knob 2) to give the step its own."""
@@ -223,7 +261,7 @@ class MoveLFO:
             return [0] * 16
         if self.arp_on_page():
             return [{0: 0, 1: 120, 2: 127}[x] for x in self.cfg()["rhythm"]]
-        if self.insert_pos() is not None:
+        if self.insert_pos() is not None or self.sends_on_page():
             return [0] * 16
         steps = self.lfos()[self.tab].get("steps", {})
         out = []
@@ -273,13 +311,16 @@ class MoveLFO:
             return True
         if self.arp_on_page():
             return (not self.arp_second()) and (n - 1) in (0, 1, 2, 3, 5, 6)
-        if self.insert_pos() is not None:
+        if self.insert_pos() is not None or self.sends_on_page():
             return False
         if self.held:
             return n == 2
         return (n - 1) in CHOICE
 
     def knob(self, number, delta, shift):
+        if self.sends_on_page():
+            self.sends_knob(number, delta)
+            return
         if self.pads_on_page():
             self.pads_knob(number, delta, shift)
             return

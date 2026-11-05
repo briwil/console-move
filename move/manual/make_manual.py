@@ -401,11 +401,11 @@ story += [
       "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
       "as the synth sequencer's knobs 5 and 6. Knob 4 VELOCITY: TOUCH (the pads play and record how hard you hit them) or a fixed velocity (turn up from TOUCH: 100, then in fives). Knob 5 CURVE: SOFT (easier to play loud), NORMAL or HARD (needs a harder hit). Pattern recording now stores the velocity you played.", BODY),
-    p("A drum machine has a PADS page too (Shift + step button 2 on its sound pages, or Right past INSERT 2). "
+    p("A drum machine has a PADS page too (Shift + step button 2 on its sound pages, or Right past SENDS). "
       "It has no key or scale: knob 1 OCTAVE (the right-hand pads, which play the picked drum a semitone a pad), "
       "knob 2 VELOCITY and knob 3 CURVE, which work as on a synth for the drum pads too.", BODY),
     p("Arpeggiator (synths)", H2),
-    p("A synth's last sound page is ARP (Right past INSERT 2; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
+    p("A synth's last sound page is ARP (Right past SENDS; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
       "its sound pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "
       "the chords in the sequencer, into a run of single notes. What you record from the pads is the notes you played, "
       "not the arp's. A rest in the rhythm does not use up a note: the run carries on at the next one.", BODY),
@@ -428,6 +428,9 @@ story += [
     p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([
         ("Left button 3", "Reverb page, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: reverb. Back: off."),
+        ("SENDS page", "On every instrument's sound pages, right after INSERT 2. Knob 1: its REVERB send, knob 2: its "
+         "DELAY send (a drum machine: all its drums together; each drum's own knobs stay on its sound page), knob 3 "
+         "and 4: how much of SONG INSERT 1 and 2 it hears (100%: all of it, 0%: it skips the effect)."),
         ("SONG INSERT 1 / 2", "One effect for the whole song. The tape records each instrument on its own track, so every "
          "loaded instrument gets its own copy of it (after its own INSERT 1 and 2), all following the settings on "
          "this page, and it is recorded with each instrument, as the reverb and delay are. Push the wheel to choose "

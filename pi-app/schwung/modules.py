@@ -562,6 +562,27 @@ class SynthModule(Module):
             p["voice"] = None
         self._voice_pages = {}
         self._locked = [set()]
+        self.fx_sends = [0, 0]               # its sends to the shared REVERB and DELAY (0-127; the SENDS page)
+
+    # kept after the module's own settings in kit(): SENDS_MARK, reverb, delay (an older kit just hasn't got them)
+    SENDS_MARK = -9
+
+    def kit(self):
+        return list(self.values) + [self.SENDS_MARK] + list(self.fx_sends)
+
+    def load_kit(self, values):
+        values = list(values)
+        if len(values) >= 3 and values[-3] == self.SENDS_MARK:
+            self.fx_sends = [max(0, min(127, int(v))) for v in values[-2:]]
+            values = values[:-3]
+        else:
+            self.fx_sends = [0, 0]
+        super().load_kit(values)
+
+    def set_send(self, kind, value):
+        self.fx_sends[0 if kind == "reverb" else 1] = max(0, min(127, int(value)))
+        with self._lock:
+            self._pending.append(("mix",))          # (the core picks the sends up after its next pending batch)
 
     def pages(self, voice=0):
         pages = self._kit_pages or [("SOUND", [])]
@@ -670,8 +691,8 @@ class SynthModule(Module):
         return np.eye(2, dtype=np.float32)
 
     def sends(self):
-        z = np.zeros(2, np.float32)
-        return z, z
+        r, d = self.fx_sends
+        return np.full(2, r / 127, np.float32), np.full(2, d / 127, np.float32)
 
 
 def make(mid):

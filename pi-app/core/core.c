@@ -176,12 +176,14 @@ typedef struct {
     void *frev, *fdly;                        /* its own effects, for the KIT inputs (NULL: none) */
     void *ins_h[4];                           /* its insert effects (NULL: none), in series, on the kit's direct sound before the tape sees
                                                  it: 0-1 its own INSERT 1 / 2, 2-3 its copy of the song's SONG INSERT 1 / 2 */
+    float ins_dry[4];                         /* how much of each insert is left dry (0: all through it, the default; 1: skipped) */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
 } Slot;
 static Slot slots[SLOTS];
 static float inputs[IN_CHANNELS][MAX_BLOCK];
 static float in_peak[IN_CHANNELS];            /* loudest sample since Python last asked */
 static float slot_send[4][MAX_BLOCK], slot_fx[4][MAX_BLOCK];
+static float ins_keep[2][MAX_BLOCK];          /* an insert's dry sound, kept to mix back in (its wet/dry amount) */
 
 /* ------------------------------------------------------------------ the tape
 
@@ -373,7 +375,18 @@ static void slots_cycle(int n) {
             int has_ins = 0;
             for (int k = 0; k < 4; k++) {
                 void *ih = sl->ins_h[k];
-                if (ifx && ih) { has_ins = 1; ifx(ih, kl, kr, n); }
+                if (!ifx || !ih) continue;
+                float dry = sl->ins_dry[k];
+                if (dry >= 1.0f) continue;                 /* turned all the way down: this instrument skips it */
+                has_ins = 1;
+                if (dry <= 0.0f) { ifx(ih, kl, kr, n); continue; }
+                memcpy(ins_keep[0], kl, sizeof(float) * n);
+                memcpy(ins_keep[1], kr, sizeof(float) * n);
+                ifx(ih, kl, kr, n);
+                for (int i = 0; i < n; i++) {
+                    kl[i] = kl[i] * (1.0f - dry) + ins_keep[0][i] * dry;
+                    kr[i] = kr[i] * (1.0f - dry) + ins_keep[1][i] * dry;
+                }
             }
             float g = sl->monitor;
             if ((aon || bon || has_ins) && g > 0.0f)
@@ -702,6 +715,13 @@ void core_slot_insert(int k, int pos, void *fn, void *h) {      /* fn: sh_fx_pro
     if (k < 0 || k >= SLOTS || pos < 0 || pos > 3) return;    /* 0-1: the instrument's, 2-3: the song's (a copy each) */
     if (fn) ins_fn = (void (*)(void *, float *, float *, int))fn;
     slots[k].ins_h[pos] = h;
+}
+
+void core_slot_insert_mix(int k, int pos, float wet) {        /* 0-1: how much of insert pos this slot hears (1: all) */
+    if (k < 0 || k >= SLOTS || pos < 0 || pos > 3) return;
+    if (wet < 0.0f) wet = 0.0f;
+    if (wet > 1.0f) wet = 1.0f;
+    slots[k].ins_dry[pos] = 1.0f - wet;
 }
 
 void core_set_effects(void *rp, void *r, void *dp, void *d) { rev_process = rp; reverb = r; dly_process = dp; delay = d; }

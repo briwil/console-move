@@ -297,9 +297,24 @@ def _extra_pages(T, out, base):
     ml = T.mlfo
     inserts = ml._inserts()
     extra = ["LFO %d" % (i + 1) for i in range(lfo.COUNT)] + ["INSERT %d" % (i + 1) for i in range(inserts)]
+    extra += ["SENDS"]
     extra += ["ARP", "PADS"] if ml.has_arp() else ["PADS"]
     out["pages"] = out["pages"] + extra
     if not ml.active():
+        return
+    if ml.sends_on_page():
+        out["tab"] = base + extra.index("SENDS")
+        e = T.engine
+        cards = []
+        for i, (label, shown) in enumerate(ml.sends_values()):
+            if i < 2:
+                v = e.inst_send("reverb" if i == 0 else "delay")
+                frac = v if v is not None else 0.0
+            else:
+                sf = T.songfx(i - 2)
+                frac = sf.amount(e.slot if e.slot is not None else 0) / 100.0 if sf.index else 0.0
+            cards.append(_card(i + 1, label, shown, frac))
+        out["knobs"] = cards
         return
     if ml.pads_on_page() and "PADS" in extra:          # (a panel goes over this, like the arp's)
         out["tab"] = base + extra.index("PADS")

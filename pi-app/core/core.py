@@ -56,6 +56,10 @@ class Core:
                 ("core_ext_monitor", [C.c_float, i32], None), ("core_capture", [i32], None), ("core_capture_get", [i32, C.POINTER(f32), i32], i32)]:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
+        try:                                   # (newer cores: an insert's wet/dry per instrument)
+            lib.core_slot_insert_mix.argtypes, lib.core_slot_insert_mix.restype = [i32, i32, f32], None
+        except AttributeError:
+            pass
         r = lib.core_open(LIBJACK.encode(), name)
         if r != 0:
             raise RuntimeError({-1: "couldn't load libjack (%s)" % LIBJACK, -2: "libjack is missing functions",
@@ -117,6 +121,13 @@ class Core:
         """An instrument's insert effect, 1 or 2 (pos 0 or 1; schwung/insertfx.py): fn(handle, left, right, frames)."""
         try:
             self.lib.core_slot_insert(slot, pos, fn or None, handle or None)
+        except AttributeError:
+            pass                                    # an older sound core
+
+    def set_slot_insert_mix(self, slot, pos, wet):
+        """How much of insert pos (0-3; 2-3 the song's) slot hears, 0-1 (1: all of it, as before)."""
+        try:
+            self.lib.core_slot_insert_mix(slot, pos, float(wet))
         except AttributeError:
             pass                                    # an older sound core
 

@@ -562,9 +562,23 @@ def pads_page(f, T):
     f.small(1, 57, "KEY, SCALE, OCTAVE, PAD FEEL" if ml.has_arp() else "OCTAVE, PAD FEEL")
 
 
+def sends_page(f, T):
+    """SENDS (after INSERT 2): this instrument's reverb and delay sends, and how much of the song inserts it hears."""
+    ml = T.mlfo
+    header(f, "SENDS", "SLOT %d" % (T.engine.slot + 1))
+    for i, (label, shown) in enumerate(ml.sends_values()):
+        col, row = divmod(i, 2)
+        x, y = col * 65, 13 + row * 20
+        f.small(x + 1, y, "%d %s" % (i + 1, label))
+        f.text(x + 1, y + 7, str(shown)[:10])
+
+
 def lfo_page(f, T):
     ml = T.mlfo
     e = T.engine
+    if ml.sends_on_page():
+        sends_page(f, T)
+        return
     if ml.pads_on_page():
         pads_page(f, T)
         return

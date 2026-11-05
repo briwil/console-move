@@ -204,6 +204,7 @@ class SongInsert:
         self.params, self.values = [], {}
         self.error = ""
         self._have = {}                     # slot -> the effect index its copy runs
+        self.mix = {}                       # slot -> how much of it that instrument hears, 0-100 (the SENDS page; 100)
 
     @property
     def h(self):
@@ -241,6 +242,27 @@ class SongInsert:
                         ins._send(key)
         if self.index and not any(self._have.get(k) for k in range(8)) and not self.params:
             self._load_params()
+        for k in range(8):
+            self._apply_mix(k)
+
+    def amount(self, slot):
+        return int(self.mix.get(slot, 100))
+
+    def set_amount(self, slot, value):
+        """How much of this effect instrument slot hears, 0-100 (wet/dry, on its copy)."""
+        self.mix[slot] = max(0, min(100, int(value)))
+        self._apply_mix(slot)
+        return self.mix[slot]
+
+    def _apply_mix(self, k):
+        if k not in self._have and k not in self.mix:
+            return
+        try:
+            ins = self.get_copy(k, 2 + self.pos)
+            if ins.core is not None and hasattr(ins.core, "set_slot_insert_mix"):
+                ins.core.set_slot_insert_mix(k, 2 + self.pos, self.amount(k) / 100.0)
+        except Exception:                          # noqa: BLE001
+            pass
 
     def _load_params(self):
         """No instrument loaded yet: still show the effect's settings (from its module.json)."""
@@ -265,10 +287,15 @@ class SongInsert:
     text = Insert.text
 
     def to_json(self):
-        return {"fx": catalog.FX[self.index - 1]["id"] if self.index else "", "values": self.values}
+        return {"fx": catalog.FX[self.index - 1]["id"] if self.index else "", "values": self.values,
+                "mix": {str(k): v for k, v in self.mix.items() if v != 100}}
 
     def from_json(self, d, slots):
         ids = [f["id"] for f in catalog.FX]
+        try:
+            self.mix = {int(k): max(0, min(100, int(v))) for k, v in ((d or {}).get("mix") or {}).items()}
+        except (TypeError, ValueError, AttributeError):
+            self.mix = {}
         self.choose(ids.index(d["fx"]) + 1 if d and d.get("fx") in ids else 0)
         if self.index:
             self._load_params()

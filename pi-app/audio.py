@@ -1576,6 +1576,12 @@ class Engine:
         m = self.drums
         if m is None:
             return None
+        if hasattr(m, "fx_sends"):                    # a synth: its one send to each
+            k = 0 if kind == "reverb" else 1
+            m.set_send(kind, m.fx_sends[k] + int(round(delta * 127)))
+            with self.lock:
+                self.dirty.add(-1)
+            return m.fx_sends[k] / 127
         if hasattr(m, "_send_keys"):
             idx = [k[0 if kind == "reverb" else 1] for k in m._send_keys]
         else:

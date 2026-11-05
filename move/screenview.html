@@ -169,6 +169,7 @@ function draw() {
     bottom = drawTape(u, pad, topH, y1, P);
     if (S.message) bottom = S.message;
   }
+  if (S.fx && S.fx.rows) drawArp(u, pad, topH, y1, S.fx);   // left button 3: REVERB / DELAY over whatever is behind
   // ---------------------------------------------------------------- the bottom: a line of text, the Move's own screen
   const fy = H - footH + 10 * u, sh = footH - 30 * u, sw = 440 * u, mh = 220 * u;
   rr(W - pad - sw - 12 * u, H - pad - mh - 12 * u, sw + 12 * u, mh + 12 * u, 16 * u); g.fillStyle = "#111317"; g.fill();

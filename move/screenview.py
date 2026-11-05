@@ -153,8 +153,14 @@ def state():
                 arp_panel = arp_data(T)
         except Exception as ex:                          # noqa: BLE001
             arp_panel = {"error": str(ex)[:80]}
+    fx_panel = None
+    if getattr(T, "fx_page", None) in ("reverb", "delay"):
+        try:
+            fx_panel = fx_data(T)
+        except Exception as ex:                          # noqa: BLE001
+            fx_panel = {"error": str(ex)[:80]}
     out = {
-        "page": page, "inst": inst, "arp": arp_panel, "seq_id": seq_id, "seq": seq_live, "sound": sound,
+        "page": page, "inst": inst, "arp": arp_panel, "fx": fx_panel, "seq_id": seq_id, "seq": seq_live, "sound": sound,
         "t": time.time(),
         "pos": round(T.tape.pos, 5), "playing": bool(T.playing), "recording": bool(T.recording),
         "overdub": e.rec_mode == "overdub", "bpm": round(e.bpm, 2),
@@ -324,6 +330,27 @@ def _extra_pages(T, out, base):
             _card(4, "DEPTH", vals[3][1], (l["depth"] + 100) / 200.0),
             _card(5, "PHASE", vals[4][1], l["phase"] / 100.0),
             _card(6, "MODE", vals[5][1], choice=True, options=len(lfo.MODES), at=l["mode"])]
+
+
+def fx_data(T):
+    """Left button 3's REVERB or DELAY page, as a panel: its three settings and the picked instrument's send."""
+    import effects
+    e = T.engine
+    which = T.fx_page
+    rows = []
+    for i, (key, name) in enumerate(T.FX_KNOBS[which]):
+        if key == "dly_time":
+            names = [n for n, _ in effects.DELAY_TIMES]
+            v = e.fx[key]
+            rows.append({"n": i + 1, "label": name, "options": names, "at": names.index(v) if v in names else 0})
+        else:
+            rows.append({"n": i + 1, "label": name, "text": T.fx_value_text(key)})
+    send = e.inst_send(which)
+    slot = (e.slot + 1) if e.slot is not None else 0
+    rows.append({"n": 4, "label": "SEND",                # (the picked instrument's send into it)
+                 "text": (("%d%%" % round(send * 100)) if send is not None else "NONE: IT HAS ITS OWN") +
+                 ("   ·   INSTRUMENT %d" % slot if slot else "")})
+    return {"title": which.upper(), "rows": rows}
 
 
 def arp_data(T):

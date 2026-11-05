@@ -440,6 +440,8 @@ story += [
         ("Arp and pads", "On the ARP or PADS page: a translucent panel over the sound page with every arp setting and all its "
          "options. The picked option is white, the rest dim; GATE, GLIDE, BEND and VELOCITY show their value, "
          "and the arp's 16 rhythm steps are along the bottom."),
+        ("Reverb and delay", "Left button 3's REVERB and DELAY pages show as the same kind of panel: SIZE, TONE, "
+         "LEVEL (reverb) or TIME, FEEDBACK, LEVEL (delay), and knob 4, the picked instrument's send."),
         ("Colours", "Each session picks one colour family at random and uses its shades."),
     ]),
     phones(("phone-tape", "The tape on a tablet, with the bar and beat grid."),

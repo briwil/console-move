@@ -661,6 +661,21 @@ def sound_page(f, T):
             f.rect(x + 1 + int(frac * 59), y + 6, 2, 3)
 
 
+def lock_knobs(f, ms):
+    """Steps selected, no pad picked: knobs 1-8 are the instrument's sound page, turning one locks it on the
+    steps (* a locked one; - one that can't be locked)."""
+    f.rect(0, 26, W, H - 26, 0)
+    pages = ms.sound_pages()
+    f.small(1, 27, ("%s  %d/%d" % (ms.page_name(), ms.knob_page + 1, max(1, len(pages))))[:31])
+    for i, (label, value, locked, lockable) in enumerate(ms.lock_list()):
+        col, row = divmod(i, 4)
+        x, y = col * 65, 35 + row * 7
+        f.small(x + 1, y, ("%s%d %s" % ("*" if locked else "", i + 1, label if lockable else "-"))[:10])
+        if lockable:
+            f.right(x + 62, y, str(value)[:5], small=True)
+    f.small(1, 57, "TURN: LOCK  < >: PAGES")
+
+
 def synth_seq_page(f, T):
     """The synth sequencer (see movesynth.py): the 16 steps the buttons show, and the knobs or the held step."""
     import notes
@@ -694,16 +709,15 @@ def synth_seq_page(f, T):
             f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
     f.small(1, 20, "STEPS %d-%d OF %d" % (first + 1, min(first + 16, length), length))
     if ms.selected:
+        if ms.sel is None:
+            lock_knobs(f, ms)
+            return
         f.frame(8, 27, 112, 26)
         f.rect(9, 28, 110, 24, 0)
-        if ms.sel is None:
-            f.centre(64, 31, "PRESS A PAD")
-            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
-        else:
-            key, label = ms.pad_items()[ms.sel]
-            f.centre(64, 30, str(label)[:16])
-            f.centre(64, 40, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
-            f.centre(64, 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
+        key, label = ms.pad_items()[ms.sel]
+        f.centre(64, 30, str(label)[:16])
+        f.centre(64, 40, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
+        f.centre(64, 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
         return
     if ms.down:
         f.small(1, 28, "PADS: ADD / TAKE OFF NOTES")
@@ -812,12 +826,12 @@ def seq_page(f, T):
     if ms.held is not None:
         # holding a step: its settings are on the pads; the picked one on knob 1 (OP-XY style)
         knobs = ms.knob_list()
+        if not knobs:
+            lock_knobs(f, ms)
+            return
         f.frame(8, 27, 112, 26)
         f.rect(9, 28, 110, 24, 0)
-        if not knobs:
-            f.centre(64, 31, "PRESS A PAD")
-            f.centre(64, 42, "LIT: THE STEP HAS IT", small=True)
-        else:
+        if True:
             label, value, on = knobs[0]
             f.centre(64, 30, str(label)[:16])
             f.centre(64, 40, ("KNOB 1: %s" % value)[:22], small=True)

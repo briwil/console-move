@@ -731,7 +731,7 @@ def choice_knob(T, m, e, name):
             if n == 1 and ms.sel is not None:
                 key = ms.pad_items()[ms.sel][0]
                 return (key not in ("vel", "chance")) if isinstance(key, str) else knobgate.is_choice(e.drums, key)
-            return False
+            return ms.sel is None and ms.lock_choice(n)          # (the sound page's knobs: a mode counts its clicks)
         return n == 2                                          # the lane's RATE
     if T.drum_page and not (T.fx_page or T.inst_page):
         pages = T.drum_pages()
@@ -964,6 +964,9 @@ def handle(name, T, m, e):
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             T.msyn.knob(name[1], name[2], name[3])
             return
+        if T.msyn.selected and isinstance(name, str) and re.match(r"^MUTE[1-8]$", name):
+            T.msyn.unlock_knob(int(name[4:]))           # Shift + touch a knob: its lock off the selected steps
+            return
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
             T.msyn.plus_minus(1 if name[2] > 0 else -1)
             return
@@ -973,6 +976,9 @@ def handle(name, T, m, e):
     if ms.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
             ms.knob(name[1], name[2], name[3])
+            return
+        if ms.selected and isinstance(name, str) and re.match(r"^MUTE[1-8]$", name):
+            ms.unlock_knob(int(name[4:]))                # Shift + touch a knob: its lock off the selected steps
             return
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
             ms.plus_minus(1 if name[2] > 0 else -1)

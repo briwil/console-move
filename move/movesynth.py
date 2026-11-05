@@ -46,6 +46,7 @@ class MoveSynth:
         self.used = set()          # held steps a pad or a length gesture has used (letting go does nothing)
         self.selected = []         # steps picked with Shift
         self.sel = None            # the pad picked while steps are selected
+        self.knob_page = 0         # while steps are selected (no pad picked): which sound page knobs 1-8 lock
         self.lane = None           # PER NOTE: the note whose steps the buttons show
         self.pads_down = {}        # pad -> note
         self.rec = {}              # pad -> (step, Note, frame) of a note being recorded live (its length follows the hold)
@@ -194,6 +195,13 @@ class MoveSynth:
         e.seq_changed()
 
     def arrows(self, way):
+        if self.selected:                                   # steps selected: the sound pages for the knobs
+            pages = self.sound_pages()
+            if pages:
+                self.knob_page = max(0, min(len(pages) - 1, self.knob_page + way))
+                self.sel = None
+                self.T.say("KNOBS: %s (%d/%d)" % (self.page_name(), self.knob_page + 1, len(pages)), 2)
+            return
         last = (max(1, self.length()) - 1) // PAGE
         self.page = max(0, min(last, self.first() // PAGE + way))
         self.T.say("STEPS %d-%d OF %d" % (self.page * PAGE + 1, self.page * PAGE + PAGE, self.length()), 2)
@@ -353,9 +361,86 @@ class MoveSynth:
             self.sel = p
             popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1")
 
+    # ------------------------------------------------------------ knobs 1-8 lock the sound page on the selected steps
+    def sound_pages(self):
+        try:
+            return list(self.d.pages(0))
+        except Exception:                                  # noqa: BLE001
+            return []
+
+    def page_name(self):
+        pages = self.sound_pages()
+        return pages[min(self.knob_page, len(pages) - 1)][0] if pages else ""
+
+    def lock_params(self):
+        pages = self.sound_pages()
+        if not pages:
+            return []
+        self.knob_page = max(0, min(len(pages) - 1, self.knob_page))
+        return list(pages[self.knob_page][1])[:8]
+
+    def lock_list(self):
+        """[(label, value, locked, lockable)] for knobs 1-8 while steps are selected."""
+        d = self.d
+        nts = self._notes_of(self.selected[0]) if self.selected else []
+        nt = nts[0][1] if nts else None
+        out = []
+        for p in self.lock_params():
+            locked = nt is not None and p in nt.locks
+            out.append((d.label(p), d.value_text(p, nt.locks[p]) if locked else d.value_text(p), locked,
+                        bool(d.lockable(p))))
+        return out
+
+    def lock_choice(self, number):
+        params = self.lock_params()
+        return number <= len(params) and knobgate.is_choice(self.d, params[number - 1])
+
+    def lock_knob(self, number, delta, shift):
+        params = self.lock_params()
+        if number > len(params):
+            return
+        key, d, seq = params[number - 1], self.d, self.seq
+        label = d.label(key)
+        if not d.lockable(key):
+            popup.show(self.T, self.which(), label, "CAN'T BE LOCKED")
+            return
+        if not any(self._notes_of(i) for i in self.selected):
+            popup.show(self.T, self.which(), label, "NO NOTES")
+            return
+        clicks = self.T.knob_clicks(number, delta, shift)
+        if knobgate.is_choice(d, key):
+            clicks = knobgate.gate(("synlock", key), delta, shift)
+            if not clicks:
+                return
+        now = time.monotonic()
+        if getattr(self, "_lock_gesture", None) != (number, tuple(self.selected)) or now - getattr(self, "_lock_at", 0) > 2:
+            seq.snapshot()
+        self._lock_gesture, self._lock_at = (number, tuple(self.selected)), now
+        with seq.lock:
+            for i in self.selected:
+                for _n, nt in self._notes_of(i):
+                    nt.locks[key] = d.stepped(key, nt.locks.get(key, d.get_param(key)), clicks)
+        self.T.engine.seq_changed()
+        popup.show(self.T, self.which(), label, self.item_value(key))
+
+    def unlock_knob(self, number):
+        params = self.lock_params()
+        if self.sel is not None or number > len(params):
+            return
+        key, seq = params[number - 1], self.seq
+        seq.snapshot()
+        with seq.lock:
+            for i in self.selected:
+                for _n, nt in self._notes_of(i):
+                    nt.locks.pop(key, None)
+        self.T.engine.seq_changed()
+        popup.show(self.T, self.which(), self.d.label(key), "OFF")
+
     def is_choice_knob(self, n):
         if self.selected:
-            if n != 1 or self.sel is None:
+            if self.sel is None:
+                return self.lock_choice(n)
+            if n != 1:
                 return False
             key = self.pad_items()[self.sel][0]
             return key in ("chance", "ratchet", "nudge") + COMPS or (not isinstance(key, str) and knobgate.is_choice(self.d, key))
@@ -404,8 +489,11 @@ class MoveSynth:
     def knob(self, number, delta, shift):
         seq, e = self.seq, self.T.engine
         if self.selected:
-            if number == 1 and self.sel is not None:
-                self.set_selected(delta, shift)
+            if self.sel is not None:
+                if number == 1:
+                    self.set_selected(delta, shift)
+            else:
+                self.lock_knob(number, delta, shift)
             return
         if self.down:
             if number == 1:

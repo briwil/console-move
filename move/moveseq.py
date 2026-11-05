@@ -3,10 +3,13 @@ screen shows what the knobs do.
 
   pads (left 4 x 4)      pick the drum (and play it)
   step buttons 1-16      tap: the step on / off
-  Shift + tap steps      select them (they blink). Then the pads are their settings (OP-XY style), bottom left
-                         first: VELOCITY, CHANCE, MULTIPLY, PULSE, HOLD, JUMP, RANDOM, RAMP UP, RAMP DOWN, then the
-                         drum's own sound settings (parameter locks). Tap a pad: it's on, knob 1 sets it; the same
-                         pad again: off (back to normal). Lit pads: what the steps have. Tap any step: done
+  Shift + tap steps      select them (they blink). Knobs 1-8 are then the drum's sound page (as on its sound
+                         page; < > or the wheel: its other pages): turning one locks that setting on the steps
+                         (Shift + touch the knob: the lock off). The pads are their settings (OP-XY style), bottom
+                         left first: VELOCITY, CHANCE, MULTIPLY, PULSE, HOLD, JUMP, RANDOM, RAMP UP, RAMP DOWN, NUDGE,
+                         then the drum's own sound settings. Tap a pad: it's on, knob 1 sets it; the same pad again:
+                         off (back to normal, and the knobs back to the sound page). Lit pads: what the steps have.
+                         Tap any step: done
   <- / ->                the lane's steps 1-16, 17-32, 33-48, 49-64
   knobs                  1 LENGTH, 2 RATE (length scale), 3 EUCLID, 4 SHIFT
   + / -                  the pattern
@@ -36,7 +39,7 @@ class MoveSeq:
         self.T = T
         self.page = {}             # lane -> which 16 steps the buttons show (0-3)
         self.selected = []         # the steps picked with Shift (their settings are on the pads)
-        self.knob_page = 0         # while a step is held: 0 STEP, 1.. the drum's sound pages
+        self.knob_page = 0         # while steps are selected: which of the drum's sound pages knobs 1-8 are
         self.sel = None            # while a step is held: the pad picked (its setting is on knob 1)
         self.down = set()
         self.chrom = {}                                      # chromatic pads held: pad -> semitones (a step tapped meanwhile gets it)          # step buttons physically held (a right-half pad then puts its pitch on them)
@@ -105,9 +108,27 @@ class MoveSeq:
         return self.sp.pages()
 
     def page_name(self):
-        if self.knob_page == 0:
-            return "STEP"
-        return self.sound_pages()[self.knob_page - 1][0]
+        pages = self.sound_pages()
+        return pages[min(self.knob_page, len(pages) - 1)][0] if pages else ""
+
+    def lock_params(self):
+        """The 8 settings knobs 1-8 lock while steps are selected (no pad picked): the drum's sound page."""
+        pages = self.sound_pages()
+        if not pages:
+            return []
+        self.knob_page = max(0, min(len(pages) - 1, self.knob_page))
+        return list(pages[self.knob_page][1])[:8]
+
+    def lock_list(self):
+        """[(label, value, locked, lockable)] for knobs 1-8 on the sound page while steps are selected."""
+        d = self.T.engine.drums
+        st = self.held_step()
+        out = []
+        for p in self.lock_params():
+            locked = p in st.locks
+            out.append((d.label(p), d.value_text(p, st.locks[p]) if locked else d.value_text(p), locked,
+                        bool(d.lockable(p))))
+        return out
 
     def knob_list(self):
         """[(label, value, locked)] for knobs 1-8 as they are now."""
@@ -179,7 +200,7 @@ class MoveSeq:
         for j in self.selected:
             self._pad_one(lane, j, p, key, off)
         if off:
-            self.sel = None
+            self.sel = None                                   # (the knobs: back to the sound page)
             popup.show(self.T, self.which(), label, "OFF" if was_set else "")
         else:
             self.sel = p
@@ -363,8 +384,56 @@ class MoveSeq:
                 self.T.len_flash = (time.monotonic() + 1.2, self.first(), self.seq.lane(sp.lane).length)
             return
         self._aim()
-        if number == 1 and self.sel is not None:
-            self.set_selected(delta, shift)
+        if self.sel is not None:
+            if number == 1:
+                self.set_selected(delta, shift)
+            return
+        self.lock_knob(number, delta, shift)
+
+    def lock_knob(self, number, delta, shift):
+        """A knob while steps are selected (no pad picked): lock that sound setting on them."""
+        params = self.lock_params()
+        if number > len(params):
+            return
+        key = params[number - 1]
+        e, seq, sp = self.T.engine, self.seq, self.sp
+        d = e.drums
+        label = d.label(key)
+        if not d.lockable(key):
+            popup.show(self.T, self.which(), label, "CAN'T BE LOCKED")
+            return
+        lane, i = sp.lane, self.held
+        clicks = self.T.knob_clicks(number, delta, shift)
+        if knobgate.is_choice(d, key):
+            clicks = knobgate.gate(("step", key), delta, shift)      # a mode, not a number: several clicks each
+            if not clicks:
+                return
+        sp._edit(("lockknob", number, i))
+        for j in self.selected:
+            if j < seq.lane(lane).length:
+                self._knob_one(lane, j, key, clicks, 1 if delta > 0 else -1)
+        e.seq_changed()
+        sp.audition(lane, i)
+        popup.show(self.T, self.which(), label, self.item_value(key))
+
+    def unlock_knob(self, number):
+        """Shift + touch a knob while steps are selected: that setting's lock off them."""
+        params = self.lock_params()
+        if self.sel is not None or number > len(params):
+            return
+        key, seq, lane = params[number - 1], self.seq, self.sp.lane
+        seq.snapshot()
+        with seq.lock:
+            for j in self.selected:
+                if j < seq.lane(lane).length:
+                    seq.step(lane, j).locks.pop(key, None)
+        self.T.engine.seq_changed()
+        popup.show(self.T, self.which(), self.T.engine.drums.label(key), "OFF")
+
+    def lock_choice(self, number):
+        """True when knob n (steps selected, no pad picked) is a mode (it counts its own clicks)."""
+        params = self.lock_params()
+        return number <= len(params) and knobgate.is_choice(self.T.engine.drums, params[number - 1])
 
     def plus_minus(self, way):
         """+ / -: the knob page while a step is held, else the pattern."""
@@ -375,7 +444,14 @@ class MoveSeq:
         T.say("OCTAVE %s" % ("%+d" % T.octave if T.octave else "0"), 2)
 
     def arrows(self, way):
-        """<- / ->: the lane's next or previous 16 steps."""
+        """<- / ->: the lane's next or previous 16 steps (steps selected: the drum's sound pages for the knobs)."""
+        if self.selected:
+            pages = self.sound_pages()
+            if pages:
+                self.knob_page = max(0, min(len(pages) - 1, self.knob_page + way))
+                self.sel = None
+                self.T.say("KNOBS: %s (%d/%d)" % (self.page_name(), self.knob_page + 1, len(pages)), 2)
+            return
         lane = self.sp.lane
         length = self.seq.lane(lane).length
         last = (max(1, length) - 1) // PAGE

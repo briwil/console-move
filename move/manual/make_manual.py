@@ -295,7 +295,11 @@ story += [
         ("Undo", "Undo the last pattern edit."),
     ]),
     p("Step settings (OP-XY style)", H2),
-    p("Hold Shift and tap one or more steps: they blink. Let go of Shift. Now the pads are the steps' settings, "
+    p("Hold Shift and tap one or more steps: they blink. Let go of Shift. <b>Knobs 1-8 are now the instrument's "
+      "sound page</b> (as on the old Console): turn one and that setting is locked on the selected steps. "
+      "Left / Right or the wheel: its other sound pages. Shift + touch a knob: its lock off. A * on the screen: "
+      "locked; a -: a setting that can't be locked.", BODY),
+    p("The pads are the steps' settings too, "
       "bottom left first. Tap a pad: that setting is on and <b>knob 1</b> sets it. Tap the same pad again: "
       "it's off (back to normal). Lit pads: settings the step has; the picked one blinks. "
       "<b>Tap any step to finish.</b>", BODY),
@@ -365,7 +369,8 @@ story += [
         ("Shift + steps", "Select steps: the pads are their settings. LENGTH, VELOCITY, CHANCE, MULTIPLY, "
          "<b>NUDGE</b> (a step early or late, -50 to +50 %), PULSE, HOLD, JUMP (PER NOTE type only), RANDOM, "
          "RAMP UP, RAMP DOWN (pitch), then the synth's own settings as parameter locks. "
-         "Knob 1 sets the picked one."),
+         "Knob 1 sets the picked one. With no pad picked, knobs 1-8 are the synth's sound page: turn one to lock "
+         "it (Left / Right: its other pages; Shift + touch a knob: the lock off)."),
         ("Record", "On an instrument's sound, sequencer or automation page: recording into the pattern while it "
          "plays. The pads you play go in (a synth note lasts as long as you hold the pad; chromatic drum pads keep "
          "their pitch), and so do the sound page's knobs: turning one puts its value on each step as it plays, as a "

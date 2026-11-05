@@ -249,9 +249,12 @@ class KitMenu(menu.Menu):
         if d.machine == "sampler":
             import sampler
             files, values = list(getattr(d, "files", [])), data["values"]
-            data["samples"] = {str(v): files[values[v * sampler.PER] - 1]
-                               for v in range(sampler.LANES)
-                               if v * sampler.PER < len(values) and 0 < values[v * sampler.PER] <= len(files)}
+            data["samples"] = {}                     # "3": drum 4's first sample, "b3": its second
+            for v in range(sampler.LANES):
+                for w, tag in ((0, ""), (1, "b")):
+                    k = sampler.sample_param(v, w)
+                    if k < len(values) and 0 < values[k] <= len(files):
+                        data["samples"][tag + str(v)] = files[values[k] - 1]
         slot = getattr(self.engine, "slot", None)
         T = self.transport
         if slot is not None and hasattr(T, "insfx") and getattr(self.engine, "core", None) is not None:
@@ -282,7 +285,8 @@ class KitMenu(menu.Menu):
             for i, f in enumerate(files):
                 by_name.setdefault(os.path.basename(f).lower(), i)
             for v, path in samples.items():
-                k = int(v) * sampler.PER
+                v = str(v)
+                k = sampler.sample_param(int(v[1:]), 1) if v.startswith("b") else sampler.sample_param(int(v), 0)
                 if not 0 <= k < len(values):
                     continue
                 if path in files:

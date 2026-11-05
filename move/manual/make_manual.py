@@ -189,8 +189,11 @@ story += [
         ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it)."),
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
          "(the ones without a picture yet show their name). Push to choose."),
-        ("SAMPLER", "A drum machine of 16 samples, one per drum: each takes a .wav from the Move's sample folders "
-         "(SAMPLE, LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY)."),
+        ("SAMPLER", "A drum machine of 16 drums, each with two .wav samples from the Move's sample folders. "
+         "Push the wheel on a drum: SAMPLE 1 or SAMPLE 2, then the folders. Knobs: LEVEL, PITCH, START, DECAY, PAN, "
+         "REVERB, DELAY (shared by both samples) and BLEND: all the way left only sample 1, the middle both at "
+         "full volume, all the way right only sample 2. BLEND can be an LFO's target or a step lock, so it can "
+         "morph between the two, even while a sample rings. Older songs and presets: sample 2 empty, BLEND left."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
         ("Left button 1 again", "The picked instrument's sound page; again: its sequencer; again: back to this "

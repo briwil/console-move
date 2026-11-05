@@ -1,7 +1,8 @@
 """The SAMPLE BROWSER: choosing a sampler drum's sample by folders instead of one long list.
 
-Push the big wheel on a sampler drum's page to open it. Then: the wheel turns through the list,
-push the wheel to open a folder / choose a sample, "< UP" goes up, Back goes up a folder (and leaves from the top).
+Push the big wheel on a sampler drum's page to open it. It first asks which of the drum's two samples (SAMPLE 1
+or SAMPLE 2; BLEND mixes them). Then: the wheel turns through the list, push the wheel to open a folder / choose
+a sample, "< UP" goes up, Back goes up a folder (from the top: back to SAMPLE 1 / 2, and Back again leaves).
 The highlighted sample is played as you land on it; leaving with Back puts the old sample back."""
 import os
 import threading
@@ -18,6 +19,9 @@ class SampleBrowser:
         self.entries = []          # [(label, kind, value)]: kind "up" / "dir" (value: folder path) / "file" (value: index)
         self.pick = 0
         self.voice = 0
+        self.which = 0             # the drum's first (0) or second (1) sample
+        self.stage = "which"       # "which": SAMPLE 1 / SAMPLE 2; "files": the folders
+        self.param = 0
         self.orig = 0
         self._timer = None
 
@@ -48,8 +52,16 @@ class SampleBrowser:
         self.entries = rows
 
     def title(self):
+        if self.stage == "which":
+            return "DRUM %d: WHICH SAMPLE?" % (self.voice + 1)
         rel = os.path.relpath(self.folder, self.root) if self.folder != self.root else os.path.basename(self.root)
-        return ("SAMPLE %d  %s" % (self.voice + 1, rel.upper()))[:27]
+        return ("D%d S%d  %s" % (self.voice + 1, self.which + 1, rel.upper()))[:27]
+
+    def _which_list(self):
+        d = self.drums
+        names = [d.sample_name(self.voice, w) if hasattr(d, "sample_name") else "" for w in (0, 1)]
+        self.entries = [("SAMPLE %d  %s" % (w + 1, names[w] if names[w] != "EMPTY" else "-"), "which", w)
+                        for w in (0, 1)]
 
     # ------------------------------------------------------------ opening and leaving
     def open(self, drums, voice):
@@ -60,17 +72,24 @@ class SampleBrowser:
         if self._files is not files or self._tree is None or len(files) != len(self._files or ()):
             self._build(files)
         self.drums, self.voice = drums, voice
-        self.orig = drums.get_param(voice * 8)
-        cur = files[self.orig - 1] if 0 < self.orig <= len(files) else None
-        self.folder = self.root                        # always from the top of the samples
-        self._list()
+        self.stage = "which"
+        self._which_list()
         self.pick = 0
         self.active = True
 
+    def _choose_which(self, which):
+        import sampler
+        self.which, self.stage = which, "files"
+        self.param = sampler.sample_param(self.voice, which)
+        self.orig = self.drums.get_param(self.param)
+        self.folder = self.root                        # always from the top of the samples
+        self._list()
+        self.pick = 0
+
     def close(self, keep):
         self._cancel()
-        if not keep:
-            self.drums.set_param(self.voice * 8, self.orig)
+        if not keep and self.stage == "files":
+            self.drums.set_param(self.param, self.orig)
         self.active = False
 
     # ------------------------------------------------------------ controls
@@ -84,6 +103,9 @@ class SampleBrowser:
         if not self.entries:
             return
         _l, kind, val = self.entries[self.pick]
+        if kind == "which":
+            self._choose_which(val)
+            return
         if kind in ("up", "dir"):
             came = self.folder
             self.folder = val
@@ -95,15 +117,21 @@ class SampleBrowser:
                         self.pick = k
         else:
             self._cancel()
-            self.drums.set_param(self.voice * 8, val)
+            self.drums.set_param(self.param, val)
             self.T.engine.hit(self.voice, 110)
             self.active = False
 
     def back(self):
-        if self.folder != self.root:
-            self.folder_up()
-        else:
+        if self.stage == "which":
             self.close(False)
+        elif self.folder != self.root:
+            self.folder_up()
+        else:                                          # the top of the samples: back to SAMPLE 1 / 2
+            self._cancel()
+            self.drums.set_param(self.param, self.orig)
+            self.stage = "which"
+            self._which_list()
+            self.pick = self.which
 
     def folder_up(self):
         came = self.folder
@@ -123,12 +151,12 @@ class SampleBrowser:
     def _preview(self):
         self._cancel()
         _l, kind, val = self.entries[self.pick]
-        if kind != "file":
+        if kind != "file" or self.stage != "files":
             return
 
         def go():
-            if self.active:
-                self.drums.set_param(self.voice * 8, val)
+            if self.active and self.stage == "files":
+                self.drums.set_param(self.param, val)
                 self.T.engine.hit(self.voice, 110)
         self._timer = threading.Timer(0.3, go)
         self._timer.daemon = True

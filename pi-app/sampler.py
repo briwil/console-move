@@ -2,7 +2,9 @@
 folder in CONSOLE_SAMPLES, colon separated). Nothing to build: it is plain numpy, so it works anywhere.
 
 Each drum has 8 settings: SAMPLE (the file), LEVEL, PITCH (0.5 semitone a click, 64 = as recorded), START (where in
-the sample it begins), DECAY (127: the whole sample; lower: faded out sooner), PAN, REVERB and DELAY.
+the sample it begins), DECAY (127: the whole sample; lower: faded out sooner), PAN, REVERB and DELAY; and after
+all of those (so older songs and presets still line up) a second sample (SAMPLE 2) and BLEND for each drum:
+0 only the first sample, 64 both at full volume, 127 only the second. Pitch, start, decay etc. are shared.
 It looks like the other drum machines to the rest of the app (drums.py's Drums class).
 
 A song keeps a sample as its place in the sorted list of files, so adding or removing samples can change which
@@ -23,6 +25,18 @@ PER = 8                                   # settings per drum
 KEYS = ["sample", "level", "pitch", "start", "decay", "pan", "reverb", "delay"]
 LABELS = ["SAMPLE", "LEVEL", "PITCH", "START", "DECAY", "PAN", "REVERB", "DELAY"]
 DEFAULTS = [0, 100, 64, 0, 127, 64, 0, 0]
+SAMPLE2 = LANES * PER                     # settings 128-143: each drum's second sample
+BLEND = SAMPLE2 + LANES                   # settings 144-159: each drum's BLEND
+ALL = BLEND + LANES
+
+
+def sample_param(voice, which=0):
+    """The setting that holds drum voice's first (which 0) or second (1) sample."""
+    return voice * PER if which == 0 else SAMPLE2 + voice
+
+
+def is_sample(param):
+    return (param < SAMPLE2 and param % PER == 0) or SAMPLE2 <= param < BLEND
 MAX_SECONDS = 12
 MAX_FILES = 4000
 LIVE_TAIL = RATE * 4
@@ -137,11 +151,14 @@ class Sampler:
         self._cache = {}
         self.params = [{"key": "%s%d" % (KEYS[i % PER], i // PER + 1), "label": LABELS[i % PER],
                         "voice": i // PER, "kind": "menu" if i % PER == 0 else "num"} for i in range(LANES * PER)]
+        self.params += [{"key": "sample2_%d" % (v + 1), "label": "SAMPLE 2", "voice": v, "kind": "menu"}
+                        for v in range(LANES)]
+        self.params += [{"key": "blend%d" % (v + 1), "label": "BLEND", "voice": v, "kind": "num"} for v in range(LANES)]
         self.param_count = self.engine_params = len(self.params)
-        self.init_values = [DEFAULTS[i % PER] for i in range(self.param_count)]
+        self.init_values = [DEFAULTS[i % PER] for i in range(LANES * PER)] + [0] * LANES + [0] * LANES
         self.values = list(self.init_values)
         self.lane_voice = list(range(LANES))
-        self.fast_params = {i * PER for i in range(LANES)}      # the SAMPLE settings
+        self.fast_params = {i * PER for i in range(LANES)} | set(range(SAMPLE2, BLEND))   # the SAMPLE settings
         self._send_keys = [(v * PER + 6, v * PER + 7) for v in range(LANES)]
         self._lock = threading.Lock()
         self._pending = []
@@ -149,10 +166,13 @@ class Sampler:
         self.load_kit(self.init_values)
 
     # ------------------------------------------------------------ names
-    def sample_name(self, v):
-        i = self.values[v * PER]
-        if 0 < i <= len(self.files):
-            return os.path.splitext(os.path.basename(self.files[i - 1]))[0].upper()
+    def sample_name(self, v, which=None):
+        """The drum's sample name (which None: the first, or the second if only it is set)."""
+        order = (which,) if which is not None else (0, 1)
+        for w in order:
+            i = self.values[sample_param(v, w)]
+            if 0 < i <= len(self.files):
+                return os.path.splitext(os.path.basename(self.files[i - 1]))[0].upper()
         return "EMPTY"
 
     @property
@@ -177,7 +197,7 @@ class Sampler:
     # ------------------------------------------------------------ what the screens ask
     def pages(self, voice):
         v = max(0, min(LANES - 1, voice))
-        return [("SOUND", [v * PER + k for k in range(1, PER)])]      # (the SAMPLE: push the wheel)
+        return [("SOUND", [v * PER + k for k in range(1, PER)] + [BLEND + v])]   # (the samples: push the wheel)
 
     def label(self, param):
         return self.params[param]["label"] if 0 <= param < len(self.params) else "?"
@@ -186,11 +206,19 @@ class Sampler:
         return self.params[param]["kind"] if 0 <= param < len(self.params) else "num"
 
     def _top(self, param):
-        return len(self.files) if param % PER == 0 else 127
+        return len(self.files) if is_sample(param) else 127
 
     def value_text(self, param, v=None):
         v = self.get_param(param) if v is None else v
-        k = param % PER
+        if param >= BLEND:                            # BLEND: which sample, and how loud the other one is
+            if v == 0:
+                return "S1"
+            if v == 127:
+                return "S2"
+            if v == 64:
+                return "BOTH"
+            return ("S2 %d%%" % round(v / 64 * 100)) if v < 64 else ("S1 %d%%" % round((127 - v) / 63 * 100))
+        k = 0 if param >= SAMPLE2 else param % PER
         if k == 0:
             if 0 < v <= len(self.files):
                 return os.path.splitext(os.path.basename(self.files[v - 1]))[0].upper()
@@ -209,6 +237,8 @@ class Sampler:
 
     @staticmethod
     def lockable(param):
+        if param >= SAMPLE2:
+            return param >= BLEND                     # BLEND can be locked on a step (the second sample can't)
         return 1 <= param % PER <= 4                  # level, pitch, start, decay (not the sample, pan or sends)
 
     def stepped(self, param, v, clicks):
@@ -267,20 +297,28 @@ class Sampler:
             return None
         if index not in self._cache:
             if len(self._cache) > 48:
-                self._cache = {k: v for k, v in self._cache.items() if k in set(self.values[::8])}
+                used = set(self.values[0:SAMPLE2:PER]) | set(self.values[SAMPLE2:BLEND])
+                self._cache = {k: v for k, v in self._cache.items() if k in used}
             self._cache[index] = read_wav(self.files[index - 1])
         return self._cache[index]
 
     def _set(self, lib, index, value):
         """One setting into a copy of the engine (lib: the library, or a stand-in that queues the call for the
         sound core)."""
-        v, k = divmod(index, PER)
+        if index >= BLEND:
+            lib.sw_set(("blend%d" % (index - BLEND + 1)).encode(), int(value))
+            return
+        if index >= SAMPLE2:
+            v, k, slot = index - SAMPLE2, 0, index - SAMPLE2 + LANES     # (the engine's 16-31: second samples)
+        else:
+            v, k = divmod(index, PER)
+            slot = v
         if k == 0:
             x = self._sample(int(value))
             if x is None or not len(x):
-                lib.sw_load(v, 0, 0)
+                lib.sw_load(slot, 0, 0)
             else:
-                lib.sw_load(v, int(x.ctypes.data), len(x))        # (the cache keeps x alive)
+                lib.sw_load(slot, int(x.ctypes.data), len(x))     # (the cache keeps x alive)
         elif k <= 4:
             lib.sw_set(("%s%d" % (KEYS[k], v + 1)).encode(), int(value))
 

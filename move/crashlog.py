@@ -6,6 +6,10 @@ was killed): it's kept as crashes/crash-<date>.log, so it's never overwritten by
     ls /data/UserData/console/crashes
     cat /data/UserData/console/crashes/crash-*.log | tail -120
 
+Black box: watch(engine) also writes BOX lines (transport changes, a heartbeat while playing, and every thread's
+Python line if the sound bridge or sequencer stalls). Since a power-off leaves running.log behind, it is kept as a
+crash file at the next start, so a freeze you ended by switching off can still be read.
+
 If the main loop stops for FREEZE seconds (a hang, not a crash) every thread's Python line is written too.
 """
 import collections
@@ -138,6 +142,79 @@ def alive(now):
         faulthandler.dump_traceback_later(FREEZE, repeat=True, file=_fd)
     except (ValueError, RuntimeError):
         pass
+
+
+def watch(engine):
+    """The black box: a thread that looks at the engine once a second and writes down what matters, so a stop
+    like "it was playing, then it froze" can be read afterwards. Lines start with BOX:
+      - play / record changes, and a heartbeat every 10 s while playing
+      - STALL: the bridge (which feeds the sound core) stopped stepping: every thread's Python line is written
+      - SEQ STUCK: the bridge runs but the sequencer's clock doesn't move while playing: threads written too
+      - CORE STOPPED: the sound core's own clock isn't moving
+      - SLOW: one bridge step took over 0.25 s"""
+    import threading
+
+    def run():
+        was = None
+        beat = 0
+        stalled = stuck = False
+        last_seq, seq_since = None, time.monotonic()
+        last_core, core_since, core_dead = None, time.monotonic(), False
+        while True:
+            time.sleep(1.0)
+            try:
+                now = time.monotonic()
+                br = getattr(engine, "bridge", None)
+                if br is None or _fd is None:
+                    continue
+                state = (bool(engine.playing), bool(engine.recording), engine.slot)
+                if state != was:
+                    _write("%s BOX play=%s rec=%s slot=%s bpm=%.1f\n" % (
+                        time.strftime("%H:%M:%S"), state[0], state[1], state[2], engine.bpm))
+                    was = state
+                    last_seq, seq_since = None, now
+                step_max, br.step_max = br.step_max, 0.0
+                if step_max > 0.25:
+                    _write("%s BOX SLOW: a bridge step took %.2f s\n" % (time.strftime("%H:%M:%S"), step_max))
+                silent = now - br.last_step
+                if silent > 1.5 and not stalled:
+                    stalled = True
+                    _write("%s BOX STALL: the bridge hasn't stepped for %.1f s. Threads:\n" % (
+                        time.strftime("%H:%M:%S"), silent))
+                    faulthandler.dump_traceback(file=_fd, all_threads=True)
+                elif silent <= 1.5 and stalled:
+                    stalled = False
+                    _write("%s BOX bridge stepping again\n" % time.strftime("%H:%M:%S"))
+                if engine.playing and silent <= 1.5:
+                    if engine.seq_clock != last_seq:
+                        last_seq, seq_since = engine.seq_clock, now
+                        stuck = False
+                    elif now - seq_since > 1.5 and not stuck:
+                        stuck = True
+                        _write("%s BOX SEQ STUCK: playing but the sequencer clock stays at %s. Threads:\n" % (
+                            time.strftime("%H:%M:%S"), last_seq))
+                        faulthandler.dump_traceback(file=_fd, all_threads=True)
+                core = getattr(br, "core", None)
+                if core is not None:
+                    c = core.now()
+                    if c != last_core:
+                        last_core, core_since = c, now
+                        if core_dead:
+                            core_dead = False
+                            _write("%s BOX sound core running again\n" % time.strftime("%H:%M:%S"))
+                    elif now - core_since > 1.5 and not core_dead:
+                        core_dead = True
+                        _write("%s BOX CORE STOPPED: the sound core's clock isn't moving. Threads:\n" %
+                               time.strftime("%H:%M:%S"))
+                        faulthandler.dump_traceback(file=_fd, all_threads=True)
+                beat += 1
+                if engine.playing and beat % 10 == 0:
+                    _write("%s BOX ok steps=%d seq_clock=%s core=%s\n" % (
+                        time.strftime("%H:%M:%S"), br.steps, engine.seq_clock, last_core))
+            except Exception as ex:                      # noqa: BLE001  (the watcher must never stop)
+                _write("BOX watcher: %r\n" % (ex,))
+
+    threading.Thread(target=run, daemon=True, name="black box").start()
 
 
 def done():

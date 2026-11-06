@@ -53,6 +53,9 @@ class CoreBridge:
         self._monitor = {}
         self._snap = {}                       # channel -> the tape as it was when recording started (for undo)
         self._tick = 0
+        self.steps = 0                        # the black box (move/crashlog.py) watches these
+        self.last_step = time.monotonic()
+        self.step_max = 0.0                   # the longest step since it last looked
         self._play_at = 0
         self.rev = self.dly = None
         engine.move_midi = queue.Queue()      # the Move's controls, for the app
@@ -99,7 +102,11 @@ class CoreBridge:
             try:
                 if self.core is None:
                     self._open()
+                t0 = time.monotonic()
                 self._step()
+                self.steps += 1
+                self.last_step = time.monotonic()
+                self.step_max = max(self.step_max, self.last_step - t0)
             except Exception as ex:                            # keep going: log it, try again shortly
                 print("Core bridge:", ex)
                 traceback.print_exc()

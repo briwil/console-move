@@ -487,6 +487,7 @@ def main():
     signal.signal(signal.SIGTERM, stop_signal)
     e = audio.Engine()
     e.start()
+    crashlog.watch(e)                        # the black box: BOX lines in the crash log
     deadline = time.time() + 15
     while getattr(e, "core", None) is None and time.time() < deadline:
         time.sleep(0.05)

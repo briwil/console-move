@@ -964,6 +964,14 @@ def handle(name, T, m, e):
         if name in ("LEFT", "RIGHT"):
             T.auto.arrows(-1 if name == "LEFT" else 1)
             return
+    seqm = T.msyn if T.msyn.active() else ms if ms.active() else None
+    if seqm is not None and seqm.selected and not (m.open or m.kits.open) and T.fx_page is None:
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and seqm.sel is not None:
+            seqm.knob(1, name[2], name[3])               # steps selected, a setting picked: the big wheel is knob 1
+            return
+        if name == "HOME":
+            seqm.selected, seqm.sel = [], None           # push the big wheel: finished setting the steps
+            return
     if (isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11 and (T.msyn.active() or ms.active())
             and not (m.open or m.kits.open) and T.fx_page is None):
         way = knobgate.gate(("wheel-pages",), name[2], False, 1)       # the big wheel: the 16-step pages

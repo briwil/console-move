@@ -309,7 +309,7 @@ story += [
     p("The pads are the steps' settings too, "
       "bottom left first. Tap a pad: that setting is on and <b>knob 1</b> sets it. Tap the same pad again: "
       "it's off (back to normal). Lit pads: settings the step has; the picked one blinks. "
-      "<b>Tap any step to finish.</b>", BODY),
+      "The big wheel sets it too, like knob 1. <b>Tap any step, or push the big wheel, to finish.</b>", BODY),
     screens(("seq-lock", "PULSE picked on two steps: knob 1 sets how many times they repeat.")),
     table([
         ("Pad 1  VELOCITY", "How hard (1-127, turned all the way down: RND, random)."),

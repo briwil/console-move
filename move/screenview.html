@@ -201,7 +201,7 @@ function draw() {
 
 // ------------------------------------------------------------------ the page change card (as on the Move: the old
 // page's name slides off to the left, the new one's in from the right; any control on the Move cuts it short)
-const PF_HOLD_OLD = 0.15, PF_SLIDE = 0.2, PF_HOLD_NEW = 0.4;
+const PF_HOLD_OLD = 0.05, PF_SLIDE = 0.2, PF_HOLD_NEW = 0.25;
 let pfId = null, pfStart = 0;
 function drawPageFx(u) {
   const p = S.pagefx, now = performance.now();

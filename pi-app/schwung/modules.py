@@ -272,7 +272,7 @@ class Module:
         if sk:                                        # a one-sample instrument (MrSample): its sample is a file in the
             try:                                      # Move's samples (index 1.. = files[0..], 0 = none), as the drum sampler's
                 import sampler
-                files = sampler.list_samples()
+                files = sampler.list_samples(("wav", "mp3", "flac", "aif", "aiff"))      # (it reads them all itself)
             except Exception:                         # noqa: BLE001
                 files = []
             entry = next((p for p in self.params if p["key"] == sk), None)

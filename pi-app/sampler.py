@@ -90,12 +90,14 @@ def sample_dirs():
     return [d for d in (env.split(":") if env else DEFAULT_DIRS) if d]
 
 
-def list_samples():
-    """The sorted sample files (paths) in the sample folders."""
+def list_samples(exts=("wav",)):
+    """The sorted sample files (paths) in the sample folders (exts: which kinds; the drum sampler reads only WAV)."""
     out = []
     for d in sample_dirs():
-        for ext in ("wav", "WAV", "Wav"):
-            out += glob.glob(os.path.join(d, "**", "*." + ext), recursive=True)
+        for root, dirs, names in os.walk(d):
+            dirs[:] = [x for x in dirs if not x.startswith(".")]          # (hidden folders and files are left out, as before)
+            out += [os.path.join(root, n) for n in names if not n.startswith(".") and "." in n
+                    and n.rsplit(".", 1)[-1].lower() in exts]
     return sorted(set(out))[:MAX_FILES]
 
 

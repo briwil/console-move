@@ -8,6 +8,7 @@ effect in it, and nothing is added to the tape afterwards.
 """
 import ctypes
 import json
+import math
 import os
 import time
 
@@ -42,6 +43,10 @@ def _params(folder, jsonname):
         if opts:
             lo, hi = 0.0, float(len(opts) - 1)
         step = float(p.get("step", 1 if t in ("int", "enum", "bool") else 0.05)) or 0.05
+        if "step" not in p and t == "float" and not opts and hi - lo > 1.0:
+            raw = (hi - lo) / 100.0                       # a wide range (4K EQ: -15..15 dB): about 100 clicks end to end
+            mag = 10 ** math.floor(math.log10(raw))
+            step = min((m for m in (1, 2, 5, 10) if m * mag >= raw * 0.7), key=lambda m: abs(m * mag - raw)) * mag
         found.append((p["key"], str(p.get("short_name") or p.get("name") or p["key"]).upper()[:12], lo, hi,
                       float(p.get("default", lo)) if not opts or isinstance(p.get("default"), (int, float)) else 0.0,
                       step, opts))

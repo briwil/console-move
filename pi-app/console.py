@@ -432,12 +432,6 @@ class Transport:
             self.focus.toggle(self.armed)
         elif name == "SEQ_UNDO":
             self.sp().undo()
-        elif name.startswith("MUTE") and name[4:].isdigit() and self.fx_page == "mixer" and e:
-            k = int(name[4:]) - 1                 # the MIXER: push a knob, that instrument's volume and pan back to normal
-            if 0 <= k < len(e.slots) and e.slots[k]:
-                e.change_inst_level(k, 1.0 - e.inst_levels[k])
-                e.change_inst_pan(k, -e.inst_pans[k])
-                self.say("INSTRUMENT %d: VOLUME 100%%, PAN CENTRE" % (k + 1), 2)
         elif name.startswith("MUTE") and name[4:].isdigit() and self.full_drum_page():
             self.drum_reset(int(name[4:]))        # the drum page: push a knob, its setting goes back to default
         elif name == "MUTE1" and self.seq_page:

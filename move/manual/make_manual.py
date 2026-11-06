@@ -440,8 +440,8 @@ story += [
     table([
         ("Left button 3", "The MIXER, again: reverb, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: the MIXER. Back: off."),
         ("MIXER", "The first left button 3 page: knobs 1-8 are the instruments in slots 1-8. Turn a knob: that "
-         "instrument's volume (100% is as it is, up to 150%). Hold Shift and turn: its pan (C, L50, R100...). Push a knob: "
-         "that instrument back to 100% and centre. It is saved with the song."),
+         "instrument's volume (100% is as it is, up to 150%). Hold Shift and turn: its pan (C, L50, R100...). It is saved with "
+         "the song."),
         ("SENDS page", "On every instrument's sound pages, right after INSERT 2. Knob 1: its REVERB send, knob 2: its "
          "DELAY send (a drum machine: all its drums together; each drum's own knobs stay on its sound page), knob 3 "
          "and 4: how much of SONG INSERT 1 and 2 it hears (100%: all of it, 0%: it skips the effect)."),

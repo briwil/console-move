@@ -23,6 +23,14 @@ CHOICES_NONE = "NONE"
 SONG_SKIP = {"tape-echo2", "dissolver", "dragonfly-hall", "cloudseed"}
 
 
+# the settings knobs 1-8 are, for effects where the module's own order isn't the useful one (and names for settings
+# the module calls the same thing): 4K EQ: the four bands' gains and frequencies (its filters need their on / off
+# switches, which would not fit on the 8 knobs)
+KNOBS = {"4k-eq": ["lf_gain", "lm_gain", "hm_gain", "hf_gain", "lf_freq", "lm_freq", "hm_freq", "hf_freq"]}
+KNOB_LABELS = {"lf_gain": "LF GAIN", "lm_gain": "LM GAIN", "hm_gain": "HM GAIN", "hf_gain": "HF GAIN",
+               "lf_freq": "LF FREQ", "lm_freq": "LM FREQ", "hm_freq": "HM FREQ", "hf_freq": "HF FREQ"}
+
+
 def _params(folder, jsonname):
     """[(key, label, lo, hi, default, step, options)] from the module's module.json (ui_hierarchy and chain_params)."""
     try:
@@ -57,6 +65,10 @@ def _params(folder, jsonname):
     for lvl in (caps.get("ui_hierarchy", {}).get("levels", {}) or {}).values():
         for p in lvl.get("params", []) or []:
             add(p)
+    pick = KNOBS.get(os.path.basename(folder))
+    if pick:                                              # an effect whose first 8 settings aren't the useful ones
+        by = {q[0]: q for q in found}
+        found = [(k, KNOB_LABELS.get(k, by[k][1]),) + by[k][2:] for k in pick if k in by]
     return found
 
 

@@ -446,36 +446,45 @@ def instrument_image(mid, folder="instimg"):
 
 def carousel(f, ip):
     """Choosing an instrument: one picture at a time, sliding left and right as the wheel turns. An
-    instrument without a picture yet shows its name."""
+    instrument without a picture yet shows its name. Past either end it wraps round, and the slide is one
+    step the short way (the last one slides in from the left of the first), not a scroll through the whole list."""
     n = len(ip.choices)
     now = time.monotonic()
-    pos = _CAR["pos"]
-    if pos is None or now - _CAR["t"] > 1.0:
-        pos = float(ip.pick)                           # just opened: start on the picked one
+    st = _CAR
+    if st["pos"] is None or now - st["t"] > 1.0 or st.get("n") != n:
+        pos = target = float(ip.pick)                  # just opened: start on the picked one
+        st["last"] = ip.pick
     else:
-        pos += (ip.pick - pos) * 0.45                  # ease towards it
-        if abs(ip.pick - pos) < 0.02:
-            pos = float(ip.pick)
-    _CAR["pos"], _CAR["t"] = pos, now
-    for i in (int(pos // 1), int(pos // 1) + 1):
-        if not 0 <= i < n:
-            continue
+        pos, target = st["pos"], st["target"]
+        if ip.pick != st["last"]:
+            d = ip.pick - st["last"]
+            if d > n / 2:
+                d -= n                                 # (1st turned left: on to the last, one step back)
+            elif d < -n / 2:
+                d += n
+            target += d
+            st["last"] = ip.pick
+        pos += (target - pos) * 0.45                   # ease towards it
+        if abs(target - pos) < 0.02:
+            pos = target = float(ip.pick)
+    st.update(pos=pos, target=target, t=now, n=n)
+    base = int(pos // 1)
+    for i in (base, base + 1):
+        k = i % n
         dx = int(round((i - pos) * W))
-        mid, title = ip.choices[i][0], ip.choices[i][1]
+        mid, title = ip.choices[k][0], ip.choices[k][1]
         img = instrument_image(mid, getattr(ip, "img_dir", "instimg"))
+        x0, x1 = max(0, dx), min(W, dx + W)
+        if x1 <= x0:
+            continue
         if img is not None:
-            x0, x1 = max(0, dx), min(W, dx + W)
-            if x1 > x0:
-                f.px[0:64, x0:x1] = img[:, x0 - dx:x1 - dx]
+            f.px[0:64, x0:x1] = img[:, x0 - dx:x1 - dx]
         else:                                          # no picture yet: the whole screen, just the name
-            x0, x1 = max(0, dx), min(W, dx + W)
-            if x1 > x0:
-                f.px[0:H, x0:x1] = 0
+            f.px[0:H, x0:x1] = 0
             f.frame(dx + 4, 4, W - 8, H - 8)
             f.centre(dx + W // 2, 26, str(title)[:19])
-    if pos > 0.05:
+    if n > 1:                                          # (it wraps, so there is always another way to go)
         f.small(0, 29, "<", 1)
-    if pos < n - 1.05:
         f.small(W - 3, 29, ">", 1)
 
 

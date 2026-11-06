@@ -150,7 +150,7 @@ class InstPage:
         hid = self.hidden()
         self.choices = sorted(((m, title) for m, title in machines()
                                if (e.slot_of(m) is None or m == mine) and (m not in hid or m == mine)),
-                              key=lambda c: c[1].lower())   # (A to Z)
+                              key=lambda c: (is_synth(c[0]), c[1].lower()))   # (drum machines A to Z, then synths A to Z)
         if not machines():
             self.mode = None
             self.t.say("NO DRUM MACHINES ARE BUILT: RUN ~/console/pi-app/setup.sh ONCE", 4)

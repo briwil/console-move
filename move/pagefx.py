@@ -1,12 +1,12 @@
 """The page change card: when you go to another page (left button 1's INSTRUMENT > SEQUENCER > AUTOMATION > ARP,
 left button 3's REVERB > DELAY > SONG INSERT 1 / 2, the instruments list, the tape...), a black screen with the
 old page's name slides off to the left and the new one's slides in from the right, stays a moment, then the page
-shows. Half a second in all; any button, knob or pad cuts it short. The Move's screen and the phone both."""
+shows. 0.6 of a second in all; any button, knob or pad cuts it short. The Move's screen and the phone both."""
 import time
 
 HOLD_OLD = 0.05                 # the old page's name, before it slides
 SLIDE = 0.2                     # the slide
-HOLD_NEW = 0.25                 # the new page's name, after it
+HOLD_NEW = 0.35                 # the new page's name, after it
 TOTAL = HOLD_OLD + SLIDE + HOLD_NEW
 
 

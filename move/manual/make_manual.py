@@ -456,7 +456,6 @@ story += [
          "every instrument they were too heavy in the load test); they are still there as an instrument's own inserts. "
          "The Move's input jack doesn't get them. Saved with the project."),
         ("Knobs 1-3", "The effect: reverb size, tone, level / delay time, feedback, level."),
-        ("Knob 4", "How much of the picked instrument goes to this effect."),
         ("INSERT 1 / 2", "The last two sound pages of an instrument (after LFO 2; wheel or arrows). Each instrument has two insert effects in a row, picked from 36 (filter, EQ, tape, reverbs, "
          "granular...). Push the wheel to open the picture picker: turn to browse, push to choose, Back to cancel. "
          "Knobs 1-8 are the effect's first eight settings; every effect has its own picture. They are on the instrument <i>before</i> the tape, "
@@ -507,7 +506,7 @@ story += [
          "options. The picked option is white, the rest dim; GATE, GLIDE, BEND and VELOCITY show their value, "
          "and the arp's 16 rhythm steps are along the bottom."),
         ("Reverb and delay", "Left button 3's REVERB and DELAY pages show as the same kind of panel: SIZE, TONE, "
-         "LEVEL (reverb) or TIME, FEEDBACK, LEVEL (delay), and knob 4, the picked instrument's send."),
+         "LEVEL (reverb) or TIME, FEEDBACK, LEVEL (delay). Each instrument's own send is on its SENDS page."),
         ("Menus and lists", "Whatever menu or list the Move has open shows as a panel too: the project menu, SETTINGS, "
          "open / delete / rename project, naming, the instrument menu (presets, copy / paste / clear pattern), "
          "the questions it asks, the sample browser, choosing an effect or an instrument (with its picture), "

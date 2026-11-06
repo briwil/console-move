@@ -938,14 +938,10 @@ class Transport:
                 self.songfx(0 if self.fx_page == "song1" else 1).knob(number - 1, delta)
                 self._insfx_save()
             return
-        if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect, 4 the picked instrument's send
+        if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect (each instrument's send is on its SENDS page)
             if number <= 3:
                 key = self.FX_KNOBS[self.fx_page][number - 1][0]
                 e.change_fx(key, delta if key == "dly_time" else delta * 0.02)
-            elif number == 4:
-                v = e.change_inst_sends(self.fx_page, delta * 0.02)
-                self.say("THIS INSTRUMENT'S %s SEND: %s" % (self.fx_page.upper(),
-                         "%d%%" % round(v * 100) if v is not None else "NONE (IT HAS ITS OWN EFFECTS)"), 2)
             return
         if number <= 8:
             e.change_send(self.fx_page, number, delta * 0.02)

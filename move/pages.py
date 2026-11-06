@@ -941,10 +941,6 @@ def fx_page(f, T):
         y = 13 + i * 10
         f.small(1, y, "%d %s" % (i + 1, name))
         f.right(W - 2, y, T.fx_value_text(k)[:10], small=True)
-    s = e.inst_send(which) if e else None
-    f.small(1, 43, "4 THIS INSTRUMENT'S SEND")
-    f.right(W - 2, 51, ("%d%%" % round(s * 100)) if s is not None else "NONE: OWN FX", small=True)
-    f.small(1, 59, "GOES ONTO THE TAPE WITH IT")
 
 
 # ------------------------------------------------------------------ the menus (any of the Pi's menu screens)

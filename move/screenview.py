@@ -569,11 +569,6 @@ def fx_data(T):
             rows.append({"n": i + 1, "label": name, "options": names, "at": names.index(v) if v in names else 0})
         else:
             rows.append({"n": i + 1, "label": name, "text": T.fx_value_text(key)})
-    send = e.inst_send(which)
-    slot = (e.slot + 1) if e.slot is not None else 0
-    rows.append({"n": 4, "label": "SEND",                # (the picked instrument's send into it)
-                 "text": (("%d%%" % round(send * 100)) if send is not None else "NONE: IT HAS ITS OWN") +
-                 ("   ·   INSTRUMENT %d" % slot if slot else "")})
     return {"title": which.upper(), "rows": rows}
 
 

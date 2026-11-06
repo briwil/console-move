@@ -86,6 +86,14 @@ section h2{font-weight:800;font-size:clamp(44px,7vw,84px);margin-top:10px;letter
 .tags.o li{border-color:color-mix(in srgb,var(--orange) 50%,var(--line))}
 .tags.l li{border-color:color-mix(in srgb,var(--lilac) 50%,var(--line))}
 
+/* full instrument lists */
+.rosters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:28px;align-items:start}
+.roster{border:1px solid color-mix(in srgb,var(--fg) 45%,transparent);border-radius:8px;padding:18px 22px}
+.roster h3{font-weight:700;font-size:22px;letter-spacing:.08em}
+.roster h3 span{font-family:var(--font-mono);font-size:13px;font-weight:400;color:var(--muted);letter-spacing:.04em;margin-left:6px}
+.roster ul{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 18px;font-family:var(--font-mono);font-size:14px;color:var(--muted)}
+.roster li{white-space:nowrap}
+
 /* left buttons */
 .lefts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:0;margin-top:32px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
 .lefts div{padding:18px 22px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 -1px -1px 0}
@@ -176,10 +184,11 @@ footer .mark{font-size:22px}
   <section id="instruments">
     <div class="kicker">Instruments</div>
     <h2>Eight slots for sound</h2>
-    <p class="intro">Eight slots, dozens of synths and drum synths.</p>
-    <ul class="tags o" aria-label="Instruments">
-      <li>LXR-02</li><li>TR-606</li><li>TR-808</li><li>Sampler</li><li>Dexed</li><li>OB-Xd</li><li>Plaits</li><li>Braids</li><li>Surge</li><li>and more from Schwung's catalog</li>
-    </ul>
+    <p class="intro">Eight slots to fill from 11 drum machines and 36 synths.</p>
+    <div class="rosters" aria-label="Every drum machine and synth">
+      <div class="roster"><h3>Drum machines <span>11</span></h3><ul><li>LXR-02</li><li>Sampler</li><li>TR-606</li><li>TR-808</li><li>MachineDrum</li><li>CW-78</li><li>Forge</li><li>LibPO32</li><li>Omega</li><li>Simian</li><li>Weird Dreams</li></ul></div>
+      <div class="roster"><h3>Synths <span>36</span></h3><ul><li>303</li><li>Amino</li><li>Aphex</li><li>Bizar</li><li>Braids</li><li>Chiptune</li><li>Chonk</li><li>Chordism</li><li>Crest</li><li>Denis</li><li>Dexed</li><li>Essaim</li><li>Fizzik</li><li>Hank</li><li>Hera</li><li>Hush One</li><li>JE-8086</li><li>Maze Voice</li><li>Model-72</li><li>Mono Voice</li><li>MrSample</li><li>Noisemaker</li><li>Nusaw</li><li>OB-Xd</li><li>Plaits</li><li>Quark</li><li>Quilt</li><li>Raffosynth</li><li>setBfree Organ</li><li>SF2 Synth</li><li>Surge XT</li><li>Tablor</li><li>Tenebrae</li><li>TinyK</li><li>TinyPro5</li><li>Wurl</li></ul></div>
+    </div>
     <div class="cards">
       <div class="card"><h3>Drum machines</h3><p>The left 4 × 4 pads are the drums. The right 4 × 4 play the picked drum chromatically, a semitone a pad.</p></div>
       <div class="card"><h3>Synths</h3><p>The pads play a scale, with the +/- buttons moving the octave. Knobs 1-8 follow the page you are on.</p></div>

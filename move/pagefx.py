@@ -1,4 +1,4 @@
-"""The page change card: when you go to another page (left button 1's INSTRUMENT > SEQUENCER > AUTOMATION > ARP,
+"""The page change card: when you go to another page (left button 1's INSTRUMENT > SEQUENCER > AUTOMATION,
 left button 3's REVERB > DELAY > SONG INSERT 1 / 2, the instruments list, the tape...), a black screen with the
 old page's name slides off to the left and the new one's slides in from the right, stays a moment, then the page
 shows. 0.6 of a second in all; any button, knob or pad cuts it short. The Move's screen and the phone both."""
@@ -19,12 +19,7 @@ def label(T):
     if T.seq_page:
         return "AUTOMATION" if getattr(T, "auto_page", False) else "SEQUENCER"
     if T.drum_page:
-        try:
-            if T.mlfo.arp_on_page():
-                return "ARP"
-        except Exception:                                # noqa: BLE001
-            pass
-        return "INSTRUMENT"
+        return "INSTRUMENT"                              # (all of an instrument's pages: LFO, INSERT, SENDS, ARP, PADS too)
     if T.inst_page:
         return "INSTRUMENT SELECTION"
     if getattr(T, "song_page", False):

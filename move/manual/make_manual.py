@@ -183,9 +183,10 @@ story += [
     ]),
 
     p("Page names", H2),
-    p("Going to another page (left button 1's INSTRUMENT, SEQUENCER, AUTOMATION, ARP; left button 3's REVERB, "
-      "DELAY, SONG INSERT 1 and 2, the MIXER; the instruments list, song mode, the tape), its name slides in on a black screen "
-      "for about 3/4 of a second, on the Move and the phone. Any button, knob or pad cuts it short.", BODY),
+    p("Going to another page (left button 1's INSTRUMENT, SEQUENCER, AUTOMATION; left button 3's MIXER, REVERB, "
+      "DELAY, SONG INSERT 1 and 2; the instruments list, song mode, the tape), its name slides in on a black screen "
+      "for about 0.6 of a second, on the Move and the phone. Moving between an instrument's own pages (its sound pages, "
+      "LFOs, inserts, SENDS, ARP, PADS) shows no card. Any button, knob or pad cuts it short.", BODY),
 
     p("Instruments", H2),
     p("Left button 1 opens the INSTRUMENTS page: 8 slots, each a drum machine or a synth. Recording an "

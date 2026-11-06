@@ -479,6 +479,15 @@ def carousel(f, ip):
         f.small(W - 3, 29, ">", 1)
 
 
+def fx_picker_view(f, fp):
+    """The effect picker: one picture at a time, or (EDIT) the show / hide list."""
+    if fp.editing:
+        header(f, "SHOW OR HIDE")
+        biglist(f, [c[0] for c in fp.choices], fp.pick)
+    else:
+        carousel(f, fp)
+
+
 def biglist(f, rows, pick, fit=5, top=11):
     """A list in the larger letters (as the sample browser), the picked row inverted, scrolled to keep it on
     screen. A row too long for the big letters is drawn small instead."""
@@ -518,7 +527,7 @@ def listing(f, rows, pick, top=11, line=7, fit=None):
 
 def insert_page(f, T, pos):
     if T.fxpick.active:
-        carousel(f, T.fxpick)
+        fx_picker_view(f, T.fxpick)
         return
     ins = T.insfx(None, pos)
     header(f, ("INSERT %d" % (ins.pos + 1)), "SLOT %d" % (ins.slot + 1))
@@ -891,7 +900,7 @@ def song_page(f, T):
 def song_insert_page(f, T, p):
     """SONG INSERT 1 / 2 (left button 3): the song's effect, on every instrument (a copy each), and its settings."""
     if T.fxpick.active:
-        carousel(f, T.fxpick)
+        fx_picker_view(f, T.fxpick)
         return
     sf = T.songfx(p)
     header(f, "SONG INSERT %d" % (p + 1))

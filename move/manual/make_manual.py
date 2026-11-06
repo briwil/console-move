@@ -454,6 +454,9 @@ story += [
         ("SENDS page", "On every instrument's sound pages, right after INSERT 2. Knob 1: its REVERB send, knob 2: its "
          "DELAY send (a drum machine: all its drums together; each drum's own knobs stay on its sound page), knob 3 "
          "and 4: how much of SONG INSERT 1 and 2 it hears (100%: all of it, 0%: it skips the effect)."),
+        ("Choosing an effect", "On an INSERT or SONG INSERT page, push the wheel to browse the effects. The last "
+         "entry, EDIT, lists every effect with a tick box: push the wheel to untick one and it leaves the list (tick "
+         "it to bring it back). An effect already in use stays. Back returns to the list."),
         ("SONG INSERT 1 / 2", "One effect for the whole song. The tape records each instrument on its own track, so every "
          "loaded instrument gets its own copy of it (after its own INSERT 1 and 2), all following the settings on "
          "this page, and it is recorded with each instrument, as the reverb and delay are. Push the wheel to choose "

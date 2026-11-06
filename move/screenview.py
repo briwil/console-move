@@ -467,9 +467,14 @@ def menu_panel(T, m):
         rows, pick = _rows([r[0] for r in sb.entries], sb.pick)
         return {"title": sb.title(), "rows": rows, "pick": pick, "empty": "EMPTY", "hint": "PUSH: CHOOSE  ·  DELETE + PUSH: REMOVE" if sb.stage == "which" else "PUSH: OPEN / CHOOSE  ·  BACK: UP"}
     fp = getattr(T, "fxpick", None)
+    if fp is not None and fp.active and fp.choices and fp.editing:
+        rows, pick = _rows([c[0] for c in fp.choices], fp.pick)
+        return {"title": "SHOW OR HIDE EFFECTS", "rows": rows, "pick": pick,
+                "hint": "WHEEL: PICK  ·  PUSH: TICK / UNTICK  ·  BACK: DONE"}
     if fp is not None and fp.active and fp.choices:
         rows, pick = _rows([c[1] for c in fp.choices], fp.pick)
-        return {"title": "CHOOSE AN EFFECT", "rows": rows, "pick": pick, "img": "fx." + fp.choices[fp.pick][0],
+        return {"title": "CHOOSE AN EFFECT", "rows": rows, "pick": pick,
+                "img": "" if fp.choices[fp.pick][0] == "__edit__" else "fx." + fp.choices[fp.pick][0],
                 "hint": "WHEEL: PICK  ·  PUSH: CHOOSE  ·  BACK: CANCEL"}
     if getattr(T, "inst_page", False) and not (T.drum_page or T.seq_page or T.fx_page):
         ip = T.instp

@@ -160,6 +160,17 @@ class InstPage:
         on = e.mute_slot(n - 1)
         self.t.say("SLOT %d (%s) %s" % (n, self.title(e.slots[n - 1]), "MUTED" if on else "ON"), 2)
 
+    def solo(self, n):
+        """Shift + track key n: solo slot n (again: everyone back)."""
+        e = self.e
+        if not e or not 1 <= n <= audio.SLOTS:
+            return
+        if not e.slots[n - 1]:
+            self.t.say("SLOT %d IS EMPTY" % n, 2)
+            return
+        on = e.solo_slot(n - 1)
+        self.t.say("SLOT %d (%s) %s" % (n, self.title(e.slots[n - 1]), "SOLO" if on else "SOLO OFF"), 2)
+
     def hint(self):
         e = self.e
         if self.mode == "pick":

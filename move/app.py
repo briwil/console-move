@@ -176,6 +176,10 @@ class MoveBoard:
         T, e, k = self.T, self.T.engine, self.keys
         if num in STEPS:
             n = num - 15                                   # 1-16
+            if T.fx_page == "mixer":                       # the MIXER: step buttons 1-8 mute (Shift: solo) the instruments
+                if val and n <= 8:
+                    k.put(("ARM%d" if self.shift else "TRACK%d") % n)
+                return
             if getattr(T, "song_page", False) and not T.seq_page:
                 if val:
                     k.put(("ROW", n, "CUT" in self.held))  # song mode's rows (Delete + a row: take it out)
@@ -397,7 +401,9 @@ class Lights:
             flash = T.len_flash = None
         for i in range(16):
             v = 0
-            if flash:                                      # a length just changed: its steps light purple
+            if T.fx_page == "mixer":                       # the MIXER: lit = that instrument plays (off: muted or empty)
+                v = WHITE if (i < 8 and e and e.slots[i] and i not in e.slot_mutes) else 0
+            elif flash:                                      # a length just changed: its steps light purple
                 v = PURPLE if flash[1] + i < flash[2] else 0
             elif song:
                 v = song[i]
@@ -1078,7 +1084,7 @@ def tape_only_elsewhere(T, name):
             return not handled                                   # (else: the tape's volumes, zoom, grid, playhead)
         return False
     if re.match(r"^(TRACK|ARM)\d+$", name):
-        return not inst                                          # select / arm a tape track
+        return not (inst or T.fx_page == "mixer")                # select / arm a tape track (the MIXER: mute / solo)
     if re.match(r"^(MUTE|SOLO)\d+$", name):                    # Shift + touch a knob
         return not (inst or T.full_drum_page() or (T.seq_page and name == "MUTE1"))
     if name in ("MUTE", "SOLO") and inst:

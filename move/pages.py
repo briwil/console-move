@@ -915,12 +915,14 @@ def mixer_page(f, T):
     knob the pan."""
     from console import mix_pan_text
     e = T.engine
-    header(f, "MIXER", "SHIFT: PAN")
+    header(f, "MIXER", "SHIFT: PAN")      # (the step buttons: mute, Shift: solo)
     for i in range(8):
         y = 12 + i * 6
         mid = e.slots[i] if e else None
         f.small(1, y, ("%d %s" % (i + 1, T.instp.title(mid) if mid else "-"))[:14])
-        if mid:
+        if mid and i in e.slot_mutes:
+            f.right(W - 2, y, "MUTED", small=True)
+        elif mid:
             f.right(88, y, "%d%%" % round(e.inst_levels[i] * 100), small=True)
             f.right(W - 2, y, mix_pan_text(e.inst_pans[i]), small=True)
 

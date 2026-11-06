@@ -805,6 +805,23 @@ class Engine:
             self.dirty.add(-1)
             return i in self.slot_mutes
 
+    def solo_slot(self, i):
+        """Solo slot i: every other instrument muted (again: they all play again). Returns True if it's soloed now."""
+        with self.lock:
+            others = {j for j in self.loaded_slots() if j != i}
+            if i in self.slot_mutes:
+                self.slot_mutes.discard(i)
+                self.slot_mutes |= others
+                on = True
+            elif others and others <= self.slot_mutes:
+                self.slot_mutes -= others                   # (it was already alone: everybody back)
+                on = False
+            else:
+                self.slot_mutes |= others
+                on = True
+            self.dirty.add(-1)
+            return on
+
     def set_drum_machine(self, machine):
         """The drums menu (FILE on the drum page) > MACHINE: change the shown slot's machine.
         Returns True if it switched."""

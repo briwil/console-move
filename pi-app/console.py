@@ -16,6 +16,7 @@ Options:
                  and the system isn't rotating it; the default is 270
     --demo       no audio engine: made-up waveforms
 """
+import re
 import argparse
 import json
 import math
@@ -404,6 +405,9 @@ class Transport:
             self.drums_key()
         elif name == "DRUMS_BACK":
             self.back_key()
+        elif self.fx_page == "mixer" and re.match(r"^(TRACK|ARM)\d+$", name):
+            # the MIXER: step buttons 1-8 mute the instrument in that slot, Shift + step button: solo it
+            (self.instp.mute if name.startswith("TRACK") else self.instp.solo)(int(re.sub(r"\D", "", name)))
         elif self.inst_page and not self.fx_page and (name.startswith("TRACK") or name.startswith("ARM")
                                                        or name.startswith("MUTE") or name.startswith("SOLO")):
             # the INSTRUMENTS page: track keys mute slots, push knob 1 opens / picks (SHIFT: change, remove)

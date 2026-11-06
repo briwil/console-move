@@ -545,8 +545,9 @@ def fx_data(T):
             mid = e.slots[i]
             if mid:
                 rows.append({"n": i + 1, "label": T.instp.title(mid).upper()[:12],
-                             "text": "%d%%    %s" % (round(e.inst_levels[i] * 100), mix_pan_text(e.inst_pans[i]))})
-        return {"title": "MIXER", "rows": rows, "hint": "KNOBS 1-8: VOLUME   SHIFT + KNOB: PAN"}
+                             "text": "MUTED" if i in e.slot_mutes else
+                             "%d%%    %s" % (round(e.inst_levels[i] * 100), mix_pan_text(e.inst_pans[i]))})
+        return {"title": "MIXER", "rows": rows, "hint": "KNOBS 1-8: VOLUME   SHIFT + KNOB: PAN   STEP 1-8: MUTE, SHIFT: SOLO"}
     if which in ("song1", "song2"):                          # SONG INSERT 1 / 2: the effect, its settings, its picture
         import catalog
         sf = T.songfx(0 if which == "song1" else 1)

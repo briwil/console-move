@@ -103,8 +103,8 @@ class InstPage:
     def start_pick(self):
         e = self.e
         mine = e.slots[self.row]
-        self.choices = [(m, title) for m, title in machines()
-                        if e.slot_of(m) is None or m == mine]
+        self.choices = sorted(((m, title) for m, title in machines()
+                               if e.slot_of(m) is None or m == mine), key=lambda c: c[1].lower())   # (A to Z)
         if not self.choices:
             self.mode = None
             self.t.say("NO DRUM MACHINES ARE BUILT: RUN ~/console/pi-app/setup.sh ONCE", 4)

@@ -19,8 +19,9 @@ class FxPicker:
         song = getattr(ins, "slot", 0) == -1                 # a song insert: not the effects too heavy for it
         skip = insertfx.SONG_SKIP if song else ()
         # (id, title, its number in the catalog): the list can leave some out, so the number is kept with each
-        self.choices = [("none", "NO EFFECT", 0)] + [(f["id"], f["title"].upper(), i)
-                                                     for i, f in enumerate(catalog.FX, 1) if f["id"] not in skip]
+        self.choices = [("none", "NO EFFECT", 0)] + sorted(     # (NO EFFECT first, then A to Z)
+            ((f["id"], f["title"].upper(), i) for i, f in enumerate(catalog.FX, 1) if f["id"] not in skip),
+            key=lambda c: c[1])
         self.pick = next((k for k, c in enumerate(self.choices) if c[2] == ins.index), 0)
         self.active = True
 

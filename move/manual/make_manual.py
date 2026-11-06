@@ -253,7 +253,9 @@ story += [
     ]),
     p("LFOs", H2),
     p("Every instrument has two LFOs per pattern (a new pattern starts as a copy of the one you came from, then "
-      "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2, then INSERT 1 and 2 (see FX).", BODY),
+      "they are separate). On a sound page press <b>Right</b> past the last page: LFO 1, again: LFO 2, then INSERT 1 and 2 (see FX). "
+      "On the sampler every drum has its own two LFOs: the LFO pages show the ones of the drum you last played, and "
+      "DEST lists that drum's settings (shown as D3 LEVEL, D3 BLEND...).", BODY),
     table([
         ("Knob 1  DEST", "Which setting it moves (numbers only): the instrument's settings, then the number settings of "
          "its two insert effects (shown I1 / I2 and the setting's name, e.g. I1 CUTOFF). Choose the effect first."),

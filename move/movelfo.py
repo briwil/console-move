@@ -245,7 +245,7 @@ class MoveLFO:
             return
         used = self.held.pop(i, True)
         if not used:
-            steps = self.lfos()[self.tab].setdefault("steps", {})
+            steps = self.cur().setdefault("steps", {})
             st = steps.setdefault(i, {})
             if st.get("mute"):
                 st.pop("mute")
@@ -254,7 +254,7 @@ class MoveLFO:
             if not st:
                 steps.pop(i, None)
             self.T.engine.seq_changed()
-            self.T.say("LFO %d STEP %d %s" % (self.tab + 1, n, "RESTS" if st.get("mute") else "PLAYS"), 2)
+            self.T.say("%sLFO %d STEP %d %s" % (self.who(), self.tab + 1, n, "RESTS" if st.get("mute") else "PLAYS"), 2)
 
     def step_lights(self):
         if self.pads_on_page():
@@ -263,7 +263,7 @@ class MoveLFO:
             return [{0: 0, 1: 120, 2: 127}[x] for x in self.cfg()["rhythm"]]
         if self.insert_pos() is not None or self.sends_on_page():
             return [0] * 16
-        steps = self.lfos()[self.tab].get("steps", {})
+        steps = self.cur().get("steps", {})
         out = []
         for i in range(16):
             st = steps.get(i)
@@ -272,7 +272,29 @@ class MoveLFO:
 
     def lfos(self):
         e = self.T.engine
-        return lfo.of(e.seq.pattern)
+        d = e.drums
+        n = lfo.per_drum(d)
+        if not n:
+            return lfo.of(e.seq.pattern)
+        pat = e.seq.pattern
+        old = getattr(pat, "lfos", None) is not None and len(pat.lfos) < n * lfo.COUNT
+        out = lfo.of(pat, n * lfo.COUNT)
+        if old:
+            lfo.spread(pat, d)                           # (a song from before: each LFO to its drum)
+        return out
+
+    def base(self):
+        """Where the LFOs of the drum you're on start in lfos() (a sampler: each drum has its own two)."""
+        d = self.T.engine.drums
+        return min(self.T.drum_voice, lfo.per_drum(d) - 1) * lfo.COUNT if lfo.per_drum(d) else 0
+
+    def who(self):
+        """ "D3 " on a sampler (whose drum's LFO it is), else "". """
+        return "D%d " % (self.base() // lfo.COUNT + 1) if lfo.per_drum(self.T.engine.drums) else ""
+
+    def cur(self):
+        """The LFO on the page (for a sampler: of the drum you're on)."""
+        return self.lfos()[self.base() + self.tab]
 
     def insert_dests(self):
         """[dest] the number settings of this instrument's two insert effects (the LFO can move them too)."""
@@ -292,13 +314,13 @@ class MoveLFO:
 
     def dests(self):
         d = self.T.engine.drums
-        mine = getattr(d, "id", "") == "sampler"             # (a sampler: the settings of the drum you are on, not all 16's)
+        mine = bool(lfo.per_drum(d))                         # (a sampler: the settings of the drum you are on, not all 16's)
         return lfo.settings_dest(d, self.T.drum_voice if mine else None) + self.insert_dests()
 
     def values(self):
         """[(label, text)] for knobs 1-6."""
         e = self.T.engine
-        l = self.lfos()[self.tab]
+        l = self.cur()
         d = e.drums
         dest = "OFF"
         if l["dest"] >= lfo.INSERT_DEST:
@@ -342,10 +364,10 @@ class MoveLFO:
         if number > len(LABELS):
             return
         e = self.T.engine
-        l = self.lfos()[self.tab]
+        l = self.cur()
         k = number - 1
         if self.held and k in (1, 3):                 # a held step: its own WAVE / DEPTH
-            steps = self.lfos()[self.tab].setdefault("steps", {})
+            steps = self.cur().setdefault("steps", {})
             way = knobgate.gate(("lfostep", k), delta, shift) if k == 1 else delta
             if not way:
                 return
@@ -380,4 +402,4 @@ class MoveLFO:
         elif k == 4:
             l["phase"] = max(0, min(100, l["phase"] + delta))
         e.seq_changed()
-        self.T.say("LFO %d  %s  %s" % (self.tab + 1, LABELS[k], self.values()[k][1]), 2)
+        self.T.say("%sLFO %d  %s  %s" % (self.who(), self.tab + 1, LABELS[k], self.values()[k][1]), 2)

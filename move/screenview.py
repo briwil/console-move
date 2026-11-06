@@ -239,7 +239,10 @@ def sound_data(T):
     tab = min(T.drum_tab, len(pages) - 1)
     params = pages[tab][1][:8]
     synth = bool(e.is_synth(mid))
-    lfos = lfo.of(e.seq.pattern) if hasattr(e.seq, "pattern") else []
+    lfos = T.mlfo.lfos() if hasattr(e.seq, "pattern") else []
+    if lfo.per_drum(d):                                  # (a sampler: the LFOs of the drum you're on)
+        b = T.mlfo.base()
+        lfos = lfos[b:b + lfo.COUNT]
     last = getattr(getattr(e, "bridge", None), "_lfos", None)
     last = getattr(last, "last", {}) if last else {}
     now = time.monotonic()
@@ -358,7 +361,7 @@ def _extra_pages(T, out, base):
         return
     if ml.tab is not None and ml.tab < lfo.COUNT:
         out["tab"] = base + ml.tab
-        l = ml.lfos()[ml.tab]
+        l = ml.cur()
         vals = ml.values()
         out["knobs"] = [
             _card(1, "DEST", vals[0][1], choice=True),

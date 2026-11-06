@@ -1,4 +1,5 @@
-"""Two LFOs for every instrument, each aimed at one of its settings (modelled on the Syntakt's). They belong to a
+"""Two LFOs for every instrument, each aimed at one of its settings (modelled on the Syntakt's); a sampler has two
+for each of its drums. They belong to a
 pattern: each pattern keeps its own two (the first time you pick a pattern it starts as a copy of the one you
 came from, after that they're separate).
 
@@ -60,11 +61,35 @@ def defaults():
     return [default() for _ in range(COUNT)]
 
 
-def of(pattern):
-    """A pattern's two LFOs (made if it has none)."""
+def of(pattern, n=COUNT):
+    """A pattern's LFOs (made if it has none). n: how many it needs (a sampler: two per drum, COUNT * drums;
+    drum v's are v * COUNT and v * COUNT + 1)."""
     if not hasattr(pattern, "lfos") or pattern.lfos is None:
         pattern.lfos = defaults()
+    while len(pattern.lfos) < n:
+        pattern.lfos.append(default())
     return pattern.lfos
+
+
+def per_drum(machine):
+    """How many drums have LFOs of their own (a sampler: every one; anything else: 0, the instrument has two)."""
+    return int(getattr(machine, "lanes", 0) or 0) if getattr(machine, "id", "") == "sampler" else 0
+
+
+def spread(pattern, machine):
+    """A sampler's song from before each drum had its own: an LFO aimed at drum v's setting moves to drum v's."""
+    lf = pattern.lfos
+    for j in range(COUNT):
+        l = lf[j]
+        d = l.get("dest", -1)
+        if 0 <= d < INSERT_DEST:
+            try:
+                v = int(machine.params[d]["voice"])
+            except Exception:                            # noqa: BLE001
+                continue
+            k = v * COUNT + j
+            if v and k < len(lf) and lf[k].get("dest", -1) < 0:
+                lf[k], lf[j] = l, default()
 
 
 def inherit(seq, n):
@@ -87,7 +112,7 @@ def to_json(pattern):
 
 def from_json(pattern, data):
     try:
-        out = defaults()
+        out = [default() for _ in range(max(COUNT, min(256, len(data or []))))]
         for o, d in zip(out, data or []):
             o["dest"] = int(d.get("dest", -1))
             o["wave"] = max(0, min(len(WAVES) - 1, int(d.get("wave", 0))))
@@ -163,7 +188,7 @@ class Runner:
                 self._release(k, None)
                 continue
             lfos = getattr(seq.pattern, "lfos", None) or []
-            for j in range(COUNT):
+            for j in range(max(COUNT, len(lfos))):
                 l = lfos[j] if j < len(lfos) else None
                 dest = l["dest"] if l else -1
                 key = (k, j)

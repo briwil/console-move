@@ -476,7 +476,12 @@ def menu_panel(T, m):
         if ip.mode == "pick" and ip.choices:
             rows, pick = _rows([c[1] for c in ip.choices], ip.pick)
             return {"title": "SLOT %d: CHOOSE AN INSTRUMENT" % (ip.row + 1), "rows": rows, "pick": pick,
-                    "img": ip.choices[ip.pick][0], "hint": "WHEEL: PICK  ·  PUSH: CHOOSE  ·  BACK: CANCEL"}
+                    "img": "" if ip.choices[ip.pick][0] == "__edit__" else ip.choices[ip.pick][0],
+                    "hint": "WHEEL: PICK  ·  PUSH: CHOOSE  ·  BACK: CANCEL"}
+        if ip.mode == "edit":
+            rows, pick = _rows([c if isinstance(c, str) else c[1] for c in ip.choices], ip.pick)
+            return {"title": "SHOW OR HIDE INSTRUMENTS", "rows": rows, "pick": pick,
+                    "hint": "WHEEL: PICK  ·  PUSH: TICK / UNTICK  ·  BACK: DONE"}
         if ip.mode == "menu":
             rows, pick = _rows([c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices], ip.pick)
             return {"title": "SLOT %d" % (ip.row + 1), "rows": rows, "pick": pick}

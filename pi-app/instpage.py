@@ -20,6 +20,7 @@ import audio
 import ui
 
 MENU = ["CHANGE INSTRUMENT", "REMOVE"]
+EDIT = "__edit__"          # the last entry of the picker: choose which instruments it lists
 BUILDING = "MORE ARE BEING BUILT (THE FIRST TIME TAKES A FEW MINUTES)..."
 
 
@@ -43,7 +44,8 @@ class InstPage:
     def __init__(self, transport):
         self.t = transport
         self.row = 0                 # the slot picked, 0-7
-        self.mode = None             # None, "pick" (an instrument for the slot) or "menu" (change / remove)
+        self.mode = None             # None, "pick" (an instrument for the slot), "menu" (change / remove) or "edit" (show / hide)
+        self.items = []              # "edit": [(machine id or None for a heading, title)]
         self.pick = 0
         self.choices = []            # "pick": [(machine id, title)]; "menu": MENU
 
@@ -60,7 +62,13 @@ class InstPage:
         if number != 11:
             return
         step = 1 if delta > 0 else -1
-        if self.mode:
+        if self.mode == "edit":
+            n = len(self.items)
+            for _ in range(n):                                # (the headings are skipped)
+                self.pick = (self.pick + step) % n
+                if self.items[self.pick][0] is not None:
+                    break
+        elif self.mode:
             self.pick = (self.pick + step) % max(1, len(self.choices))
         else:
             self.row = max(0, min(audio.SLOTS - 1, self.row + step))
@@ -72,6 +80,8 @@ class InstPage:
             return
         if self.mode == "pick":
             self.choose_machine()
+        elif self.mode == "edit":
+            self.toggle()
         elif self.mode == "menu":
             if self.choices[self.pick] == "REMOVE":
                 self.remove()
@@ -98,17 +108,54 @@ class InstPage:
         self.mode, self.choices, self.pick = "menu", list(MENU), 0
 
     def cancel(self):
+        if self.mode == "edit":
+            self.start_pick()                                  # Back from the list: the picker again
+            return
         self.mode = None
+
+    # ------------------------------------------------------------ which instruments the picker lists
+    def hidden(self):
+        e = self.e
+        return set(e.settings.get("hidden_instruments", [])) if e else set()
+
+    def start_edit(self):
+        """EDIT: every drum machine, then every synth, each with a check box. Unchecked ones leave the picker
+        (a song that already uses one still has it)."""
+        found = machines()
+        drums = sorted(((m, t) for m, t in found if not is_synth(m)), key=lambda c: c[1].lower())
+        synths = sorted(((m, t) for m, t in found if is_synth(m)), key=lambda c: c[1].lower())
+        self.items = [(None, "DRUM MACHINES")] + drums + [(None, "SYNTHS")] + synths
+        self.pick = 1 if drums else (len(drums) + 2 if synths else 0)
+        self.mode = "edit"
+        self.labels()
+
+    def labels(self):
+        hid = self.hidden()
+        self.choices = [("-- %s --" % t) if m is None else ("%s %s" % ("( )" if m in hid else "(X)", t.upper()))
+                        for m, t in self.items]
+
+    def toggle(self):
+        mid, title = self.items[self.pick]
+        if mid is None:
+            return
+        hid = self.hidden()
+        hid = hid - {mid} if mid in hid else hid | {mid}
+        self.e.remember("hidden_instruments", sorted(hid))
+        self.labels()
+        self.t.say("%s: %s" % (title.upper(), "HIDDEN FROM THE LIST" if mid in hid else "SHOWN IN THE LIST"), 2)
 
     def start_pick(self):
         e = self.e
         mine = e.slots[self.row]
+        hid = self.hidden()
         self.choices = sorted(((m, title) for m, title in machines()
-                               if e.slot_of(m) is None or m == mine), key=lambda c: c[1].lower())   # (A to Z)
-        if not self.choices:
+                               if (e.slot_of(m) is None or m == mine) and (m not in hid or m == mine)),
+                              key=lambda c: c[1].lower())   # (A to Z)
+        if not machines():
             self.mode = None
             self.t.say("NO DRUM MACHINES ARE BUILT: RUN ~/console/pi-app/setup.sh ONCE", 4)
             return
+        self.choices.append((EDIT, "EDIT"))                     # (always last)
         ids = [m for m, _ in self.choices]
         self.pick = ids.index(mine) if mine in ids else 0
         self.mode = "pick"
@@ -116,6 +163,9 @@ class InstPage:
     def choose_machine(self):
         e = self.e
         mid, title = self.choices[self.pick]
+        if mid == EDIT:
+            self.start_edit()
+            return
         self.mode = None
         if mid == e.slots[self.row]:
             return
@@ -175,6 +225,8 @@ class InstPage:
         e = self.e
         if self.mode == "pick":
             return "INSTRUMENT FOR SLOT %d  ·  KNOB 11: PICK  ·  PUSH KNOB 11: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
+        if self.mode == "edit":
+            return "SHOW OR HIDE INSTRUMENTS  ·  PUSH KNOB 11: TICK / UNTICK  ·  SHIFT+MIDI: BACK"
         if self.mode == "menu":
             return "SLOT %d  ·  KNOB 11: PICK  ·  PUSH KNOB 11: CHOOSE  ·  SHIFT+MIDI: CANCEL" % (self.row + 1)
         if e and e.slots[self.row]:
@@ -260,7 +312,7 @@ class InstPage:
     def draw_list(self, surf, f, white, grey, dim, green):
         """The pick list (or the CHANGE / REMOVE menu): 6 rows at a time, scrolling with the pick."""
         if self.mode == "pick":
-            items = [(title, "SYNTH" if is_synth(mid) else "DRUMS") for mid, title in self.choices]
+            items = [(title, "" if mid == EDIT else "SYNTH" if is_synth(mid) else "DRUMS") for mid, title in self.choices]
         else:
             items = [(label, "") for label in self.choices]
         rows = 6
@@ -271,7 +323,8 @@ class InstPage:
         x, y = 640 - w // 2, max(40, 200 - h // 2)
         pygame.draw.rect(surf, (20, 22, 26), (x, y, w, h), border_radius=10)
         pygame.draw.rect(surf, (70, 75, 84), (x, y, w, h), 2, border_radius=10)
-        head = "INSTRUMENT FOR SLOT %d" % (self.row + 1) if self.mode == "pick" else "SLOT %d" % (self.row + 1)
+        head = "INSTRUMENT FOR SLOT %d" % (self.row + 1) if self.mode == "pick" else \
+            "SHOW OR HIDE" if self.mode == "edit" else "SLOT %d" % (self.row + 1)
         if len(items) > rows:
             head += "   (%d OF %d)" % (self.pick + 1, len(items))
         hd = f(13).render(head, True, grey)

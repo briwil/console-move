@@ -209,6 +209,9 @@ story += [
          "each sample plays as you land on it); push a sample to choose it, Back to leave. It is saved with the song "
          "(as a place in the sample list, like the drum sampler's)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
+        ("EDIT (last in the instrument list)", "Every drum machine, then every synth, each with a tick box. Push the "
+         "wheel to untick one and it no longer appears in the list when you choose an instrument; tick it to bring it "
+         "back. A song that already uses an untick instrument keeps it. Back returns to the list."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
         ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then (a synth "
          "with its arp on) ARP, then the sound again. Back (or Shift + left button 1), from any of them: this page."),

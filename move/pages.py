@@ -406,8 +406,8 @@ def inst_page(f, T):
     if ip.mode == "pick":
         carousel(f, ip)
         return
-    header(f, "INSTRUMENTS")
-    if ip.mode == "menu":
+    header(f, "SHOW OR HIDE" if ip.mode == "edit" else "INSTRUMENTS")
+    if ip.mode in ("menu", "edit"):
         items = [c[1] if isinstance(c, (tuple, list)) else str(c) for c in ip.choices]
         biglist(f, items, ip.pick)
         return

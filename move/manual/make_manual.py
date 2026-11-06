@@ -491,7 +491,11 @@ story += [
         ("Shift + Menu", "Export: a stereo mix and one file per track, in "
          "/data/UserData/console/data/exports/(song name and time)/."),
     ]),
-    p("To copy the exports to the Mac's desktop:", BODY),
+    p("<b>Downloading exports and backing up projects:</b> on a phone, tablet or computer on the same network open "
+      "<font face='Courier'>http://move.local:8080/files</font>. It lists every export (the stereo mix and the "
+      "stems) and every project: tap <b>Download ZIP</b> for a whole folder, or open <b>Files</b> to take one file. "
+      "Stop recording and playing before you back up the project you are working on.", BODY),
+    p("Or to copy the exports to the Mac's desktop:", BODY),
     p("scp -r \"ableton@move.local:/data/UserData/console/data/exports\" ~/Desktop/move-exports", CODE),
 
     p("External screen (a phone or tablet)", H2),

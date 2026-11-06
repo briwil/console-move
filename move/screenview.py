@@ -742,6 +742,100 @@ def _screen_b64():
         return ""
 
 
+# ---------------------------------------------------------------- exports and projects, to download / back up
+#   http://move.local:8080/files : every export (stems + mix) and every project, each as one ZIP or file by file
+
+class _ZipOut:
+    """A write-only stand-in for a file, so a ZIP can be streamed to the browser without a temporary copy
+    (zipfile writes such a stream with data descriptors)."""
+    def __init__(self, w):
+        self.w, self.n = w, 0
+
+    def write(self, b):
+        self.w.write(b)
+        self.n += len(b)
+        return len(b)
+
+    def flush(self):
+        self.w.flush()
+
+
+def _root(kind):
+    if kind not in ("exports", "projects"):
+        return None
+    data = os.path.realpath(os.path.expanduser(os.environ.get("CONSOLE_DATA", "~/console-data")))   # (as audio.DATA)
+    return os.path.join(data, kind)
+
+
+def _safe(kind, *parts):
+    """The path for exports/<folder>[/<file>], or None if it would leave that folder."""
+    import urllib.parse
+    root = _root(kind)
+    if not root:
+        return None
+    bits = [urllib.parse.unquote(p) for p in parts]
+    if any(not b or b in (".", "..") or "/" in b or "\\" in b or "\0" in b for b in bits):
+        return None
+    path = os.path.realpath(os.path.join(root, *bits))
+    return path if path.startswith(os.path.realpath(root) + os.sep) else None
+
+
+def _size(path):
+    if os.path.isfile(path):
+        return os.path.getsize(path)
+    return sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(path) for f in fs
+               if os.path.isfile(os.path.join(d, f)))
+
+
+def _mb(n):
+    return "%.1f MB" % (n / 1048576.0) if n >= 104858 else "%d KB" % max(1, round(n / 1024.0))
+
+
+FILES_CSS = ("body{margin:0;background:#0b0c0e;color:#e9e6df;font:16px/1.45 system-ui,-apple-system,sans-serif;"
+             "padding:20px max(16px,env(safe-area-inset-left))}main{max-width:760px;margin:0 auto}"
+             "h1{font-size:22px;letter-spacing:.14em;color:#f2b33d;margin:4px 0 2px}h2{font-size:13px;letter-spacing:.16em;"
+             "text-transform:uppercase;color:#9b968b;margin:30px 0 8px}p.s{color:#9b968b;margin:2px 0 14px;font-size:14px}"
+             "a{color:#f2b33d}.item{border:1px solid #2c2a26;border-radius:10px;padding:10px 14px;margin:8px 0;background:#141310}"
+             ".row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}"
+             ".nm{font-weight:600;word-break:break-word;min-width:0}.sz{color:#9b968b;font-size:13px;margin-left:8px;font-weight:400}"
+             ".btn{background:#f2b33d;color:#16110c;text-decoration:none;font-weight:700;border-radius:8px;padding:7px 14px;white-space:nowrap}"
+             "details{margin-top:6px}summary{cursor:pointer;color:#9b968b;font-size:14px}"
+             "ul{list-style:none;margin:6px 0 2px;padding:0}li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;"
+             "border-top:1px solid #1f1d19;font-size:14px;word-break:break-all}.empty{color:#9b968b}")
+
+
+def files_page():
+    import html
+    import urllib.parse
+    q = lambda s: urllib.parse.quote(s, safe="")
+    out = ['<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+           '<title>Console files</title><style>%s</style><main><h1>CONSOLE FILES</h1>'
+           '<p class="s">Download an export, or back up a project. Stop recording and playing first when you back '
+           'up the project you are working on.</p>' % FILES_CSS]
+    for kind, title, newest in (("exports", "Exports (stems and stereo mix)", True), ("projects", "Projects (backups)", False)):
+        out.append("<h2>%s</h2>" % title)
+        root = _root(kind)
+        try:
+            names = [n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n)) and not n.startswith(".")]
+        except OSError:
+            names = []
+        names.sort(key=(lambda n: -os.path.getmtime(os.path.join(root, n))) if newest else str.lower)
+        if not names:
+            out.append('<p class="empty">Nothing here yet.</p>')
+        for n in names:
+            d = os.path.join(root, n)
+            fl = sorted(f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f)) and not f.startswith("."))
+            out.append('<div class="item"><div class="row"><span class="nm">%s<span class="sz">%s, %d files</span></span>'
+                       '<a class="btn" href="/zip/%s/%s">Download ZIP</a></div><details><summary>Files</summary><ul>' %
+                       (html.escape(n), _mb(_size(d)), len(fl), kind, q(n)))
+            for f in fl:
+                out.append('<li><a href="/dl/%s/%s/%s">%s</a><span class="sz">%s</span></li>' %
+                           (kind, q(n), q(f), html.escape(f), _mb(os.path.getsize(os.path.join(d, f)))))
+            out.append("</ul></details></div>")
+    out.append("</main>")
+    return "".join(out).encode()
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -786,6 +880,43 @@ class _Handler(BaseHTTPRequestHandler):
             if path in ("/", "/index.html"):
                 page = open(os.path.join(HERE, "screenview.html"), "rb").read().replace(b"%%FAMILY%%", FAMILY.encode())
                 self._send(page, "text/html; charset=utf-8")
+            elif path in ("/files", "/files/"):
+                self._send(files_page(), "text/html; charset=utf-8")
+            elif path.startswith("/dl/"):
+                bits = path.split("/")[2:]
+                target = _safe(bits[0], *bits[1:]) if len(bits) == 3 else None
+                if not target or not os.path.isfile(target):
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(os.path.getsize(target)))
+                self.send_header("Content-Disposition", 'attachment; filename="%s"' % os.path.basename(target).replace('"', ""))
+                self.end_headers()
+                with open(target, "rb") as fh:
+                    while True:
+                        chunk = fh.read(262144)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            elif path.startswith("/zip/"):
+                bits = path.split("/")[2:]
+                target = _safe(bits[0], *bits[1:]) if len(bits) == 2 else None
+                if not target or not os.path.isdir(target):
+                    self.send_error(404)
+                    return
+                import zipfile
+                name = os.path.basename(target)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", 'attachment; filename="%s.zip"' % name.replace('"', ""))
+                self.end_headers()                       # (no length: the ZIP is streamed, then the connection closes)
+                with zipfile.ZipFile(_ZipOut(self.wfile), "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+                    for d, _, fs in os.walk(target):
+                        for f in sorted(fs):
+                            fp = os.path.join(d, f)
+                            if os.path.isfile(fp) and not f.startswith("."):
+                                z.write(fp, os.path.join(name, os.path.relpath(fp, target)))
             elif path == "/manifest.json":
                 self._send(json.dumps({"name": "Console", "short_name": "Console", "display": "fullscreen",
                                        "orientation": "landscape", "start_url": "/", "background_color": "#0b0c0e",

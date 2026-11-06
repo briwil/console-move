@@ -267,6 +267,21 @@ class Module:
             if voice is not None:
                 voices.add(voice)
             self.params.append(entry)
+        self.sample_param_index, self.files = None, []
+        sk = self.spec.get("sample_key")
+        if sk:                                        # a one-sample instrument (MrSample): its sample is a file in the
+            try:                                      # Move's samples (index 1.. = files[0..], 0 = none), as the drum sampler's
+                import sampler
+                files = sampler.list_samples()
+            except Exception:                         # noqa: BLE001
+                files = []
+            entry = next((p for p in self.params if p["key"] == sk), None)
+            if entry is None:
+                entry = {"key": sk, "voice": None, "unit": ""}
+                self.params.append(entry)
+            entry.update(label="SAMPLE", kind="menu", int=False, raw=[""] + files, steps=len(files),
+                         options=["-"] + [os.path.splitext(os.path.basename(f))[0].upper() for f in files])
+            self.files, self.sample_param_index = files, self.params.index(entry)
         self.index = {p["key"]: i for i, p in enumerate(self.params)}
         # the drums: 16 pads (fewer if the module says), each on a voice
         nv = max(voices) + 1 if voices else 1
@@ -438,6 +453,18 @@ class Module:
         with self._lock:
             self.values = values
             self._pending.extend(("param", i, v) for i, v in enumerate(values))
+
+    def hear(self, note=60):
+        """The sample browser's preview for a one-sample instrument: a note, let go a moment later."""
+        with self._lock:
+            self._pending.append(("on", note, 100))
+
+        def off():
+            with self._lock:
+                self._pending.append(("off", note))
+        t = threading.Timer(0.8, off)
+        t.daemon = True
+        t.start()
 
     def init_kit(self):
         self.load_kit(self.init_values)

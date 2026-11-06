@@ -1,6 +1,7 @@
 """The SAMPLE BROWSER: choosing a sampler drum's sample by folders instead of one long list.
 
-Push the big wheel on a sampler drum's page to open it. It first asks which of the drum's samples: SAMPLE 1 and
+Push the big wheel on a sampler drum's page to open it (on a one-sample instrument like MRSAMPLE it goes straight to
+the folders: one sample, played as a note). It first asks which of the drum's samples: SAMPLE 1 and
 SAMPLE 2 (BLEND mixes them), then RANDOM (push: on / off). With RANDOM on, SAMPLES 3-5 come in above RANDOM, and each hit plays
 one of them at random (BLEND off). Delete + push the wheel on a sample: take it out. Then: the wheel turns through the list, push the wheel to open a folder / choose
 a sample, "< UP" goes up, Back goes up a folder (from the top: back to SAMPLE 1 / 2, and Back again leaves).
@@ -25,6 +26,7 @@ class SampleBrowser:
         self.param = 0
         self.orig = 0
         self._timer = None
+        self.single = False
         self._off = None
         self.last_file = None      # and the file it was on
         self.last_folder = None    # where the last pick left off: the next one starts there
@@ -59,6 +61,8 @@ class SampleBrowser:
         if self.stage == "which":
             return "DRUM %d: WHICH SAMPLE?" % (self.voice + 1)
         rel = os.path.relpath(self.folder, self.root) if self.folder != self.root else os.path.basename(self.root)
+        if self.single:
+            return ("SAMPLE  %s" % rel.upper())[:27]
         return ("D%d S%d  %s" % (self.voice + 1, self.which + 1, rel.upper()))[:27]
 
     def _random(self):
@@ -86,15 +90,18 @@ class SampleBrowser:
         if self._files is not files or self._tree is None or len(files) != len(self._files or ()):
             self._build(files)
         self.drums, self.voice = drums, voice
+        self.single = getattr(drums, "sample_param_index", None) is not None     # a one-sample instrument (MrSample)
         self.stage = "which"
-        self._which_list()
+        self._which_list() if not self.single else None
         self.pick = 0
         self.active = True
+        if self.single:
+            self._choose_which(0)                      # (no SAMPLE 1 / 2 / RANDOM: straight to the folders)
 
     def _choose_which(self, which):
         import sampler
         self.which, self.stage = which, "files"
-        self.param = sampler.sample_param(self.voice, which)
+        self.param = self.drums.sample_param_index if self.single else sampler.sample_param(self.voice, which)
         self.orig = self.drums.get_param(self.param)
         if hasattr(self.drums, "solo"):
             self.drums.solo(self.voice, which)            # while browsing, hear only the sample being chosen
@@ -176,6 +183,10 @@ class SampleBrowser:
             self.drums.set_param(self.param, val)
             self._unsolo()                             # (no sound as it goes back to the list)
             self._remember()
+            if self.single:                            # a one-sample instrument: that was the choice, done
+                self.active = False
+                self.T.say("SAMPLE: %s" % self.drums.value_text(self.param), 2)
+                return
             self.stage = "which"                       # (back to SAMPLE 1 / 2 ..., not out to the instrument)
             self._which_list()
             self.pick = next((k for k, (_l, kind, v) in enumerate(self.entries) if kind == "which" and v == self.which), 0)
@@ -188,6 +199,9 @@ class SampleBrowser:
             self.close(False)
         elif self.folder != self.root:
             self.folder_up()
+        elif self.single:                              # the top of the samples: leave (the old sample stays)
+            self._remember()
+            self.close(False)
         else:                                          # the top of the samples: back to SAMPLE 1 / 2
             self._remember()
             self._cancel()
@@ -239,7 +253,10 @@ class SampleBrowser:
         def go():
             if self.active and self.stage == "files":
                 self.drums.set_param(self.param, val)
-                self.T.engine.hit(self.voice, 110)
+                if self.single:
+                    self.drums.hear()                  # (a note: it plays chromatically)
+                else:
+                    self.T.engine.hit(self.voice, 110)
         self._timer = threading.Timer(0.3, go)
         self._timer.daemon = True
         self._timer.start()

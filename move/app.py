@@ -813,7 +813,8 @@ def handle(name, T, m, e):
         if name in ("BACK", "FILE", "DRUMS_BACK"):
             sb.back()
             return
-    elif (name == "HOME" and T.drum_page and e and e.drums and getattr(e.drums, "id", "") == "sampler"
+    elif (name == "HOME" and T.drum_page and e and e.drums and (getattr(e.drums, "id", "") == "sampler"
+                                                                or getattr(e.drums, "sample_param_index", None) is not None)
           and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)):
         sb.open(e.drums, T.drum_voice)                 # push the wheel on a sampler drum: choose its sample
         return

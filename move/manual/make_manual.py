@@ -203,6 +203,10 @@ story += [
          "rings. Older songs and presets: sample 2 empty, BLEND left."),
         ("RANDOM", "Push it to turn it on: SAMPLES 3, 4 and 5 appear under it, and each hit plays one of the drum's "
          "samples (1-5) at random. BLEND is off while it's on (and back as it was when you turn it off)."),
+        ("MRSAMPLE", "One sample played chromatically on the pads (like the OP-1 or the Move's own Sampler), with an amp "
+         "envelope, filter and LFO. Push the wheel on its sound page: the sample browser (the Move's sample folders, "
+         "each sample plays as you land on it); push a sample to choose it, Back to leave. It is saved with the song "
+         "(as a place in the sample list, like the drum sampler's)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
         ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then (a synth "

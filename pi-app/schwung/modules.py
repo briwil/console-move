@@ -215,22 +215,31 @@ class Module:
                             q["max"] = max(0, (n or 1) - 1)
                         if p["key"] not in {c.get("key") for c in chain}:
                             chain.append(q)
+        list_skip = set()
         # a preset / kit list the module says the length of (OB-Xd: 0-9999 in chain_params, but 128 real presets)
         for lvl in list((ui.get("levels") or {}).values()) + list(((caps.get("ui_hierarchy") or {}).get("levels") or {}).values()):
             lp, cp = lvl.get("list_param"), lvl.get("count_param")
             n = _number(s.get(cp)) if cp else None
-            if lp and n and n >= 1:
+            if lp:
+                for k in (cp, lvl.get("name_param")):
+                    if k:
+                        list_skip.add(k)             # the count and name are read-outs, not knobs
                 for c in chain:
                     if c.get("key") == lp and c.get("type", "float") in ("int", "float"):
-                        c["min"], c["max"], c["step"] = 0, int(n) - 1, 1
-                        c["type"] = "int"
+                        if n and n >= 1:
+                            c["min"], c["max"] = 0, int(n) - 1
+                        elif _number(c.get("max")) is None:
+                            continue
+                        c["step"], c["type"], c["list"] = 1, "int", True
+                        if c.get("access") == "write":
+                            c.pop("access")          # (Amino's preset is write-only, but it is the knob we want)
         prefixes = self.spec.get("voice_prefixes")
         self.params = []                              # {key, label, kind, options, lo, hi, steps, voice}
         voices = set()
         for p in chain:
             key = p.get("key")
             if not key or p.get("access") == "write" or key.startswith(("ui_", "cv_", "midi")) \
-                    or key in SKIP or key in self.spec.get("skip", ()):
+                    or key in SKIP or key in list_skip or key in self.spec.get("skip", ()):
                 continue
             voice, label = None, p.get("name") or key
             m = VOICE_KEY.match(key)
@@ -257,7 +266,7 @@ class Module:
                     entry.update(kind="menu", options=["OFF", "ON"], raw=["0", "1"], steps=1)
                 elif kind == "int":
                     steps = int(hi - lo)
-                    entry.update(kind="num", int=True, lo=lo, hi=hi, steps=max(1, steps))
+                    entry.update(kind="num", int=True, lo=lo, hi=hi, steps=max(1, steps), one=bool(p.get("list")))
                     if lo > 0 and hi / lo >= 100:             # a frequency (20-20000): even steps by octave, not by Hz
                         entry.update(log=True, steps=127)
                 else:
@@ -417,7 +426,7 @@ class Module:
         if p["kind"] == "menu":
             return max(0, min(p["steps"], v + (1 if clicks > 0 else -1)))
         # about 128 clicks end to end, whatever the range (a click is one step on short ones)
-        per = max(1, p["steps"] // 128)
+        per = 1 if p.get("one") else max(1, p["steps"] // 128)
         return max(0, min(p["steps"], v + clicks * per))
 
     def step(self, param, clicks):

@@ -186,11 +186,10 @@ class MoveBoard:
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
-            if (n - 1 in (ARP_ICON, PADS_ICON) and self.shift and T.drum_page
-                    and (T.synth_shown() or (n - 1 == PADS_ICON and not T.seq_page))
+            if (n - 1 == PADS_ICON and self.shift and T.drum_page and not T.seq_page
                     and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
                 if val:
-                    k.put("ARP_JUMP" if n - 1 == ARP_ICON else "PADS_JUMP")   # the icons: the arp page, the pads page
+                    k.put("PADS_JUMP")                                 # the icon: the pads page
                 return
             if T.mlfo.active():
                 k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
@@ -453,9 +452,6 @@ class Lights:
         # the icons under the step buttons: lit only while Shift is held (as on the Move's own software), on a synth's sound page
         icons = {}
         if board.shift and T.drum_page and not T.seq_page and not (T.fx_page or T.inst_page or T.song_page):
-            if T.synth_shown():
-                on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
-                icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
             if e and e.drums and e.slot is not None and e.slots[e.slot]:        # (a drum machine has PADS too)
                 icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20
         self.icons(icons)
@@ -464,7 +460,6 @@ class Lights:
 # ---------------------------------------------------------------- the app
 
 PADS_ICON = 1                     # the hexagon, under step button 2: the pads' key and scale
-ARP_ICON = 2                      # the branching-nodes icon, under step button 3 (see MOVE-NOTES.md)
 ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
 
 
@@ -886,9 +881,6 @@ def handle(name, T, m, e):
             ms.step(name[1], name[2], name[3])
         elif T.msyn.active():
             T.msyn.step(name[1], name[2], name[3])
-        return
-    if name == "ARP_JUMP":
-        T.mlfo.goto_arp()
         return
     if name == "PADS_JUMP":
         T.mlfo.goto_pads()

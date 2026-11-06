@@ -417,8 +417,7 @@ story += [
       "It has no key or scale: knob 1 OCTAVE (the right-hand pads, which play the picked drum a semitone a pad), "
       "knob 2 VELOCITY and knob 3 CURVE, which work as on a synth for the drum pads too.", BODY),
     p("Arpeggiator (synths)", H2),
-    p("A synth's last sound page is ARP (Right past SENDS; Right again: ARP 2), or hold Shift and press step button 3 (the branching-nodes icon) on "
-      "its sound pages (the icon is bright when the arp is on). The arp turns the notes you hold on the pads, and "
+    p("A synth's last sound page is ARP (Right past SENDS; Right again: ARP 2); knob 1 turns it on and off. The arp turns the notes you hold on the pads, and "
       "the chords in the sequencer, into a run of single notes. What you record from the pads is the notes you played, "
       "not the arp's. A rest in the rhythm does not use up a note: the run carries on at the next one.", BODY),
     table([

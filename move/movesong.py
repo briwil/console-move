@@ -47,7 +47,7 @@ class Song:
         self.rows, self.on, self.pick = [], False, 0
         try:
             d = json.load(open(self.path()))
-            self.on = bool(d.get("on"))
+            self.on = False                       # (song mode is always off when a song opens; the rows are kept)
             for r in d.get("rows", [])[:MAX_ROWS]:
                 pats = {int(k): (None if v is None else max(0, min(PATTERNS - 1, int(v))))
                         for k, v in r.get("pats", {}).items()}

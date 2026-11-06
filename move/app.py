@@ -652,6 +652,8 @@ def main():
                     T.live_rec = False                        # recording into the pattern ends at Stop, or when you leave the page
                     T.say("PATTERN RECORDING OFF", 2)
                 T._rec_was_playing = bool(e.playing)
+                if T.sbrowse.active and (T.seq_page or T.fx_page or T.inst_page or T.song_page or not T.drum_page):
+                    T.sbrowse.close(False)                # (went to another page: the sample browser closes, the old sample stays)
                 T.pagefx.update(T, m)
                 pages.draw(frame, T, m)
                 if screenview is not None:
@@ -800,6 +802,8 @@ def handle(name, T, m, e):
         if voice != sb.voice:
             sb.close(False)
             sb.open(e.drums, voice)
+    if sb.active and (T.seq_page or T.fx_page or T.inst_page or T.song_page or not T.drum_page):
+        sb.close(False)                                # (it is not on this page: it must not keep the wheel)
     if sb.active:                                      # the sample browser has the wheel and Back
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
             sb.turn(name[2])

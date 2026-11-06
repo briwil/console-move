@@ -1533,7 +1533,7 @@ class Engine:
         total = end
         if use_rev or use_dly:
             rev, dly = effects.Reverb(self.rate), effects.Delay(self.rate)
-            rev.set(fx["rev_size"], fx["rev_tone"])
+            rev.set(fx["rev_size"], fx["rev_tone"], fx.get("rev_width", 1.0))
             dly.set(effects.delay_beats(fx["dly_time"]) * self.frames_per_beat(), fx["dly_feedback"])
             chunk = 65536
             for a in range(0, end + tail, chunk):
@@ -2930,7 +2930,7 @@ class Engine:
                 self._rev, self._dly = effects.Reverb(self.rate), effects.Delay(self.rate)
             rev, dly = self._rev, self._dly
         fx = self.fx
-        rev.set(fx["rev_size"], fx["rev_tone"])
+        rev.set(fx["rev_size"], fx["rev_tone"], fx.get("rev_width", 1.0))
         dly.set(effects.delay_beats(fx["dly_time"]) * self.frames_per_beat(), fx["dly_feedback"])
         return (rev.process(rev_in) * (fx["rev_level"] * effects.REVERB_MAKEUP)
                 + dly.process(dly_in) * fx["dly_level"])

@@ -62,6 +62,7 @@ typedef struct {
     float lfo_phase[2], lfo_inc[2], lfo_value[2];
     float amount, input_gain, reverb_time, diffusion, lp;
     float lp_decay_1, lp_decay_2;
+    float width;                           /* 0 (the two sides the same: mono) .. 1 (the reverb's own stereo) */
 } Reverb;
 
 typedef struct {                           /* fx_engine.h's Context */
@@ -138,6 +139,7 @@ Reverb *rev_new(float sample_rate) {
     r->diffusion = 0.625f;
     r->lp = 0.7f;
     r->room = 1.0f;
+    r->width = 1.0f;
     return r;
 }
 
@@ -155,6 +157,11 @@ void rev_room(Reverb *r, float room) {
 
 void rev_free(Reverb *r) { free(r); }
 
+/* The stereo width of the wet output: 1 as it is, 0 mono. */
+void rev_width(Reverb *r, float width) {
+    r->width = width < 0.0f ? 0.0f : (width > 1.0f ? 1.0f : width);
+}
+
 void rev_params(Reverb *r, float reverb_time, float lp, float diffusion, float input_gain) {
     r->reverb_time = reverb_time;
     r->lp = lp;
@@ -165,7 +172,7 @@ void rev_params(Reverb *r, float reverb_time, float lp, float diffusion, float i
 /* Wet output only. in and out may not overlap. */
 void rev_process(Reverb *r, const float *in_l, const float *in_r, float *out_l, float *out_r, int n) {
     const float kap = r->diffusion, klp = r->lp, krt = r->reverb_time, gain = r->input_gain;
-    const float s = r->scale * r->room;
+    const float s = r->scale * r->room, width = r->width;
     float lp_1 = r->lp_decay_1, lp_2 = r->lp_decay_2;
     Ctx c;
     c.r = r;
@@ -216,6 +223,11 @@ void rev_process(Reverb *r, const float *in_l, const float *in_r, float *out_l, 
         wet = c.acc;
         c.acc = 0.0f;
         out_r[k] = wet;
+        if (width < 1.0f) {                                   /* narrower: the sides come towards the middle */
+            float mid = 0.5f * (out_l[k] + out_r[k]), side = 0.5f * (out_l[k] - out_r[k]) * width;
+            out_l[k] = mid + side;
+            out_r[k] = mid - side;
+        }
     }
     r->lp_decay_1 = lp_1;
     r->lp_decay_2 = lp_2;

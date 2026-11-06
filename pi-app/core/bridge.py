@@ -229,11 +229,11 @@ class CoreBridge:
             return
         self._fx = key
         dly = effects.delay_beats(fx["dly_time"]) * e.frames_per_beat()
-        self.rev.set(fx["rev_size"], fx["rev_tone"])
+        self.rev.set(fx["rev_size"], fx["rev_tone"], fx.get("rev_width", 1.0))
         self.dly.set(dly, fx["dly_feedback"])
         self.core.effect_levels(fx["rev_level"] * effects.REVERB_MAKEUP, fx["dly_level"])
         for _mid, slot in self.slots.values():
-            slot.effect_settings(fx["rev_size"], fx["rev_tone"], dly, fx["dly_feedback"])
+            slot.effect_settings(fx["rev_size"], fx["rev_tone"], dly, fx["dly_feedback"], fx.get("rev_width", 1.0))
 
     # ---- the instrument slots
     def _sync_slots(self):

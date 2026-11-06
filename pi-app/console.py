@@ -803,7 +803,7 @@ class Transport:
 
     # ------------------------------------------------------------ send effects (the FX key)
 
-    FX_KNOBS = {"reverb": (("rev_size", "SIZE"), ("rev_tone", "TONE"), ("rev_level", "LEVEL")),
+    FX_KNOBS = {"reverb": (("rev_size", "SIZE"), ("rev_tone", "TONE"), ("rev_level", "LEVEL"), ("rev_width", "WIDTH")),
                 "delay": (("dly_time", "TIME"), ("dly_feedback", "FEEDBACK"), ("dly_level", "LEVEL"))}
 
     def insert_fx_available(self):
@@ -939,7 +939,7 @@ class Transport:
                 self._insfx_save()
             return
         if getattr(self, "inst_sends", False):          # the Move: 1-3 the effect (each instrument's send is on its SENDS page)
-            if number <= 3:
+            if number <= len(self.FX_KNOBS[self.fx_page]):
                 key = self.FX_KNOBS[self.fx_page][number - 1][0]
                 e.change_fx(key, delta if key == "dly_time" else delta * 0.02)
             return

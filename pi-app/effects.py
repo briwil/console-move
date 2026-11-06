@@ -18,7 +18,7 @@ LIB = os.path.join(HERE, "fx", "libconsolefx.so")
 DELAY_TIMES = [("1/16", 0.25), ("1/8T", 1 / 3), ("1/8", 0.5), ("1/8.", 0.75), ("1/4T", 2 / 3),
                ("1/4", 1.0), ("1/4.", 1.5), ("1/2", 2.0)]
 DELAY_TIMES.sort(key=lambda t: t[1])
-DEFAULTS = {"rev_size": 0.5, "rev_tone": 0.5, "rev_level": 0.8,
+DEFAULTS = {"rev_size": 0.5, "rev_tone": 0.5, "rev_level": 0.8, "rev_width": 1.0,
             "dly_time": "1/8.", "dly_feedback": 0.4, "dly_level": 0.7}
 REVERB_MAKEUP = 4.0       # the reverb comes out quieter than it goes in; this brings it up to match
 PROBLEM = ""              # why the effects are off, if they are
@@ -56,6 +56,8 @@ def _load():
                             ("dly_params", [p, f, f, f], None), ("dly_process", [p, p, p, p, p, i], None)]:
         fn = getattr(lib, name)
         fn.argtypes, fn.restype = args, res
+    if hasattr(lib, "rev_width"):                     # (an older library has no WIDTH: the reverb stays as it was)
+        lib.rev_width.argtypes, lib.rev_width.restype = [p, f], None
     return lib
 
 
@@ -92,10 +94,12 @@ class Reverb(_Effect):
     def __init__(self, rate):
         super().__init__(_lib.rev_new(rate), _lib.rev_process, _lib.rev_free)
 
-    def set(self, size, tone):
-        if (size, tone) == getattr(self, "_set", None):
+    def set(self, size, tone, width=1.0):
+        if (size, tone, width) == getattr(self, "_set", None):
             return
-        self._set = (size, tone)
+        self._set = (size, tone, width)
+        if hasattr(_lib, "rev_width"):
+            _lib.rev_width(self.h, width)                 # 0 mono .. 1 the reverb's own stereo
         """size and tone 0..1. SIZE sets the room (its lines shrink to an eighth at 0) and the tail
         together: fully down is a small, short room, fully up the Elements hall. Tone as on Elements."""
         _lib.rev_room(self.h, 0.125 + 0.875 * size ** 1.5)

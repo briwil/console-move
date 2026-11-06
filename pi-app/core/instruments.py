@@ -118,10 +118,10 @@ class Slot:
         for s in self.sources():
             self.core.remove(s)
 
-    def effect_settings(self, rev_size, rev_tone, dly_samples, dly_feedback):
+    def effect_settings(self, rev_size, rev_tone, dly_samples, dly_feedback, rev_width=1.0):
         """The slot's own effects (printed into its KIT inputs) follow the main ones' settings."""
         if self.fx:
-            self.fx[0].set(rev_size, rev_tone)
+            self.fx[0].set(rev_size, rev_tone, rev_width)
             self.fx[1].set(dly_samples, dly_feedback)
 
     def sync_mix(self, gain=0.8):

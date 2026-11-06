@@ -14,7 +14,8 @@ def label(T):
     """The page's name as the card shows it, or None (a list or menu over it: no card)."""
     fx = getattr(T, "fx_page", None)
     if fx:
-        return {"reverb": "REVERB", "delay": "DELAY", "song1": "SONG INSERT 1", "song2": "SONG INSERT 2"}.get(fx)
+        return {"reverb": "REVERB", "delay": "DELAY", "song1": "SONG INSERT 1", "song2": "SONG INSERT 2",
+                "mixvol": "MIXER VOLUME", "mixpan": "MIXER PAN"}.get(fx)
     if T.seq_page:
         return "AUTOMATION" if getattr(T, "auto_page", False) else "SEQUENCER"
     if T.drum_page:

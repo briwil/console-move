@@ -126,7 +126,14 @@ class CoreBridge:
         c.volume(e.phones_volume)
         self._transport()
         origin = self.sched.start_frame if self.sched.playing else None
-        for mid, slot in self.slots.values():
+        for k, (mid, slot) in self.slots.items():
+            try:
+                mix = (e.inst_levels[k], e.inst_pans[k])                          # the MIXER
+                if mix != (getattr(slot, "level", 1.0), getattr(slot, "balance", 0.0)):
+                    slot.level, slot.balance = mix
+                    slot.sync_mix()
+            except (AttributeError, IndexError):
+                pass
             cfg = getattr(e.seqs.get(mid), "arp_cfg", None)
             if cfg is not None and slot.kind == "synth":
                 slot.set_arp(cfg, e.frames_per_beat(), origin)

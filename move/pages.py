@@ -910,11 +910,30 @@ def song_insert_page(f, T, p):
     f.small(1, 59, (sf.error or "PUSH WHEEL: CHOOSE EFFECT").upper()[:31])
 
 
+def mixer_page(f, T):
+    """MIXER VOLUME / MIXER PAN (left button 3, after the song inserts): knobs 1-8 are the instruments in slots 1-8."""
+    from console import mix_pan_text
+    e = T.engine
+    vol = T.fx_page == "mixvol"
+    header(f, "MIXER VOLUME" if vol else "MIXER PAN")
+    for i in range(8):
+        col, row = divmod(i, 4)
+        x, y = col * 65, 13 + row * 11
+        mid = e.slots[i] if e else None
+        f.small(x + 1, y, ("%d %s" % (i + 1, T.instp.title(mid) if mid else "-"))[:9])
+        if mid:
+            f.right(x + 62, y, ("%d%%" % round(e.inst_levels[i] * 100)) if vol else mix_pan_text(e.inst_pans[i]), small=True)
+    f.small(1, 58, "KNOBS 1-8: INSTRUMENTS 1-8")
+
+
 def fx_page(f, T):
     e = T.engine
     which = T.fx_page
     if which in ("song1", "song2"):
         song_insert_page(f, T, 0 if which == "song1" else 1)
+        return
+    if which in ("mixvol", "mixpan"):
+        mixer_page(f, T)
         return
     header(f, which.upper())
     for i, (k, name) in enumerate(T.FX_KNOBS[which]):

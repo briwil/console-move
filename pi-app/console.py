@@ -143,6 +143,11 @@ HOLD_KEYS = ("COPY", "CUT")            # hold one and move to take several piece
 PUSHES = ["MUTE%d" % n for n in range(1, 9)] + ["ZOOM_RESET", "LOOP", "HOME"]
 
 
+def mix_pan_text(p):
+    """-1..1 as C, L25, R50..."""
+    return "C" if abs(p) < 0.02 else ("L%d" % round(-p * 100) if p < 0 else "R%d" % round(p * 100))
+
+
 class Board:
     """Turns control board MIDI into actions, keeping track of SHIFT."""
 
@@ -427,6 +432,12 @@ class Transport:
             self.focus.toggle(self.armed)
         elif name == "SEQ_UNDO":
             self.sp().undo()
+        elif name.startswith("MUTE") and name[4:].isdigit() and self.fx_page in ("mixvol", "mixpan") and e:
+            k = int(name[4:]) - 1                 # the MIXER: push a knob, that instrument's volume / pan back to normal
+            if 0 <= k < len(e.slots) and e.slots[k]:
+                vol = self.fx_page == "mixvol"
+                (e.change_inst_level if vol else e.change_inst_pan)(k, (1.0 - e.inst_levels[k]) if vol else -e.inst_pans[k])
+                self.say("INSTRUMENT %d %s BACK TO %s" % (k + 1, "VOLUME" if vol else "PAN", "100%" if vol else "CENTRE"), 2)
         elif name.startswith("MUTE") and name[4:].isdigit() and self.full_drum_page():
             self.drum_reset(int(name[4:]))        # the drum page: push a knob, its setting goes back to default
         elif name == "MUTE1" and self.seq_page:
@@ -447,6 +458,8 @@ class Transport:
             order = [None, "reverb", "delay"]                # (the inserts are pages of each instrument's sound)
             if self.insert_fx_available():
                 order += ["song1", "song2"]                  # ... and the song's two (a copy on every instrument)
+            if getattr(self, "list_is_top", False):
+                order += ["mixvol", "mixpan"]                # (the Move) the MIXER: each instrument's volume, then pan
             if self.fx_page and getattr(self, "list_is_top", False):
                 order.remove(None)                           # (the Move) round the FX pages; Back leaves them
             self.fx_page = order[(order.index(self.fx_page) + 1) % len(order)]
@@ -907,6 +920,15 @@ class Transport:
     def fx_knob(self, number, delta):
         """On an FX page: knobs 1-8 are the tracks' sends, 9 and 10 the effect's settings, the big knob its level."""
         e = self.engine
+        if self.fx_page in ("mixvol", "mixpan"):                 # the MIXER: knobs 1-8 the instruments in slots 1-8
+            if number <= 8 and e and e.slots[number - 1]:
+                if self.fx_page == "mixvol":
+                    v = e.change_inst_level(number - 1, delta * 0.02)
+                    self.say("INSTRUMENT %d VOLUME: %d%%" % (number, round(v * 100)), 2)
+                else:
+                    v = e.change_inst_pan(number - 1, delta * 0.04)
+                    self.say("INSTRUMENT %d PAN: %s" % (number, mix_pan_text(v)), 2)
+            return
         if self.fx_page in ("insert", "insert2"):
             ins = self.insfx()
             if number <= 8:

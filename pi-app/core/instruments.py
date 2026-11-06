@@ -8,6 +8,7 @@ calls into the machine's library at the right frame (settings and step locks), a
 Every machine has two copies, as before: "seq" (the sequencer plays it) and "live" (your hands do). Each
 copy is one core source.
 """
+import math
 import time
 
 import arp as arplib
@@ -128,9 +129,13 @@ class Slot:
         pans = self.m.pans()
         rev, dly = self.m.sends()
         if self.k is not None:
+            lv = float(getattr(self, "level", 1.0))                       # the MIXER: volume and pan of the whole instrument
+            a = (float(getattr(self, "balance", 0.0)) + 1.0) * math.pi / 4
+            gl, gr = math.cos(a) * math.sqrt(2) * lv, math.sin(a) * math.sqrt(2) * lv
             for v in range(len(pans)):
-                self.core.slot_mix(self.k, v, float(pans[v][0]), float(pans[v][1]),
-                                   float(rev[v]) if v < len(rev) else 0.0, float(dly[v]) if v < len(dly) else 0.0)
+                self.core.slot_mix(self.k, v, float(pans[v][0]) * gl, float(pans[v][1]) * gr,
+                                   (float(rev[v]) if v < len(rev) else 0.0) * lv,
+                                   (float(dly[v]) if v < len(dly) else 0.0) * lv)
             return
         for s in self.sources():
             for v in range(len(pans)):

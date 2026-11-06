@@ -65,6 +65,7 @@ RIGHT = TRACKS           # a stereo track's right channel is at track index + RI
 CHANNELS = 2 * TRACKS
 DRUM_KIT = 8             # in each instrument's input channels: 0-7 its drums, 8-9 the kit in stereo, 10 the kit mono
 SLOTS = 8                # instrument slots (the INSTRUMENTS page)
+INST_LEVEL_MAX = 1.5     # the MIXER: an instrument's loudest volume (1.0 is as it is)
 SLOT_CH = 11             # input channels per slot: slot n's are n * SLOT_CH ...
 INST_CHANNELS = SLOTS * SLOT_CH
 EXT_IN = INST_CHANNELS        # then the Move's own audio input (a guitar, a mic...): left, right
@@ -570,6 +571,8 @@ class Engine:
         self.slots = [None] * SLOTS             # the INSTRUMENTS page: each slot's machine ("606"...) or None
         self.slot = None                        # the slot the drum and sequencer pages show
         self.slot_mutes = set()                 # muted slots
+        self.inst_levels = [1.0] * SLOTS        # the MIXER: each instrument's volume (1.0: as it is) ...
+        self.inst_pans = [0.0] * SLOTS          # ... and pan (-1 left ... 1 right)
         self.inst_view = False                  # True on the instrument pages: every instrument plays, the tape doesn't
         self.seq_hits = [0.0] * sequencer.MAX_LANES  # when each lane's last sequencer hit is heard (for the screen)
         self._auditions = []                         # hits asked for by audition(), for the next block
@@ -1050,6 +1053,7 @@ class Engine:
             self.slots = [None] * SLOTS
             self.slot = None
             self.slot_mutes = set()
+            self.inst_levels, self.inst_pans = [1.0] * SLOTS, [0.0] * SLOTS
             self.loop_on, self.loop_a, self.loop_b = False, 0, 0
             self.arm_extra = set()
             self.sel_anchor = None
@@ -1286,6 +1290,11 @@ class Engine:
             if mid and mid not in self.slots and (not self.drums or self.drums.get(mid) is not None):
                 self.slots[i] = mid
                 self._seq_for(mid)
+        try:
+            self.inst_levels = [max(0.0, min(INST_LEVEL_MAX, float(x))) for x in (list(meta.get("inst_levels", [])) + [1.0] * SLOTS)[:SLOTS]]
+            self.inst_pans = [max(-1.0, min(1.0, float(x))) for x in (list(meta.get("inst_pans", [])) + [0.0] * SLOTS)[:SLOTS]]
+        except (TypeError, ValueError):
+            self.inst_levels, self.inst_pans = [1.0] * SLOTS, [0.0] * SLOTS
         self.slot_mutes = {int(i) for i in meta.get("slot_mutes", []) if 0 <= int(i) < SLOTS and self.slots[int(i)]}
         self.slot = None
         want = meta.get("slot", self.slot_of(machine))
@@ -1398,6 +1407,8 @@ class Engine:
             meta["slots"] = list(self.slots)
             meta["slot"] = self.slot
             meta["slot_mutes"] = sorted(self.slot_mutes)
+            meta["inst_levels"] = [round(x, 3) for x in self.inst_levels]
+            meta["inst_pans"] = [round(x, 3) for x in self.inst_pans]
         if not changed:
             return False
 
@@ -1568,6 +1579,25 @@ class Engine:
             sends[track - 1] = v
             self.dirty.add(-1)
         return v
+
+    def change_inst_level(self, k, delta):
+        """The MIXER: instrument (slot) k's volume, by delta (1.0 = as it is). Returns the new volume."""
+        if not 0 <= k < SLOTS:
+            return 0.0
+        with self.lock:
+            self.inst_levels[k] = round(max(0.0, min(INST_LEVEL_MAX, self.inst_levels[k] + delta)), 3)
+            self.dirty.add(-1)
+            return self.inst_levels[k]
+
+    def change_inst_pan(self, k, delta):
+        """The MIXER: instrument (slot) k's pan, by delta (-1 left ... 1 right). Returns the new pan."""
+        if not 0 <= k < SLOTS:
+            return 0.0
+        with self.lock:
+            v = round(max(-1.0, min(1.0, self.inst_pans[k] + delta)), 3)
+            self.inst_pans[k] = 0.0 if abs(v) < 0.02 else v          # (it stops at the centre)
+            self.dirty.add(-1)
+            return self.inst_pans[k]
 
     def change_inst_sends(self, kind, delta):
         """The picked instrument's reverb or delay: every drum's send moved together by delta (0..1). They are

@@ -1081,7 +1081,7 @@ def tape_only_elsewhere(T, name):
         return not inst                                          # select / arm a tape track
     if re.match(r"^(MUTE|SOLO)\d+$", name):                    # Shift + touch a knob
         return not (inst or T.full_drum_page() or (T.seq_page and name == "MUTE1")
-                    or (T.fx_page in ("mixvol", "mixpan") and name.startswith("MUTE")))   # (the MIXER: a push resets)
+                    or (T.fx_page == "mixer" and name.startswith("MUTE")))   # (the MIXER: a push resets)
     if name in ("MUTE", "SOLO") and inst:
         return False
     if name == "UNDO" and T.seq_page:

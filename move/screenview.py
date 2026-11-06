@@ -165,7 +165,7 @@ def state():
         except Exception as ex:                          # noqa: BLE001
             arp_panel = {"error": str(ex)[:80]}
     fx_panel = None
-    if getattr(T, "fx_page", None) in ("reverb", "delay", "song1", "song2", "mixvol", "mixpan"):
+    if getattr(T, "fx_page", None) in ("reverb", "delay", "song1", "song2", "mixer"):
         try:
             fx_panel = fx_data(T)
         except Exception as ex:                          # noqa: BLE001
@@ -538,17 +538,15 @@ def fx_data(T):
     import effects
     e = T.engine
     which = T.fx_page
-    if which in ("mixvol", "mixpan"):                        # the MIXER: the 8 instruments' volume or pan
+    if which == "mixer":                                     # the MIXER: the 8 instruments' volume and pan
         from console import mix_pan_text
-        vol = which == "mixvol"
         rows = []
         for i in range(8):
             mid = e.slots[i]
             if mid:
                 rows.append({"n": i + 1, "label": T.instp.title(mid).upper()[:12],
-                             "text": ("%d%%" % round(e.inst_levels[i] * 100)) if vol else mix_pan_text(e.inst_pans[i])})
-        return {"title": "MIXER VOLUME" if vol else "MIXER PAN", "rows": rows,
-                "hint": "KNOBS 1-8: THE INSTRUMENTS IN SLOTS 1-8"}
+                             "text": "%d%%    %s" % (round(e.inst_levels[i] * 100), mix_pan_text(e.inst_pans[i]))})
+        return {"title": "MIXER", "rows": rows, "hint": "KNOBS 1-8: VOLUME   SHIFT + KNOB: PAN"}
     if which in ("song1", "song2"):                          # SONG INSERT 1 / 2: the effect, its settings, its picture
         import catalog
         sf = T.songfx(0 if which == "song1" else 1)

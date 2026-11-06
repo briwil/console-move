@@ -90,21 +90,74 @@ def sample_dirs():
     return [d for d in (env.split(":") if env else DEFAULT_DIRS) if d]
 
 
-def list_samples(exts=("wav",)):
-    """The sorted sample files (paths) in the sample folders (exts: which kinds; the drum sampler reads only WAV)."""
-    out = []
+def list_samples(exts=("wav", "aif", "aiff")):
+    """The sample files (paths) in the sample folders: the .wav files sorted first (so a song's places in the list
+    stay as they were), then the other kinds in exts, sorted. Hidden files and folders are left out."""
+    found = {}
     for d in sample_dirs():
         for root, dirs, names in os.walk(d):
-            dirs[:] = [x for x in dirs if not x.startswith(".")]          # (hidden folders and files are left out, as before)
-            out += [os.path.join(root, n) for n in names if not n.startswith(".") and "." in n
-                    and n.rsplit(".", 1)[-1].lower() in exts]
-    return sorted(set(out))[:MAX_FILES]
+            dirs[:] = [x for x in dirs if not x.startswith(".")]
+            for n in names:
+                ext = n.rsplit(".", 1)[-1].lower() if "." in n and not n.startswith(".") else ""
+                if ext in exts:
+                    found.setdefault(ext == "wav", set()).add(os.path.join(root, n))
+    return (sorted(found.get(True, ())) + sorted(found.get(False, ())))[:MAX_FILES]
+
+
+def _aiff(data):
+    """(float32 samples, channels, rate) of an AIFF / AIFC file (uncompressed, 8-32 bit, or 32-bit float), or None."""
+    pos, comm, raw, ctype = 12, None, None, b"NONE"
+    aifc = data[8:12] == b"AIFC"
+    while pos + 8 <= len(data):
+        tag, size = data[pos:pos + 4], struct.unpack(">I", data[pos + 4:pos + 8])[0]
+        body = data[pos + 8:pos + 8 + size]
+        if tag == b"COMM":
+            ch, _frames, bits = struct.unpack(">hIh", body[:8])
+            exp, hi, lo = struct.unpack(">HII", body[8:18])               # (an 80-bit float: the rate)
+            rate = ((hi << 32) | lo) * 2.0 ** ((exp & 0x7FFF) - 16383 - 63)
+            if aifc and len(body) >= 22:
+                ctype = body[18:22]
+            comm = (ch, bits, rate)
+        elif tag == b"SSND":
+            raw = body[8 + struct.unpack(">I", body[:4])[0]:]
+        pos += 8 + size + (size & 1)
+    if comm is None or raw is None:
+        return None
+    ch, bits, rate = comm
+    little = ctype == b"sowt"                                               # (little-endian 16 bit, from Macs)
+    if ctype in (b"fl32", b"FL32") and bits == 32:
+        x = np.frombuffer(raw[:len(raw) // 4 * 4], ">f4").astype(np.float32)
+    elif ctype not in (b"NONE", b"sowt", b"twos", b"in24", b"in32", b"raw "):
+        return None                                                         # (u-law, MP4... not read)
+    elif bits == 8:
+        x = np.frombuffer(raw, np.int8).astype(np.float32) / 128
+    elif bits == 16:
+        x = np.frombuffer(raw[:len(raw) // 2 * 2], "<i2" if little else ">i2").astype(np.float32) / 32768
+    elif bits == 24:
+        b = np.frombuffer(raw[:len(raw) // 3 * 3], np.uint8).reshape(-1, 3).astype(np.int32)
+        v = (b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)) if little else ((b[:, 0] << 16) | (b[:, 1] << 8) | b[:, 2])
+        x = np.where(v >= 1 << 23, v - (1 << 24), v).astype(np.float32) / (1 << 23)
+    elif bits == 32:
+        x = np.frombuffer(raw[:len(raw) // 4 * 4], "<i4" if little else ">i4").astype(np.float32) / (1 << 31)
+    else:
+        return None
+    return x, max(1, ch), rate
 
 
 def read_wav(path):
     """(mono float32 samples at RATE) or None. Reads PCM 8/16/24/32 and float32 WAVs, any rate."""
     try:
         data = open(path, "rb").read()
+        if data[:4] == b"FORM" and data[8:12] in (b"AIFF", b"AIFC"):
+            got = _aiff(data)
+            if got is None:
+                return None
+            x, ch, rate = got
+            x = x[:len(x) // ch * ch].reshape(-1, ch).mean(axis=1)
+            if rate != RATE and rate > 0:
+                n = int(len(x) * RATE / rate)
+                x = np.interp(np.linspace(0, len(x) - 1, max(1, n)), np.arange(len(x)), x).astype(np.float32)
+            return np.ascontiguousarray(x[:RATE * MAX_SECONDS], np.float32)
         if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
             return None
         pos, fmt, raw = 12, None, None

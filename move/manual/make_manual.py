@@ -195,7 +195,7 @@ story += [
          "nothing here."),
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
          "(the ones without a picture yet show their name). Push to choose."),
-        ("SAMPLER", "A drum machine of 16 drums, each with two .wav samples from the Move's sample folders. "
+        ("SAMPLER", "A drum machine of 16 drums, each with two .wav or .aif samples from the Move's sample folders. "
          "Push the wheel on a drum: SAMPLE 1, SAMPLE 2 and RANDOM; push a sample for the folders, or <b>Delete + "
          "push</b> to take it out. Knobs: LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY (shared by all its samples) "
          "and BLEND: all the way left only sample 1, the middle both at full volume, all the way right only sample "

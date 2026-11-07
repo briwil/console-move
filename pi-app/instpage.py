@@ -168,12 +168,14 @@ class InstPage:
             return
         self.mode = None
         if mid == e.slots[self.row]:
+            self.open()                                  # (the one it had: straight to it)
             return
         if not e.set_slot(self.row, mid):
             self.t.say("THE %s ISN'T BUILT YET: RUN ~/console/pi-app/setup.sh ONCE" % title, 4)
             return
         if e.slot == self.row:
             self.t.reset_drum_view()
+        self.open()                                      # chosen: straight to its page
         self.t.say("SLOT %d: %s" % (self.row + 1, title), 3)
 
     def remove(self):

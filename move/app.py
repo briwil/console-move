@@ -190,10 +190,11 @@ class MoveBoard:
             if T.seq_page:
                 k.put(("STEP", n, bool(val), self.shift))  # tap: on / off; Shift + taps: select to set
                 return
-            if (n - 1 == PADS_ICON and self.shift and T.drum_page and not T.seq_page
+            if (n - 1 in (ARP_ICON, PADS_ICON) and self.shift and T.drum_page and not T.seq_page
+                    and (T.synth_shown() or n - 1 == PADS_ICON)
                     and not (T.fx_page or T.inst_page or T.song_page or T.sbrowse.active)):
                 if val:
-                    k.put("PADS_JUMP")                                 # the icon: the pads page
+                    k.put("ARP_JUMP" if n - 1 == ARP_ICON else "PADS_JUMP")   # the icons: the arp page, the pads page
                 return
             if T.mlfo.active():
                 k.put(("LFOSTEP", n, bool(val)))               # the LFO's own steps
@@ -458,6 +459,9 @@ class Lights:
         # the icons under the step buttons: lit only while Shift is held (as on the Move's own software), on a synth's sound page
         icons = {}
         if board.shift and T.drum_page and not T.seq_page and not (T.fx_page or T.inst_page or T.song_page):
+            if T.synth_shown():
+                on = bool(getattr(e.seq, "arp_cfg", {}).get("on"))
+                icons[ARP_ICON] = 120 if on else 118 if T.mlfo.arp_on_page() else 20
             if e and e.drums and e.slot is not None and e.slots[e.slot]:        # (a drum machine has PADS too)
                 icons[PADS_ICON] = 118 if T.mlfo.pads_on_page() else 20
         self.icons(icons)
@@ -466,6 +470,7 @@ class Lights:
 # ---------------------------------------------------------------- the app
 
 PADS_ICON = 1                     # the hexagon, under step button 2: the pads' key and scale
+ARP_ICON = 2                      # the branching-nodes icon, under step button 3 (see MOVE-NOTES.md)
 ICONFILE = os.environ.get("CONSOLE_ICONFILE", "/data/UserData/console/icontest")      # touch it: the step icons light one at a time (see icon_test below)
 
 
@@ -840,7 +845,8 @@ def handle(name, T, m, e):
             return
     elif (name == "HOME" and T.drum_page and e and e.drums and (getattr(e.drums, "id", "") == "sampler"
                                                                 or getattr(e.drums, "sample_param_index", None) is not None)
-          and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)):
+          and not (T.seq_page or T.fx_page or T.inst_page or T.song_page or m.open or m.kits.open)
+          and not T.mlfo.active()):                    # (its sound page only: not LFO, INSERT, SENDS, ARP, PADS)
         sb.open(e.drums, T.drum_voice)                 # push the wheel on a sampler drum: choose its sample
         return
     if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8 and not choice_knob(T, m, e, name):
@@ -911,6 +917,9 @@ def handle(name, T, m, e):
         elif T.msyn.active():
             T.msyn.step(name[1], name[2], name[3])
         return
+    if name == "ARP_JUMP":
+        T.mlfo.goto_arp()
+        return
     if name == "PADS_JUMP":
         T.mlfo.goto_pads()
         return
@@ -963,15 +972,11 @@ def handle(name, T, m, e):
     if name in ("DRUMS", "FX", "DRUMS_BACK"):
         T.song_page = False
     if name == "DRUMS" and T.drum_page and not T.fx_page and not (m.open or m.kits.open):
-        # an instrument's pages round: sound -> sequencer -> automation -> (a synth with its arp on: ARP) -> sound
-        arp = bool(e and T.synth_shown() and getattr(e.seq, "arp_cfg", {}).get("on") and T.mlfo.has_arp())
-        if not T.seq_page and arp and T.mlfo.arp_on_page():
-            T.mlfo.tab = None                        # the ARP page (4th): back to the sound's settings
-            return
+        # an instrument's pages round: sound -> sequencer -> automation -> sound (ARP: Shift + step 3)
         if T.seq_page and getattr(T, "auto_page", False):
             T.auto_page = T.seq_page = False
             T.seqp.held, T.synthp.held = {}, {}
-            T.mlfo.tab = T.mlfo.arp_tab() if arp else None
+            T.mlfo.tab = None
             return
     if T.auto.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:

@@ -195,9 +195,9 @@ story += [
         ("Jog wheel", "Pick a slot. Push: open it (an empty slot: choose what goes in it). Left button 1 does "
          "nothing here."),
         ("Choosing an instrument", "A picture of each instrument scrolls left and right as you turn the wheel "
-         "(the ones without a picture yet show their name). Push to choose."),
+         "(the ones without a picture yet show their name). Push to choose: it goes straight to its page."),
         ("SAMPLER", "A drum machine of 16 drums, each with two .wav or .aif samples from the Move's sample folders. "
-         "Push the wheel on a drum: SAMPLE 1, SAMPLE 2 and RANDOM; push a sample for the folders, or <b>Delete + "
+         "Push the wheel on a drum (on its sound page, not LFO, INSERT, SENDS or PADS): SAMPLE 1, SAMPLE 2 and RANDOM; push a sample for the folders, or <b>Delete + "
          "push</b> to take it out. Knobs: LEVEL, PITCH, START, DECAY, PAN, REVERB, DELAY (shared by all its samples) "
          "and BLEND: all the way left only sample 1, the middle both at full volume, all the way right only sample "
          "2. BLEND can be an LFO's target or a step lock, so it can morph between the two, even while a sample "
@@ -205,7 +205,7 @@ story += [
         ("RANDOM", "Push it to turn it on: SAMPLES 3, 4 and 5 appear under it, and each hit plays one of the drum's "
          "samples (1-5) at random. BLEND is off while it's on (and back as it was when you turn it off)."),
         ("MRSAMPLE", "One sample played chromatically on the pads (like the OP-1 or the Move's own Sampler), with an amp "
-         "envelope, filter and LFO. Push the wheel on its sound page: the sample browser (the Move's sample folders, "
+         "envelope, filter and LFO. Push the wheel on its sound page (not LFO, INSERT, SENDS, ARP or PADS): the sample browser (the Move's sample folders, "
          "each sample plays as you land on it); push a sample to choose it, Back to leave. It is saved with the song "
          "(as a place in the sample list, like the drum sampler's)."),
         ("Shift + push the jog wheel", "On a loaded slot: change it or remove it."),
@@ -213,8 +213,8 @@ story += [
          "wheel to untick one and it no longer appears in the list when you choose an instrument; tick it to bring it "
          "back. A song that already uses an unticked instrument keeps it. Back returns to the list."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then (a synth "
-         "with its arp on) ARP, then the sound again. Back (or Shift + left button 1), from any of them: this page."),
+        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then the sound "
+         "again (ARP: Shift + step button 3). Back (or Shift + left button 1), from any of them: this page."),
     ]),
     p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
       "and flip a click at a time. A preset or kit setting turns one preset a click and stops at the last one.",
@@ -418,15 +418,16 @@ story += [
     ]),
 
     p("Pads: key and scale (synths)", H2),
-    p("On a synth's settings pages hold <b>Shift</b>: the icons light under the step buttons. <b>Shift + step button 2</b> (the hexagon) opens the PADS page (or press Right past the ARP page). Press the icon again to return to the settings pages (<b>Back</b> goes to the instruments list): "
+    p("On a synth's settings pages hold <b>Shift</b>: the icons light under the step buttons. <b>Shift + step button 2</b> (the hexagon) opens the PADS page. Press the icon again to return to the settings pages (<b>Back</b> goes to the instruments list): "
       "the PADS page. Knob 1 KEY, knob 2 SCALE (12 scales, or CHROMATIC), knob 3 OCTAVE. The pads then play only "
       "notes in that key and scale, and the pads on the key's root note light white. It is the same key and scale "
       "as the synth sequencer's knobs 5 and 6. Knob 4 VELOCITY: TOUCH (the pads play and record how hard you hit them) or a fixed velocity (turn up from TOUCH: 100, then in fives). Knob 5 CURVE: SOFT (easier to play loud), NORMAL or HARD (needs a harder hit). Pattern recording now stores the velocity you played.", BODY),
-    p("A drum machine has a PADS page too (Shift + step button 2 on its sound pages, or Right past SENDS). "
+    p("A drum machine has a PADS page too (Shift + step button 2 on its sound pages). "
       "It has no key or scale: knob 1 OCTAVE (the right-hand pads, which play the picked drum a semitone a pad), "
       "knob 2 VELOCITY and knob 3 CURVE, which work as on a synth for the drum pads too.", BODY),
     p("Arpeggiator (synths)", H2),
-    p("A synth's last sound page is ARP (Right past SENDS; Right again: ARP 2); knob 1 turns it on and off. The arp turns the notes you hold on the pads, and "
+    p("On a synth's sound pages hold Shift and press step button 3 (the branching-nodes icon, bright when the arp is on): the ARP page "
+      "(Right: ARP 2; the icon again: back to the sound page). Knob 1 turns it on and off. The arp turns the notes you hold on the pads, and "
       "the chords in the sequencer, into a run of single notes. What you record from the pads is the notes you played, "
       "not the arp's. A rest in the rhythm does not use up a note: the run carries on at the next one.", BODY),
     table([

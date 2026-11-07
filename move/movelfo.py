@@ -40,9 +40,9 @@ class MoveLFO:
         return self.sends_tab() + 1 if self.has_arp() else None
 
     def last(self):
-        """The last tab: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2, then SENDS, then
-        a synth's ARP, ARP 2 and PADS (a drum machine: just PADS)."""
-        return self.sends_tab() + (3 if self.has_arp() else 1)
+        """The last tab Right goes to: LFO 1, LFO 2, then (if the effects came with the update) INSERT 1, INSERT 2,
+        then SENDS. A synth's ARP (and ARP 2) and PADS come after it, but only by Shift + step 3 / step 2."""
+        return self.sends_tab()
 
     def insert_pos(self):
         """0 / 1 while on the INSERT 1 / 2 page, else None."""
@@ -117,7 +117,7 @@ class MoveLFO:
         return self.tab is not None and self.arp_tab() is not None and self.tab == self.arp_tab() + 1
 
     def goto_arp(self):
-        """The ARP icon (step button 3 on a synth's sound page): straight to the arp page."""
+        """Shift + step 3 (the ARP icon) on a synth's sound pages: straight to the arp page, and back again."""
         if self.has_arp():
             if self.arp_on_page():                    # its own icon again: back to the settings pages
                 self.tab = None
@@ -223,6 +223,11 @@ class MoveLFO:
                 self.tab = 0
                 return True
             return False
+        if self.pads_on_page():
+            return True                              # (PADS is on its own: Shift + step 2 again leaves it)
+        if self.arp_on_page():                       # ARP <-> ARP 2, and no further
+            self.tab = self.arp_tab() + (1 if way > 0 else 0)
+            return True
         self.tab = self.tab + way
         if self.tab < 0:
             self.tab = None

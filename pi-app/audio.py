@@ -2496,13 +2496,14 @@ class Engine:
                 self.undo_stack.pop()               # a recording pass that recorded nothing
             if not self.undo_stack or self.recording:
                 return False
+            put = {}                                        # track -> [a, b] stretches put back
             for item in reversed(self.undo_stack.pop()):
                 if item[0] == "regions":
                     t = item[1]
                     spans = [(r[0], r[1]) for r in self.regions[t]] + [(r[0], r[1]) for r in item[2]]
                     self.regions[t] = item[2]
                     for a, b in spans:                  # gains and fades change how the waveform looks
-                        self._update_levels(t, a, b, reset=True)
+                        put.setdefault(t, []).append([a, b])      # (redrawn at the end, with the audio)
                     self.dirty.add(-1)
                     continue
                 if item[0] in ("volume", "pan"):
@@ -2526,8 +2527,26 @@ class Engine:
                 t, a, old = item
                 if self.tracks[t] is None:
                     continue                                # a right channel that's gone (the track went mono)
-                self.tracks[t][a:a + len(old)] = old
-                self._changed(t, a, a + len(old))
+                b = a + len(old)
+                self.tracks[t][a:b] = old
+                sp = put.setdefault(t, [])
+                if sp and a <= sp[-1][1] and b >= sp[-1][0]:
+                    sp[-1] = [min(a, sp[-1][0]), max(b, sp[-1][1])]
+                else:
+                    sp.append([a, b])
+            for t, sp in put.items():                       # the waveform once per stretch, not once per piece:
+                sp.sort()                                   # (a recording pass keeps one piece per audio block,
+                run = []                                    #  thousands a minute, and that took seconds)
+                for a, b in sp:
+                    if run and a <= run[-1][1]:
+                        run[-1][1] = max(run[-1][1], b)
+                    else:
+                        run.append([a, b])
+                for a, b in run:
+                    if self.tracks[t] is not None:
+                        self._changed(t, a, b)
+                    else:
+                        self.levels[t][:] = 0
             return True
 
     # ------------------------------------------------------------ the audio thread
@@ -3044,7 +3063,13 @@ class Engine:
             # widen to whole level values, so the edges keep the audio just outside a-b
             a, b = int(i0 * fpb), min(self.frames, int(np.ceil(i1 * fpb)))
         seg = np.abs(shape_range(self.regions[t], self.tracks[t][a:b], a))
-        bins = np.minimum((np.arange(a, b) // fpb).astype(np.int64), len(lv) - 1)
-        starts = np.concatenate(([0], np.flatnonzero(np.diff(bins)) + 1))
-        idx = bins[starts]
+        if not len(seg):
+            return
+        # level value k covers frames ceil(k * fpb) on: where each starts in seg (no frame-by-frame index:
+        # a minute of audio is millions of frames)
+        idx = np.arange(int(a // fpb), min(len(lv) - 1, int((b - 1) // fpb)) + 1)
+        starts = np.ceil(idx * fpb).astype(np.int64) - a
+        starts[0] = 0
+        keep = np.concatenate(([True], np.diff(starts) > 0)) & (starts < len(seg))
+        idx, starts = idx[keep], starts[keep]
         lv[idx] = np.maximum(lv[idx], np.maximum.reduceat(seg, starts))

@@ -696,11 +696,11 @@ def lock_knobs(f, ms):
     f.small(1, 27, ("%s  %d/%d" % (ms.page_name(), ms.knob_page + 1, max(1, len(pages))))[:31])
     for i, (label, value, locked, lockable) in enumerate(ms.lock_list()):
         col, row = divmod(i, 4)
-        x, y = col * 65, 35 + row * 7
+        x, y = col * 65, 34 + row * 6                  # (four rows, then the hint on the bottom line)
         f.small(x + 1, y, ("%s%d %s" % ("*" if locked else "", i + 1, label if lockable else "-"))[:10])
         if lockable:
             f.right(x + 62, y, str(value)[:5], small=True)
-    f.small(1, 57, "TURN: LOCK  < >: PAGES")
+    f.small(1, 59, "TURN: LOCK  < >: PAGES")
 
 
 def synth_seq_page(f, T):
@@ -919,8 +919,8 @@ def song_insert_page(f, T, p):
     header(f, "SONG INSERT %d" % (p + 1))
     f.text(2, 12, sf.name()[:21])
     if not sf.params:
-        f.small(2, 24, "ON EVERY INSTRUMENT, A COPY EACH")
-        f.small(2, 31, "RECORDED WITH IT")
+        f.small(2, 24, "ON EVERY INSTRUMENT, A COPY")
+        f.small(2, 31, "EACH, RECORDED WITH IT")
     for i in range(8):
         label, shown = sf.text(i)
         if not label:
@@ -1167,7 +1167,7 @@ def name_page(f, menu, prompt=None):
     if msg:
         f.small(1, 44, msg.upper()[:31])
     f.small(1, 51, "WHEEL: LETTER   < >: MOVE")
-    f.small(1, 58, "DELETE: ERASE  PLAY: OK  BACK: CANCEL")
+    f.small(1, 58, "DELETE:ERASE PLAY:OK BACK:CANCEL")
 
 
 def text_page(f, s, msg=""):

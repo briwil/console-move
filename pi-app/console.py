@@ -1118,7 +1118,7 @@ class Transport:
     def say_drop_ask(self):
         n = self.engine.clip_parts()
         merged = self.drop_ask["merged"]
-        self.say("DROP %d TRACKS AS:  %s  /  %s   ·   KNOB 1 CHANGES   ·   DROP AGAIN TO DROP" % (
+        self.say("DROP %d AS %s / %s   ·   KNOB 1 CHANGES   ·   DROP AGAIN TO DROP" % (   # (the Move shows the first 31 letters)
             n, "SEPARATE" if merged else "[SEPARATE]", "[MERGED]" if merged else "MERGED"), 60)
 
     def edit_text(self):

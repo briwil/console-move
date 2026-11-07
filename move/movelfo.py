@@ -21,7 +21,7 @@ class MoveLFO:
         T = self.T
         if not T.drum_page:
             self.tab = None
-        return self.tab is not None and bool(T.drum_page and not T.seq_page and T.engine and T.engine.drums)
+        return self.tab is not None and bool(T.drum_page and not T.seq_page and not T.fx_page and T.engine and T.engine.drums)
 
     def _inserts(self):
         return 2 if self.T.insert_fx_available() else 0

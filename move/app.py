@@ -797,6 +797,13 @@ def handle(name, T, m, e):
     elif name == "HOME" and T.fx_page in ("song1", "song2") and not (m.open or m.kits.open):
         fp.open(T.songfx(0 if T.fx_page == "song1" else 1))   # push the wheel on SONG INSERT 1 / 2: choose it
         return
+    elif (T.fx_page and not (m.open or m.kits.open) and isinstance(name, tuple) and name[0] == "KNOB"
+          and name[1] == 11 and name[2]):                # the wheel on the FX pages: the next / previous one
+        order = ["mixer", "reverb", "delay"] + (["song1", "song2"] if T.insert_fx_available() else [])
+        way = 1 if name[2] > 0 else -1                   # (one page a click, as the wheel moves through lists)
+        if T.fx_page in order:
+            T.fx_page = order[max(0, min(len(order) - 1, order.index(T.fx_page) + way))]   # (stops at the ends)
+        return
     if isinstance(name, tuple) and name[0] == "PICK_LANE" and sb.active and e and e.drums:
         lv = getattr(e.drums, "lane_voice", ())          # another drum's pad: its sample list (the old one is put back)
         voice = lv[name[1]] if name[1] < len(lv) else sb.voice

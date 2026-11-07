@@ -360,7 +360,8 @@ story += [
         ("PER NOTE", "Every pitch gets its own row. Tap a pad to pick a note (it turns white): the 16 steps now show "
          "only that note. Each note has its <b>own LENGTH (knob 1) and its own RATE (knob 2)</b>, and its own "
          "pulse / hold / jump / chance. Pads of notes that already have steps light <b>orange</b>; a step you are "
-         "holding lights red."),
+         "holding lights red. Every note starts at 16 steps; with no note picked, knob 1 asks you to tap a pad (so "
+         "it can't change all the notes at once)."),
     ]),
     p("Why use PER NOTE", H3),
     table([
@@ -446,7 +447,8 @@ story += [
     p("FX", H2),
     p("The reverb and delay sends and the insert effects are on each instrument <i>before</i> the tape, so they are recorded with the sound. The tape room has no effects.", BODY),
     table([
-        ("Left button 3", "The MIXER, again: reverb, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: the MIXER. Back: off."),
+        ("Left button 3", "The MIXER, again: reverb, again: delay, again: SONG INSERT 1, again: SONG INSERT 2, again: the MIXER. Or turn the jog wheel: the next / previous page (it stops at the MIXER and "
+         "at SONG INSERT 2). Back: off."),
         ("MIXER", "The first left button 3 page: knobs 1-8 are the instruments in slots 1-8. Turn a knob: that "
          "instrument's volume (100% is as it is, the most). Hold Shift and turn: its pan (C, L50, R100...). Step buttons 1-8: mute "
          "that instrument (lit = it plays); Shift + a step button: solo it (again: everyone back). The volume and pan are "

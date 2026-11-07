@@ -75,7 +75,7 @@ class Auto:
     # ------------------------------------------------------------ what's shown
     def active(self):
         T = self.T
-        return bool(T.seq_page and getattr(T, "auto_page", False) and T.engine and T.engine.drums)
+        return bool(T.seq_page and not T.fx_page and getattr(T, "auto_page", False) and T.engine and T.engine.drums)
 
     @property
     def seq(self):

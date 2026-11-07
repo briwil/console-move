@@ -530,7 +530,10 @@ class Menu:
         elif name in ("RIGHT", "DOWN", "BAR_RIGHT"):
             self.turn(1)
         elif name == "FILE":
-            self.mode, self.msg = "list", ""
+            if self.confirm:                                  # (an "open it anyway?": Back keeps the song)
+                self.confirm, self.msg = None, ""
+            else:
+                self.mode, self.msg = "list", ""
         elif name == "COPY" and self.songs:               # the LIFT key: rename the picked song
             self.renaming = self.songs[self.pick]
             self.mode, self.naming = "name", "rename"
@@ -644,6 +647,7 @@ class Menu:
 
     def show(self):
         self.open, self.mode, self.msg, self.confirm_new, self.editing = True, "list", "", False, False
+        self.confirm = None
         self.deleting = self.rename_pick = False
         self.refresh()
 

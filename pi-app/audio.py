@@ -1631,9 +1631,11 @@ class Engine:
             return m.fx_sends[k] / 127
         if hasattr(m, "_send_keys"):
             idx = [k[0 if kind == "reverb" else 1] for k in m._send_keys]
-        else:
+        elif getattr(m, "id", "lxr") == "lxr":           # (the LXR-02's own parameter numbers: only for the LXR)
             import drumparams as dp
             idx = list(dp.REVERB_SEND if kind == "reverb" else dp.DELAY_SEND)
+        else:
+            return None
         idx = [i for i in idx if i is not None]
         if not idx:
             return None

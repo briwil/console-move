@@ -186,6 +186,7 @@ class Module:
         self._lock = threading.Lock()
         self._pending = []
         self._offs = []                               # notes to let go at the start of the next block
+        self.fx_sends = [0, 0]                        # its sends to the shared REVERB and DELAY (0-127; the SENDS page)
         self._read_settings(info)
         self.available = True
 
@@ -453,10 +454,24 @@ class Module:
     def get_param(self, index):
         return self.values[index] if 0 <= index < self.param_count else 0
 
+    # kept after the module's own settings in kit(): SENDS_MARK, reverb, delay (an older kit just hasn't got them)
+    SENDS_MARK = -9
+
     def kit(self):
-        return list(self.values)
+        return list(self.values) + [self.SENDS_MARK] + list(self.fx_sends)
+
+    def set_send(self, kind, value):
+        self.fx_sends[0 if kind == "reverb" else 1] = max(0, min(127, int(value)))
+        with self._lock:
+            self._pending.append(("mix",))          # (the core picks the sends up after its next pending batch)
 
     def load_kit(self, values):
+        values = list(values)
+        if len(values) >= 3 and values[-3] == self.SENDS_MARK:
+            self.fx_sends = [max(0, min(127, int(v))) for v in values[-2:]]
+            values = values[:-3]
+        else:
+            self.fx_sends = [0, 0]
         values = [int(v) for v in list(values)[:self.param_count]]
         values += self.init_values[len(values):]
         with self._lock:
@@ -479,8 +494,10 @@ class Module:
         self.load_kit(self.init_values)
 
     def sends(self):
-        z = np.zeros(self.voices, np.float32)     # the module has its own effects
-        return z, z
+        """Its sends to the shared REVERB and DELAY (the SENDS page), on its stereo output (voices 0 and 1)."""
+        r, d = np.zeros(self.voices, np.float32), np.zeros(self.voices, np.float32)
+        r[:2], d[:2] = self.fx_sends[0] / 127, self.fx_sends[1] / 127
+        return r, d
 
     def channel_sends(self):
         z = np.zeros(self.channels, np.float32)

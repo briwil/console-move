@@ -406,7 +406,10 @@ def menu_panel(T, m):
             return {"title": "SETTINGS", "right": "TURN, PUSH: DONE" if m.editing else "PUSH: CHANGE IT",
                     "rows": rows, "pick": m.row, "editing": bool(m.editing), "hint": str(hint).upper()}
         if mode == "load":
-            if m.confirm:
+            if m.confirm and m.confirm[0] == "open":
+                return {"title": "OPEN PROJECT", "lines": ["THIS SONG ISN'T SAVED", "OPEN " + str(m.confirm[1]).upper()],
+                        "hint": "THE UNSAVED SONG IS LOST  ·  PLAY: OPEN IT ANYWAY  ·  BACK: NO, SAVE MINE FIRST"}
+            if m.confirm and m.confirm[0] == "delete":
                 return {"title": "DELETE PROJECT", "lines": ["ARE YOU SURE?", str(m.confirm[1]).upper()],
                         "hint": "IT IS GONE FOR GOOD  ·  PLAY: YES, DELETE IT  ·  BACK: NO, KEEP IT"}
             renaming, deleting = getattr(m, "rename_pick", False), getattr(m, "deleting", False)

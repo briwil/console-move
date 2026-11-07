@@ -56,7 +56,7 @@ class MoveSynth:
 
     def active(self):
         T = self.T
-        return bool(T.seq_page and not getattr(T, "auto_page", False) and T.synth_shown() and T.engine and T.engine.drums)
+        return bool(T.seq_page and not T.fx_page and not getattr(T, "auto_page", False) and T.synth_shown() and T.engine and T.engine.drums)
 
     @property
     def seq(self):
@@ -512,6 +512,8 @@ class MoveSynth:
             v = seq.change_lane_length(self.lane, delta)
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)
             self.T.say("NOTE %s LENGTH %d" % (notes_mod.note_name(self.lane), v), 2)
+        elif what == "length" and self.kind:                # PER NOTE, no note picked: don't change them all
+            self.T.say("TAP A NOTE'S PAD FIRST: EACH NOTE HAS ITS OWN LENGTH", 2)
         elif what == "length":
             v = seq.change_track("length", delta)
             self.T.len_flash = (time.monotonic() + 1.2, self.first(), v)      # the step lights show the length

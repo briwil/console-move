@@ -95,7 +95,7 @@ class MoveSeq:
 
     def active(self):
         T = self.T
-        return bool(T.seq_page and not getattr(T, "auto_page", False) and not T.synth_shown() and T.engine and T.engine.drums)
+        return bool(T.seq_page and not T.fx_page and not getattr(T, "auto_page", False) and not T.synth_shown() and T.engine and T.engine.drums)
 
     def first(self):
         lane = self.sp.lane

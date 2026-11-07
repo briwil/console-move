@@ -1031,7 +1031,15 @@ def menu_list_page(f, menu, T):
 
 def delete_page(f, menu):
     """Deleting a project: the list, then a full-screen "are you sure?"."""
-    if menu.confirm:
+    if menu.confirm and menu.confirm[0] == "open":     # opening another song over an unsaved one
+        header(f, "OPEN PROJECT")
+        f.text(2, 16, "THIS SONG ISN'T SAVED")
+        f.text(2, 30, ("OPEN " + str(menu.confirm[1]).upper())[:21])
+        f.small(2, 42, "THE UNSAVED SONG IS LOST")
+        f.small(1, 52, "PLAY: OPEN IT ANYWAY")
+        f.small(1, 58, "BACK: NO, SAVE MINE FIRST")
+        return
+    if menu.confirm and menu.confirm[0] == "delete":
         header(f, "DELETE PROJECT")
         name = str(menu.confirm[1]).upper()
         f.text(2, 16, "ARE YOU SURE?")

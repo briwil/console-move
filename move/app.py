@@ -554,14 +554,21 @@ def main():
     except Exception as ex:                          # noqa: BLE001
         print("Big screen:", ex)
         screenview = None
-    st = stress.Stress(STRESS_MINUTES, T, m, e, board) if STRESS_MINUTES else None
+    if STRESS_MINUTES and stress.MENU:
+        import uitest
+        st = uitest.UiTest(STRESS_MINUTES, T, m, e, board)       # the menu test: every screen, every control
+    else:
+        st = stress.Stress(STRESS_MINUTES, T, m, e, board) if STRESS_MINUTES else None
     if st:
-        T.say(("START-UP CHECK: 8 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.STARTUP else
+        T.say(("MENU TEST: %g MINUTES. SHIFT + BACK STOPS IT" % STRESS_MINUTES if stress.MENU else
+               "START-UP CHECK: 8 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.STARTUP else
                "SONG INSERT TEST: ABOUT 15 MIN, ENDS ITSELF. SHIFT + BACK STOPS IT" if stress.SONGFX else
                "STRESS TEST: %g MINUTES. SHIFT + BACK STOPS IT" % STRESS_MINUTES), 5)
     elif crashed:
         T.say("CONSOLE CRASHED LAST TIME. SAVED IN CONSOLE/CRASHES: %s" % crashed.upper(), 6)
     frame = Frame()
+    if st is not None and hasattr(st, "watch_frame"):
+        st.watch_frame(frame)                        # the menu test: what each screen draws
     lights = Lights(core)
     print("Console on the Move: running. Ctrl+C quits (the song is saved).")
     last = time.monotonic()
@@ -591,7 +598,10 @@ def main():
                         icon_k = (icon_k + (1 if name[2] > 0 else -1)) % 16
                     continue
                 T.pagefx.cancel()                         # any control cuts the page card short
-                handle(name, T, m, e)
+                if st is not None and getattr(st, "catch", False):
+                    st.handle(handle, name, T, m, e)      # the menu test: an error is noted, and it goes on
+                else:
+                    handle(name, T, m, e)
             if m.restart and not quit_now:          # a software update was installed: start the new version
                 frame.clear()
                 frame.centre(64, 28, "RESTARTING...")
@@ -656,7 +666,10 @@ def main():
                 if T.sbrowse.active and (T.seq_page or T.fx_page or T.inst_page or T.song_page or not T.drum_page):
                     T.sbrowse.close(False)                # (went to another page: the sample browser closes, the old sample stays)
                 T.pagefx.update(T, m)
+                drew_at = time.monotonic()
                 pages.draw(frame, T, m)
+                if st is not None and hasattr(st, "drawn"):
+                    st.drawn(frame, time.monotonic() - drew_at)
                 if screenview is not None:
                     screenview.frame(frame)                   # (a copy for the big screen, if one is open)
                 if st is not None:                            # the stress test: the time left, bottom right

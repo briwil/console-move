@@ -64,6 +64,9 @@ def draw(f, T, menu=None):
         else:
             tape_page(f, T)
     except Exception as ex:                           # a drawing problem shouldn't stop the app
+        global last_error
+        import traceback
+        last_error = traceback.format_exc()           # (the menu test reads it)
         f.clear()
         f.text(1, 1, "SCREEN ERROR")
         f.small(1, 12, str(ex)[:31])
@@ -425,6 +428,7 @@ def inst_page(f, T):
     listing(f, rows, ip.row, top=11)
 
 
+last_error = None                                     # the last drawing problem's Python error (see draw)
 _IMG = {}
 _CAR = {"pos": None, "t": 0.0}
 

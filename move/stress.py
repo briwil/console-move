@@ -55,6 +55,7 @@ RANDOM_ONLY = False             # "60 random" in the file: straight to part 3
 INSERTS_FIRST = False           # "60 inserts": straight to part 2 (no instruments tried first)
 SONGFX = False                  # "songfx": only the song inserts' load test
 STARTUP = False                 # "startup": only the start-up check
+MENU = False                    # "menu": the menu test instead (uitest.py)
 SONGFX_SET = ["lxr", "606", "braids", "obxd", "808", "plaits", "dexed", "wurl"]   # what plays (the first 4, then 8)
 
 # the Move's controls the test presses (see app.py). Not the volume knob, and never Shift + Back (that quits).
@@ -73,9 +74,13 @@ def prepare():
     if os.path.exists(FLAG):
         global RANDOM_ONLY, INSERTS_FIRST
         try:
-            global SONGFX, STARTUP
+            global SONGFX, STARTUP, MENU
             words = open(FLAG).read().split()
             low = [w.lower() for w in words]
+            MENU = "menu" in low
+            if MENU:
+                words = [w for w in words if w.lower() != "menu"] or ["60"]
+                low = [w.lower() for w in words]
             SONGFX = "songfx" in low
             STARTUP = "startup" in low
             if STARTUP:

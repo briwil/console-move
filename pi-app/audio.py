@@ -567,7 +567,7 @@ class Engine:
         self._slot_fx = {}                      # machine -> [reverb, delay, frames to keep ringing]: each
                                                 # instrument's own effects, printed into its KIT inputs
         self._punch = {}                        # machine -> [its sequencer's effect, its hand-played one, busy, busy]
-        self.punch_live = None                  # (machine, effect): a punch-in pad held now
+        self.punch_live = None                  # (machine, mask): the punch-in pads held now
         self.punch_rec = False                  # ... and recording it into the pattern's steps
         self.punch_now = {}                     # machine -> the punch-in effect it's playing (for the lights)
         self._punch_decided = {}                # machine -> {slot: its chance's answer}
@@ -2903,8 +2903,10 @@ class Engine:
             if live:
                 if self.punch_rec and step is not None:
                     with seq.lock:
-                        punch.of(seq.pattern)[step] = [live, 0]
-                fx = live
+                        pst = punch.of(seq.pattern)
+                        old = pst.get(step, [0, 0])
+                        pst[step] = [punch.over(old[0], live), old[1]]
+                fx = punch.over(fx, live)
             out.append((a, b, fx, beat))
         return out
 
@@ -2918,24 +2920,29 @@ class Engine:
             return seq_voices, live_voices, None, False
         if not (effects and getattr(effects, "PUNCH", False)):
             return seq_voices, live_voices, None, False
-        if st is None:
-            st = self._punch[mid] = [effects.Punch(self.rate), effects.Punch(self.rate), False, False]
+        if st is None:                           # [seq stages, live stages, seq busy, live busy]
+            st = self._punch[mid] = [[effects.Punch(self.rate) for _ in punch.STAGES],
+                                     [effects.Punch(self.rate) for _ in punch.STAGES], False, False]
         seq_voices = np.ascontiguousarray(seq_voices, np.float32)
         live_voices = np.ascontiguousarray(live_voices, np.float32)
         do_live = st[3] or bool(live_voices.any())
-        for a, b, f, beat in segs:
-            st[2] = st[0].process(seq_voices[a:b], f, fpb, beat)
-            if do_live:
-                st[3] = st[1].process(live_voices[a:b], f, fpb, beat)
+        sb = lb = False
+        for a, b, mask, beat in segs:
+            for k, g in enumerate(punch.STAGES):
+                f = punch.in_group(mask, g)
+                sb = st[0][k].process(seq_voices[a:b], f, fpb, beat) or sb
+                if do_live:
+                    lb = st[1][k].process(live_voices[a:b], f, fpb, beat) or lb
+        st[2], st[3] = sb, lb
         if fx_now:
             self.punch_now[mid] = fx_now
         else:
             self.punch_now.pop(mid, None)
         swing = None
-        if fx_now == punch.PAN_SWING:
+        if fx_now & punch.bit(punch.PAN_SWING):
             beat = segs[0][3] if segs[0][3] >= 0 else self._punch_clock / fpb
             swing = 0.9 * math.sin(2 * math.pi * beat)
-        return seq_voices, live_voices, swing, fx_now == punch.ECHO_THROW
+        return seq_voices, live_voices, swing, bool(fx_now & punch.bit(punch.ECHO_THROW))
 
     def _drum_input(self, mid, m, voices, rev_g, dly_g, p=None):
         """What one instrument puts on tape, as its SLOT_CH input channels: 0-7 each drum on its own (DRUM 1-8:

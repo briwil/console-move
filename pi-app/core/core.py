@@ -57,7 +57,7 @@ class Core:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
         try:                                   # (newer cores: the punch-in effects)
-            lib.core_slot_punch.argtypes, lib.core_slot_punch.restype = [i32, vp, vp, vp], None
+            lib.core_slot_punch.argtypes, lib.core_slot_punch.restype = [i32, vp, i32, i32, vp], None
             lib.core_punch_live.argtypes, lib.core_punch_live.restype = [i32, i32, f32], None
             lib.core_punch_seq.argtypes, lib.core_punch_seq.restype = [ip, ip, ip], None
             self.has_punch = True
@@ -230,9 +230,9 @@ class Core:
         """How loud slot k is heard (0: not heard; it still makes its recording inputs)."""
         self.lib.core_slot_monitor(k, gain)
 
-    def slot_punch(self, k, fn, seq_h, live_h):
+    def slot_punch(self, k, fn, src, stage, h):
         if self.has_punch:
-            self.lib.core_slot_punch(k, fn, seq_h, live_h)
+            self.lib.core_slot_punch(k, fn, src, stage, h)
 
     def punch_live(self, k, fx, fpb):
         if self.has_punch:

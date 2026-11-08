@@ -421,7 +421,10 @@ story += [
     ]),
     p("Punch FX page", H2),
     p("Left button 1 after AUTOMATION: OP-XY style punch-in effects on the instrument you're on. Each pattern keeps "
-      "its own, so song mode plays them with it. Pads 1-16 (the bottom two rows) are the effects:", BODY),
+      "its own, so song mode plays them with it. Pads 1-16 (the bottom two rows) are the effects. They stack: one "
+      "from each group plays at once (TIME: pads 1-8; FILTER: pads 9-11; BITCRUSH, GATE, PAN SWING, ECHO THROW and "
+      "KILL each on their own), and another from the same group replaces it. So REPEAT 1/16 + LOW PASS + BITCRUSH "
+      "works; REPEAT 1/16 + REVERSE is just REVERSE.", BODY),
     table([
         ("Pads 1-5", "REPEAT 1/4, 1/8, 1/16, 1/32, 1/8T: the slice from when it starts, round and round."),
         ("Pad 6  REVERSE", "The beat just gone, backwards."),
@@ -435,7 +438,7 @@ story += [
         ("Pad 16  KILL", "Silence."),
     ]),
     table([
-        ("Hold a pad", "The effect plays while you hold it. Recording into the pattern (Record, playing): it also "
+        ("Hold pads", "The effects play while you hold them (several: stacked). Recording into the pattern (Record, playing): it also "
          "goes on the steps it was held over."),
         ("Hold a pad + tap steps", "The quickest way to step-sequence: hold an effect's pad and tap the steps you "
          "want it on (tap again: off). The effect plays while you hold the pad, so you hear it as you place it."),
@@ -443,7 +446,7 @@ story += [
          "sixteenths, as many as the pattern is long."),
         ("Shift + steps", "Pick several (they blink), then tap a pad: the effect on all of them. Tap a step "
          "without Shift: done."),
-        ("Hold a step with an effect", "Its effect and chance show; knob 1 sets the chance (100% down to 0%, or "
+        ("Hold a step with effects", "They show with the chance; knob 1 sets the chance for all of them (100% down to 0%, or "
          "1:2, 2:3...)."),
         ("Delete + step", "Take its effect off."),
         ("Shift + Delete", "Take every punch step off this pattern: it asks first (Shift + Delete again: yes)."),

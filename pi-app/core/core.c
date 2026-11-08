@@ -168,6 +168,18 @@ static void flush_denormals(void) {
 #define EXT_IN (SLOTS * SLOT_CH)              /* the Move's audio input: channels EXT_IN, EXT_IN + 1 */
 #define IN_CHANNELS (EXT_IN + 2)
 
+#define PU_STAGES 5                           /* punch-in stages: TIME (fx 1-8), FILTER (9-11), CRUSH (12), GATE (13), KILL (16) */
+static const int PU_FIRST[PU_STAGES] = {1, 9, 12, 13, 16}, PU_LAST[PU_STAGES] = {8, 11, 12, 13, 16};
+static int pu_pick(int mask, int st) {         /* the effect of that stage in the mask (0: none) */
+    for (int fx = PU_FIRST[st]; fx <= PU_LAST[st]; fx++) if (mask & (1 << (fx - 1))) return fx;
+    return 0;
+}
+static int pu_over(int base, int top) {        /* top's effects win their groups (TIME: 1-8, FILTER: 9-11, the rest alone) */
+    if (top & 0xFF) base &= ~0xFF;
+    if (top & 0x700) base &= ~0x700;
+    return base | top;
+}
+
 typedef struct {
     int used, src[2], voices;
     int lane[MAX_VOICES];                     /* voice -> DRUM n channel (0-7), or -1 */
@@ -178,9 +190,9 @@ typedef struct {
                                                  it: 0-1 its own INSERT 1 / 2, 2-3 its copy of the song's SONG INSERT 1 / 2 */
     float ins_dry[4];                         /* how much of each insert is left dry (0: all through it, the default; 1: skipped) */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
-    void *pu_h[2];                            /* its punch-in effects (fx.c's punch_process): on the seq and live voices */
-    int pu_seq, pu_live, pu_cur;              /* the effect the steps say, the pad held (wins), the one playing */
-    int pu_busy[2];                           /* still sounding (fading out) */
+    void *pu_h[2][PU_STAGES];                 /* its punch-in effects (fx.c's punch_process): seq / live voices, by stage */
+    int pu_seq, pu_live, pu_cur;              /* masks (bit fx-1): the steps', the pads held (win their groups), playing */
+    int pu_busy[2][PU_STAGES];                /* still sounding (fading out) */
     float pu_fpb;                             /* frames per beat */
     int64_t pu_age;                           /* frames since pu_cur started (PAN SWING's sway) */
 } Slot;
@@ -344,22 +356,28 @@ static void slots_cycle(int n) {
         Source *b = (sl->src[1] >= 0 && sl->src[1] != sl->src[0]) ? &sources[sl->src[1]] : NULL;
         int aon = a && a->kind && a->on && !a->silent, bon = b && b->kind && b->on && !b->silent;
         /* the punch-in effect (PUNCH FX page): on each source's voices, before anything is mixed */
-        int pfx = sl->pu_live ? sl->pu_live : sl->pu_seq;
-        if (pfx != sl->pu_cur) { sl->pu_cur = pfx; sl->pu_age = 0; }
+        int pmask = pu_over(sl->pu_seq, sl->pu_live);
+        if ((pmask & (1 << 13)) && !(sl->pu_cur & (1 << 13))) sl->pu_age = 0;   /* PAN SWING starts its sway */
+        sl->pu_cur = pmask;
         float swing = 0.0f;
         int throw_ = 0;
-        if (pu_fn && (pfx || sl->pu_busy[0] || sl->pu_busy[1])) {
-            if (aon && sl->pu_h[0]) sl->pu_busy[0] = pu_fn(sl->pu_h[0], a->buf, n, a->voices, pfx, sl->pu_fpb, -1.0);
-            if (bon && sl->pu_h[1]) sl->pu_busy[1] = pu_fn(sl->pu_h[1], b->buf, n, b->voices, pfx, sl->pu_fpb, -1.0);
-            if (pfx == 14 && sl->pu_fpb > 0.0f)                       /* PAN SWING: the whole instrument sways */
+        if (pu_fn) {
+            for (int st = 0; st < PU_STAGES; st++) {                 /* each stage in turn, on the voices in place */
+                int f = pu_pick(pmask, st);
+                if (aon && sl->pu_h[0][st] && (f || sl->pu_busy[0][st]))
+                    sl->pu_busy[0][st] = pu_fn(sl->pu_h[0][st], a->buf, n, a->voices, f, sl->pu_fpb, -1.0);
+                if (bon && sl->pu_h[1][st] && (f || sl->pu_busy[1][st]))
+                    sl->pu_busy[1][st] = pu_fn(sl->pu_h[1][st], b->buf, n, b->voices, f, sl->pu_fpb, -1.0);
+            }
+            if ((pmask & (1 << 13)) && sl->pu_fpb > 0.0f)             /* PAN SWING: the whole instrument sways */
                 swing = 0.9f * sinf(6.2831853f * (float)sl->pu_age / sl->pu_fpb);
-            throw_ = pfx == 15;                                       /* ECHO THROW: all of it into the delay */
+            throw_ = (pmask & (1 << 14)) != 0;                        /* ECHO THROW: all of it into the delay */
         }
         sl->pu_age += n;
         int fx = sl->frev && sl->fdly && rev_process && dly_process;
         int sending = 0;
         for (int v = 0; v < sl->voices; v++) if (sl->rev[v] > 0.0f || sl->dly[v] > 0.0f) sending = 1;
-        if (sl->pu_cur == 15 || (sl->pu_live ? sl->pu_live : sl->pu_seq) == 15) sending = 1;
+        if ((sl->pu_cur | sl->pu_live | sl->pu_seq) & (1 << 14)) sending = 1;
         int run_fx = fx && (sending || sl->fx_tail > 0);
         if (run_fx) for (int k = 0; k < 4; k++) memset(slot_send[k], 0, sizeof(float) * n);
         float *kl = inputs[s * SLOT_CH + DRUM_KIT], *kr = inputs[s * SLOT_CH + DRUM_KIT + 1];
@@ -803,7 +821,7 @@ int core_slot(int k, int seq, int live, int voices) {
     memset(sl->pan, 0, sizeof sl->pan); memset(sl->rev, 0, sizeof sl->rev); memset(sl->dly, 0, sizeof sl->dly);
     for (int v = 0; v < MAX_VOICES; v++) sl->lane[v] = -1;
     sl->voices = voices; sl->src[0] = seq; sl->src[1] = live; sl->monitor = 0.0f; sl->fx_tail = 0;
-    sl->pu_seq = sl->pu_live = sl->pu_cur = 0; sl->pu_busy[0] = sl->pu_busy[1] = 0;
+    sl->pu_seq = sl->pu_live = sl->pu_cur = 0; memset(sl->pu_busy, 0, sizeof sl->pu_busy);
     if (seq >= 0 && seq < MAX_SOURCES) sources[seq].slot = k;
     if (live >= 0 && live < MAX_SOURCES) sources[live].slot = k;
     sl->used = 1;
@@ -819,11 +837,12 @@ void core_slot_mix(int k, int v, float l, float r, float rev, float dly) {
     if (k < 0 || k >= SLOTS || v < 0 || v >= MAX_VOICES) return;
     slots[k].pan[v][0] = l; slots[k].pan[v][1] = r; slots[k].rev[v] = rev; slots[k].dly[v] = dly;
 }
-/* the punch-in effects: fn (fx.c's punch_process) and slot k's two (made and kept by Python) */
-void core_slot_punch(int k, void *fn, void *seq_h, void *live_h) {
-    if (k < 0 || k >= SLOTS) return;
+/* the punch-in effects: fn (fx.c's punch_process) and one of slot k's (made and kept by Python): src 0 the
+   sequencer's voices, 1 the hand-played ones; stage as PU_STAGES */
+void core_slot_punch(int k, void *fn, int src, int stage, void *h) {
+    if (k < 0 || k >= SLOTS || src < 0 || src > 1 || stage < 0 || stage >= PU_STAGES) return;
     if (fn) pu_fn = (int (*)(void *, float *, int, int, int, float, double))fn;
-    slots[k].pu_h[0] = seq_h; slots[k].pu_h[1] = live_h;
+    slots[k].pu_h[src][stage] = h;
 }
 /* the effect slot k's steps say from now (0: none); called at its frame (EV_CALL) or straight away */
 void core_punch_seq(intptr_t k, intptr_t fx, intptr_t fpb) {

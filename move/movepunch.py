@@ -1,12 +1,17 @@
 """The PUNCH FX page (left button 1 after AUTOMATION): OP-XY style punch-in effects on the instrument you're on.
 
-Pads 1-16 (the bottom two rows) are the effects (punch.NAMES). Hold one: it plays on the instrument while you
-hold it; recording into the pattern (Record, playing), it also goes on the steps it was held over.
+Pads 1-16 (the bottom two rows) are the effects (punch.NAMES). They stack: one from each group plays at once
+(TIME: pads 1-8, FILTER: 9-11, then BITCRUSH, GATE, PAN SWING, ECHO THROW, KILL each on their own); another
+from the same group replaces it.
 
-On the steps (sixteenths, as long as the pattern): hold a step and tap a pad: that effect goes on it (the same
-pad again: off). Shift + steps: select several (they blink), then a pad puts the effect on all of them; tap a
-step without Shift to finish. Hold a step with an effect: knob 1 is its chance. Delete + step: its effect goes.
-Shift + Delete, twice: every punch step in the pattern goes. < > (or the wheel): steps 17-32...
+Hold pads: they play on the instrument while held (several at once: stacked); recording into the pattern
+(Record, playing), they also go on the steps they were held over.
+
+On the steps (sixteenths, as long as the pattern): hold a pad and tap steps: it goes on them (tap again: off).
+Or hold a step and tap pads: each goes on it (the same pad again: off). Shift + steps: select several (they
+blink), then pads put effects on all of them; tap a step without Shift to finish. Hold a step with effects:
+knob 1 is its chance (for all of them). Delete + step: its effects go. Shift + Delete, twice: every punch step
+in the pattern goes. < > (or the wheel): steps 17-32...
 """
 import time
 
@@ -16,8 +21,8 @@ import punch
 import sequencer
 
 PADS = len(punch.NAMES)                 # pads 0-15: the effects
-# each effect's pad colour, by kind: repeats, time, filters, colour, space, kill
-GROUP = [3, 3, 3, 3, 3, 8, 8, 8, 11, 11, 11, 15, 15, 22, 22, 127]
+# each effect's pad colour, by group: time (repeats orange, the others yellow), filters, crush / gate, pan / echo, kill
+COLOUR = [3, 3, 3, 3, 3, 8, 8, 8, 11, 11, 11, 15, 15, 22, 22, 127]
 CONFIRM_SECONDS = 4.0
 
 
@@ -27,9 +32,14 @@ class Punch:
         self.held = None              # the step held down
         self.selected = []            # steps picked with Shift (they blink)
         self.page = 0
-        self.pad_down = None          # the effect pad held (0-15)
+        self.pads_down = []           # the effect pads held (0-15), in the order pressed
         self.confirm_until = 0.0
         self._snapped = None
+
+    @property
+    def pad_down(self):
+        """The pad pressed last of those held, or None."""
+        return self.pads_down[-1] if self.pads_down else None
 
     # ------------------------------------------------------------ what's shown
     def active(self):
@@ -61,8 +71,15 @@ class Punch:
             return None
 
     def now(self):
-        """The effect playing on this instrument now (1-16), or 0."""
+        """The effects playing on this instrument now (a mask), or 0."""
         return self.T.engine.punch_now.get(self.mid(), 0)
+
+    def held_mask(self):
+        """The pads held, as a mask (one from each group: the last pressed wins it)."""
+        m = 0
+        for p in self.pads_down:
+            m = punch.with_fx(m, p + 1)
+        return m
 
     def targets(self):
         """The steps a pad puts its effect on: the selected ones, or the one held."""
@@ -76,6 +93,31 @@ class Punch:
             self.seq.snapshot()
             self._snapped = why
 
+    def _toggle(self, steps, fx):
+        """fx on these steps (taking out another of its group), or off them if they all have it. Returns
+        True if it went on."""
+        b = punch.bit(fx)
+        with self.seq.lock:
+            st = self.steps()
+            off = all(st.get(i, [0])[0] & b for i in steps)
+            for i in steps:
+                old = st.get(i, [0, 0])
+                mask = old[0] & ~b if off else punch.with_fx(old[0], fx)
+                if mask:
+                    st[i] = [mask, old[1]]
+                else:
+                    st.pop(i, None)
+        self.T.engine.seq_changed()
+        return not off
+
+    def _live(self):
+        """Tell the engine which pads are held now."""
+        e = self.T.engine
+        m = self.held_mask()
+        e.punch_live = (self.mid(), m) if m else None
+        if not m:
+            e.punch_rec = False
+
     def pad(self, p, vel):
         """A pad on this page. Returns True (it's used here, never a note)."""
         e = self.T.engine
@@ -83,33 +125,26 @@ class Punch:
             return True
         fx = p + 1
         if not vel:
-            if self.pad_down == p:
-                self.pad_down = None
-                e.punch_live, e.punch_rec = None, False
+            if p in self.pads_down:
+                self.pads_down.remove(p)
+                self._live()
                 self._snapped = None
             return True
         tg = [i for i in self.targets() if i < self.length()]
         if tg:                                            # steps picked: the pad puts its effect on them
-            seq = self.seq
             self._snapshot(("pad", tuple(tg), time.monotonic()))
-            with seq.lock:
-                st = self.steps()
-                off = all(st.get(i, [0])[0] == fx for i in tg)
-                for i in tg:
-                    if off:
-                        st.pop(i, None)
-                    else:
-                        st[i] = [fx, st[i][1] if i in st else 0]
-            e.seq_changed()
+            on = self._toggle(tg, fx)
             where = "STEP %d" % (tg[0] + 1) if len(tg) == 1 else "%d STEPS" % len(tg)
-            popup.show(self.T, where, punch.name(fx), "OFF" if off else "ON")
+            popup.show(self.T, where, punch.name(fx), "ON" if on else "OFF")
             return True
-        self.pad_down = p                                 # nothing picked: play it while it's held (tap steps meanwhile: put it on them)
+        if p not in self.pads_down:                       # nothing picked: it plays while held (stacked with others)
+            self.pads_down.append(p)
         self._snapped = None
         rec = bool(getattr(self.T, "live_rec", False) and e.playing)
-        if rec:
+        if rec and not e.punch_rec:
             self.seq.snapshot()
-        e.punch_live, e.punch_rec = (self.mid(), fx), rec
+        self._live()
+        e.punch_rec = rec
         return True
 
     def step(self, n, down, shift, deleting):
@@ -122,18 +157,11 @@ class Punch:
         if i >= self.length():
             return
         st = self.steps()
-        if self.pad_down is not None and not deleting and not shift:   # a pad held: tap steps to put it on / off
+        if self.pads_down and not deleting and not shift:    # pads held: tap steps to put the last one on / off
             fx = self.pad_down + 1
             self._snapshot(("padsteps", self.pad_down))
-            with self.seq.lock:
-                if st.get(i, [0])[0] == fx:
-                    st.pop(i, None)
-                    word = "OFF"
-                else:
-                    st[i] = [fx, st[i][1] if i in st else 0]
-                    word = "ON"
-            self.T.engine.seq_changed()
-            popup.show(self.T, "STEP %d" % (i + 1), punch.name(fx), word)
+            on = self._toggle([i], fx)
+            popup.show(self.T, "STEP %d" % (i + 1), punch.name(fx), "ON" if on else "OFF")
             return
         if deleting:
             if i in st:
@@ -154,8 +182,9 @@ class Punch:
             return
         self.held = i
         if i in st:
-            fx, ch = st[i]
-            popup.show(self.T, "STEP %d" % (i + 1), punch.name(fx), "CHANCE " + sequencer.CHANCES[ch], "KNOB 1")
+            mask, ch = st[i]
+            popup.show(self.T, "STEP %d" % (i + 1), punch.label(mask, short=True), "CHANCE " + sequencer.CHANCES[ch],
+                       "KNOB 1")
 
     def knob(self, number, delta, shift):
         if number != 1 or self.held is None:
@@ -172,7 +201,7 @@ class Punch:
         with self.seq.lock:
             st[i][1] = max(0, min(len(sequencer.CHANCES) - 1, st[i][1] + one))
         self.T.engine.seq_changed()
-        popup.show(self.T, "STEP %d" % (i + 1), punch.name(st[i][0]), "CHANCE " + sequencer.CHANCES[st[i][1]])
+        popup.show(self.T, "STEP %d" % (i + 1), punch.label(st[i][0], short=True), "CHANCE " + sequencer.CHANCES[st[i][1]])
 
     def clear(self):
         """Shift + Delete: asks first; again (within a few seconds): every punch step in the pattern goes."""
@@ -197,9 +226,9 @@ class Punch:
     def leave(self):
         """Off the page: nothing left held."""
         e = self.T.engine
-        if e is not None and self.pad_down is not None:
+        if e is not None and self.pads_down:
             e.punch_live, e.punch_rec = None, False
-        self.pad_down, self.held, self.selected = None, None, []
+        self.pads_down, self.held, self.selected = [], None, []
 
     # ------------------------------------------------------------ lights
     def step_lights(self):
@@ -209,22 +238,22 @@ class Punch:
         out = []
         for k in range(16):
             i = self.page * 16 + k
+            colour = COLOUR[punch.effects(st[i][0])[0] - 1] if i in st else 0
             if i >= length:
                 out.append(0)
             elif i in self.selected:
-                out.append(120 if blink else (GROUP[st[i][0] - 1] if i in st else 0))
+                out.append(120 if blink else colour)
             elif i == self.held or i == now:
                 out.append(120 if i in st or i == self.held else 118)
             else:
-                out.append(GROUP[st[i][0] - 1] if i in st else 0)
+                out.append(colour)
         return out
 
     def pad_lights(self):
         out = [0] * 32
-        now = self.now()
-        st = self.steps()
-        on_step = st.get(self.held, [0])[0] if self.held is not None else 0
+        lit = self.now() | self.held_mask()
+        if self.held is not None:
+            lit |= self.steps().get(self.held, [0])[0]
         for p in range(PADS):
-            fx = p + 1
-            out[p] = 120 if (p == self.pad_down or fx == now or fx == on_step) else GROUP[p]
+            out[p] = 120 if lit & punch.bit(p + 1) else COLOUR[p]
         return out

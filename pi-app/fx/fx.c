@@ -407,19 +407,25 @@ static const float PU_REPEAT[] = {0, 1.0f, 0.5f, 0.25f, 0.125f, 1.0f / 3.0f};   
 int punch_process(Punch *p, float *buf, int frames, int chans, int fx, float fpb, double beat) {
     if (chans < 1 || chans > PU_MAXCH || frames <= 0)
         return 0;
-    if (chans != p->chans || !p->hist) {
+    /* only the TIME effects (1-8) need the history: the other stages never make one */
+    int need = (fx >= 1 && fx <= 8) || (p->cur >= 1 && p->cur <= 8);
+    if (p->hist && chans != p->chans) {
         free(p->hist);
-        p->len = (int)(p->rate * PU_SECONDS);
-        p->hist = (float *)calloc((size_t)p->len * chans, sizeof(float));
-        p->chans = chans;
-        p->w = 0;
+        p->hist = NULL;
         p->cur = 0;
         p->mix = 0.0f;
+    }
+    if (!p->hist && need) {
+        p->len = (int)(p->rate * PU_SECONDS);
+        p->hist = (float *)calloc((size_t)p->len * chans, sizeof(float));
+        p->w = 0;
         if (!p->hist)
             return 0;
     }
+    p->chans = chans;
+    int keep = p->hist != NULL;
     if (fpb < 16.0f) fpb = 16.0f;
-    if (fpb > p->len * 0.45f) fpb = p->len * 0.45f;          /* (a very slow tempo: shorter, so it fits) */
+    if (p->len > 0 && fpb > p->len * 0.45f) fpb = p->len * 0.45f;   /* (a very slow tempo: shorter, so it fits the history) */
     if (fx != 0 && fx != p->cur) {                           /* a new effect: start it */
         p->cur = fx;
         p->age = 0;
@@ -434,6 +440,8 @@ int punch_process(Punch *p, float *buf, int frames, int chans, int fx, float fpb
     float target = fx ? 1.0f : 0.0f;
     float ramp = 1.0f / (0.004f * p->rate);
     if (p->cur == 0 && p->mix <= 0.0f) {                     /* nothing running: just keep the history */
+        if (!keep)
+            return 0;
         for (int i = 0; i < frames; i++) {
             memcpy(p->hist + (size_t)p->w * chans, buf + (size_t)i * chans, sizeof(float) * chans);
             if (++p->w >= p->len) p->w = 0;
@@ -444,7 +452,8 @@ int punch_process(Punch *p, float *buf, int frames, int chans, int fx, float fpb
     float wet[PU_MAXCH];
     for (int i = 0; i < frames; i++) {
         float *x = buf + (size_t)i * chans;
-        memcpy(p->hist + (size_t)p->w * chans, x, sizeof(float) * chans);
+        if (keep)
+            memcpy(p->hist + (size_t)p->w * chans, x, sizeof(float) * chans);
         long age = p->age;
         if ((age & 15) == 0) {                               /* the filters move every 16 frames */
             float t = age / fpb;
@@ -517,7 +526,7 @@ int punch_process(Punch *p, float *buf, int frames, int chans, int fx, float fpb
         else if (m > target) { m -= ramp; if (m < 0.0f) m = 0.0f; }
         p->mix = m;
         p->age++;
-        if (++p->w >= p->len) p->w = 0;
+        if (keep && ++p->w >= p->len) p->w = 0;
     }
     if (p->mix <= 0.0f && fx == 0)
         p->cur = 0;

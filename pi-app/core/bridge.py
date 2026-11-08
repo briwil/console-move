@@ -290,11 +290,13 @@ class CoreBridge:
             return
         if not hasattr(self, "_pu"):
             self._pu, self._pu_sent, self._pu_live, self._pu_decided = {}, {}, None, {}
-        if k not in self._pu:
-            self._pu[k] = (effects.Punch(self.core.rate), effects.Punch(self.core.rate))
-        a, b = self._pu[k]
-        a.prepare(getattr(slot, "voices", 2))           # (the hand-played one makes its own when it's first needed)
-        self.core.slot_punch(k, effects._lib.punch_process, a.h, b.h)
+        import punch
+        if k not in self._pu:                           # [source][stage]: the sequencer's voices, the hand-played ones
+            self._pu[k] = [[effects.Punch(self.core.rate) for _ in punch.STAGES] for _src in range(2)]
+        self._pu[k][0][0].prepare(getattr(slot, "voices", 2))   # (TIME's history now; the others need none, and
+        for src in range(2):                                    #  the hand-played TIME makes its own when first used)
+            for st, h in enumerate(self._pu[k][src]):
+                self.core.slot_punch(k, effects._lib.punch_process, src, st, h.h)
         self._pu_sent.pop(k, None)
 
     def _punch_steps(self, plays, start, n, fpb):
@@ -331,7 +333,7 @@ class CoreBridge:
                 fx = 0
             live = e.punch_live[1] if e.punch_live and e.punch_live[0] == mid else 0
             if live or fx:
-                e.punch_now[mid] = live or fx
+                e.punch_now[mid] = punch.over(fx, live)
             else:
                 e.punch_now.pop(mid, None)
 
@@ -353,7 +355,8 @@ class CoreBridge:
                 self.core.punch_live(want[0], want[1], e.frames_per_beat())
             self._pu_live = want
         if want:
-            e.punch_now[e.punch_live[0]] = want[1]
+            if not self.sched.playing:
+                e.punch_now[e.punch_live[0]] = want[1]      # (playing: _punch_steps puts the pads over the steps)
             if e.punch_rec and e.playing and self.sched.playing:
                 import punch
                 seq = e.seqs.get(e.punch_live[0])
@@ -361,7 +364,9 @@ class CoreBridge:
                     step = punch.at(seq, int(self.sched.seq_frame()), e.frames_per_beat())[1]
                     if step is not None:
                         with seq.lock:
-                            punch.of(seq.pattern)[step] = [want[1], 0]
+                            st = punch.of(seq.pattern)
+                            old = st.get(step, [0, 0])
+                            st[step] = [punch.over(old[0], want[1]), old[1]]
                         self._pu_sent.pop(want[0], None)
                 except Exception as ex:                # noqa: BLE001
                     print("punch record:", ex)

@@ -826,9 +826,9 @@ def punch_page(f, T):
     name = (e.slots[e.slot] or "").upper() if e.slot is not None else ""
     header(f, "PUNCH FX", name[:12])
     st = pu.steps()
-    now = pu.now() or ((pu.pad_down + 1) if pu.pad_down is not None else 0)
+    now = pu.now() or pu.held_mask()
     if now:
-        f.centre(64, 12, punch.name(now))
+        f.centre(64, 12, punch.label(now)[:21])
     else:
         f.centre(64, 13, "HOLD A PAD: ITS EFFECT", small=True)
     length, at = pu.length(), pu.playing_step()
@@ -854,9 +854,9 @@ def punch_page(f, T):
         f.small(1, 43, "%d STEPS PICKED: TAP A PAD" % len(pu.selected))
         f.small(1, 50, "A STEP (NO SHIFT): DONE")
     elif pu.held is not None and pu.held in st:
-        fx, ch = st[pu.held]
+        mask, ch = st[pu.held]
         f.frame(4, 37, 120, 18)
-        f.centre(64, 39, "STEP %d  %s" % (pu.held + 1, punch.SHORT[fx - 1]))
+        f.centre(64, 39, ("%d %s" % (pu.held + 1, punch.label(mask, short=True)))[:20])
         f.centre(64, 48, "KNOB 1 CHANCE: %s" % sequencer.CHANCES[ch], small=True)
     elif pu.held is not None:
         f.small(1, 43, "STEP %d: TAP A PAD TO ADD" % (pu.held + 1))

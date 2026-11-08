@@ -223,7 +223,7 @@ class MoveBoard:
         T, e = self.T, self.T.engine
         if e is None or e.slot is None or not e.drums:
             return
-        if not vel and T.punch.pad_down == p:
+        if not vel and p in T.punch.pads_down:
             T.punch.pad(p, vel)                            # a punch FX pad let go (even with Shift held)
             return
         if T.punch.active() and self.shift and (T.punch.selected or T.punch.held is not None):
@@ -233,7 +233,7 @@ class MoveBoard:
             if vel:
                 self.keys.put(("PATTERN", p))
             return
-        if T.punch.active() or (not vel and T.punch.pad_down == p):
+        if T.punch.active() or (not vel and p in T.punch.pads_down):
             T.punch.pad(p, vel)                            # the PUNCH FX page: the pads are effects
             return
         mid = e.slots[e.slot]
@@ -410,7 +410,7 @@ class Lights:
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
         syn = T.msyn.active()
-        if T.punch.pad_down is not None and not T.punch.active():
+        if T.punch.pads_down and not T.punch.active():
             T.punch.leave()                                # (left the page with a pad held)
         seq_lights = T.punch.step_lights() if T.punch.active() else T.auto.step_lights() if T.auto.active() else T.msyn.step_lights() if syn else \
             T.mseq.step_lights() if T.mseq.active() else T.mlfo.step_lights() if T.mlfo.active() else None

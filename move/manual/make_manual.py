@@ -437,6 +437,8 @@ story += [
     table([
         ("Hold a pad", "The effect plays while you hold it. Recording into the pattern (Record, playing): it also "
          "goes on the steps it was held over."),
+        ("Hold a pad + tap steps", "The quickest way to step-sequence: hold an effect's pad and tap the steps you "
+         "want it on (tap again: off). The effect plays while you hold the pad, so you hear it as you place it."),
         ("Hold a step + tap a pad", "Puts that effect on the step (the same pad again: off). The steps are "
          "sixteenths, as many as the pattern is long."),
         ("Shift + steps", "Pick several (they blink), then tap a pad: the effect on all of them. Tap a step "

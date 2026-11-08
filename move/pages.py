@@ -861,8 +861,9 @@ def punch_page(f, T):
     elif pu.held is not None:
         f.small(1, 43, "STEP %d: TAP A PAD TO ADD" % (pu.held + 1))
     else:
-        f.small(1, 43, "HOLD STEP + PAD: PUT IT ON")
-        f.small(1, 50, "DEL+STEP: OFF  SHIFT+DEL: ALL")
+        f.small(1, 41, "HOLD A PAD + TAP STEPS")
+        f.small(1, 47, "OR HOLD A STEP + TAP A PAD")
+        f.small(1, 53, "DEL+STEP: OFF  SHIFT+DEL: ALL")
 
 
 def seq_page(f, T):

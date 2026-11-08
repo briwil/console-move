@@ -226,6 +226,9 @@ class MoveBoard:
         if not vel and T.punch.pad_down == p:
             T.punch.pad(p, vel)                            # a punch FX pad let go (even with Shift held)
             return
+        if T.punch.active() and self.shift and (T.punch.selected or T.punch.held is not None):
+            T.punch.pad(p, vel)                            # (steps picked with Shift: the pad is an effect, Shift still down)
+            return
         if self.shift and p < 16:                          # Shift + pad: the instrument's pattern 1-16
             if vel:
                 self.keys.put(("PATTERN", p))

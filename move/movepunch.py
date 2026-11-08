@@ -104,7 +104,8 @@ class Punch:
             where = "STEP %d" % (tg[0] + 1) if len(tg) == 1 else "%d STEPS" % len(tg)
             popup.show(self.T, where, punch.name(fx), "OFF" if off else "ON")
             return True
-        self.pad_down = p                                 # nothing picked: play it while it's held
+        self.pad_down = p                                 # nothing picked: play it while it's held (tap steps meanwhile: put it on them)
+        self._snapped = None
         rec = bool(getattr(self.T, "live_rec", False) and e.playing)
         if rec:
             self.seq.snapshot()
@@ -121,6 +122,19 @@ class Punch:
         if i >= self.length():
             return
         st = self.steps()
+        if self.pad_down is not None and not deleting and not shift:   # a pad held: tap steps to put it on / off
+            fx = self.pad_down + 1
+            self._snapshot(("padsteps", self.pad_down))
+            with self.seq.lock:
+                if st.get(i, [0])[0] == fx:
+                    st.pop(i, None)
+                    word = "OFF"
+                else:
+                    st[i] = [fx, st[i][1] if i in st else 0]
+                    word = "ON"
+            self.T.engine.seq_changed()
+            popup.show(self.T, "STEP %d" % (i + 1), punch.name(fx), word)
+            return
         if deleting:
             if i in st:
                 self.seq.snapshot()

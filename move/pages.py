@@ -818,52 +818,48 @@ def auto_page(f, T):
 
 
 def punch_page(f, T):
-    """PUNCH FX (left button 1 after AUTOMATION): the effect playing, the steps that have one, a held step's
-    effect and chance (see movepunch.py)."""
+    """PUNCH FX (left button 1 after AUTOMATION): the punch pattern, the picked effect's lane (its steps, length,
+    rate), the time scale, what plays now (see movepunch.py)."""
     import punch
     pu = T.punch
-    e = T.engine
-    name = (e.slots[e.slot] or "").upper() if e.slot is not None else ""
-    header(f, "PUNCH FX", name[:12])
-    st = pu.steps()
+    st = pu.st()
+    ln = pu.ln()
+    head = "FX%d" % (st.current + 1) + (">%d" % (st.queued + 1) if st.queued is not None else "")
+    header(f, "PUNCH FX", head)
+    f.text(1, 11, punch.NAMES[pu.lane])
     now = pu.now() or pu.held_mask()
-    if now:
-        f.centre(64, 12, punch.label(now)[:21])
-    else:
-        f.centre(64, 13, "HOLD A PAD: ITS EFFECT", small=True)
-    length, at = pu.length(), pu.playing_step()
+    f.right(127, 12, punch.label(now, short=True)[:10] if now else "", small=True)
+    trip, at = pu.trip(), pu.playing_step()
     for k in range(16):
         i = pu.page * 16 + k
-        x, y = 1 + k * 8, 23
-        if i >= length:
+        x, y = 1 + k * 8, 21
+        if i >= ln.length:
+            continue
+        if sequencer.dark(i, trip):
             f.dot(x + 3, y + 3)
             continue
-        on = i in st
+        on = i in ln.steps
         (f.rect if on else f.frame)(x, y, 7, 7)
-        if i == pu.held or i in pu.selected:
+        if i == pu.held:
             f.frame(x - 1, y - 1, 9, 9)
         if at is not None and i == at:
             f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
-    f.small(1, 33, "STEPS %d-%d OF %d   %d SET" % (pu.page * 16 + 1, min(pu.page * 16 + 16, length), length,
-                                                  len(st)))
+    f.small(1, 31, "STEPS %d-%d OF %d" % (pu.page * 16 + 1, min(pu.page * 16 + 16, ln.length), ln.length))
+    f.right(127, 31, "%d ON" % len(ln.steps), small=True)
     if pu.confirming():
-        f.frame(4, 40, 120, 17)
-        f.centre(64, 43, "TAKE OFF ALL %d PUNCH STEPS?" % len(st), small=True)
-        f.centre(64, 50, "SHIFT + DELETE AGAIN: YES", small=True)
-    elif pu.selected:
-        f.small(1, 43, "%d STEPS PICKED: TAP A PAD" % len(pu.selected))
-        f.small(1, 50, "A STEP (NO SHIFT): DONE")
-    elif pu.held is not None and pu.held in st:
-        mask, ch = st[pu.held]
+        f.frame(4, 38, 120, 17)
+        f.centre(64, 41, "CLEAR PUNCH PATTERN %d?" % (st.current + 1), small=True)
+        f.centre(64, 48, "SHIFT + DELETE AGAIN: YES", small=True)
+    elif pu.held is not None and pu.held in ln.steps:
         f.frame(4, 37, 120, 18)
-        f.centre(64, 39, ("%d %s" % (pu.held + 1, punch.label(mask, short=True)))[:20])
-        f.centre(64, 48, "KNOB 1 CHANCE: %s" % sequencer.CHANCES[ch], small=True)
-    elif pu.held is not None:
-        f.small(1, 43, "STEP %d: TAP A PAD TO ADD" % (pu.held + 1))
+        f.centre(64, 39, "STEP %d" % (pu.held + 1))
+        f.centre(64, 48, "KNOB 1 CHANCE: %s" % sequencer.CHANCES[ln.steps[pu.held]], small=True)
     else:
-        f.small(1, 41, "HOLD A PAD + TAP STEPS")
-        f.small(1, 47, "OR HOLD A STEP + TAP A PAD")
-        f.small(1, 53, "DEL+STEP: OFF  SHIFT+DEL: ALL")
+        f.small(1, 39, "1 LENGTH %d" % ln.length)
+        f.small(1, 46, "2 RATE %s" % pu.rate_name())
+        f.small(66, 39, "8 SCALE X%d" % punch.SCALES[st.pattern.scale])
+        f.small(66, 46, "SHIFT+PAD:PAT")
+        f.small(1, 53, "PAD: LANE  HOLD: PLAY IT")
 
 
 def seq_page(f, T):
@@ -952,16 +948,19 @@ def song_page(f, T):
         return
     row = sg.rows[sg.pick]
     slots = sg.slots()
+    shift = bool(getattr(T, "shift_held", lambda: False)())    # Shift held: the punch FX patterns instead
     for i, slot in enumerate(slots):
         col, r = divmod(i, 4)
         x, y = col * 65, 13 + r * 8
-        v = row["pats"].get(slot)
+        v = row.get("punch", {}).get(slot) if shift else row["pats"].get(slot)
         f.small(x + 1, y, "%d %s" % (i + 1, sg.short(slot)))
-        f.right(x + 62, y, "-" if v is None else "P%d" % (v + 1), small=True)
+        f.right(x + 62, y, "-" if v is None else ("FX%d" if shift else "P%d") % (v + 1), small=True)
+    if shift:
+        f.small(1, 48, "SHIFT: PUNCH FX PATTERNS")
     col, r = divmod(7, 4)
     f.small(66, 13 + r * 8, "8 PLAYS")
     f.right(W - 2, 13 + r * 8, "x%d" % row["repeat"], small=True)
-    if sg.playing_row is not None:
+    if sg.playing_row is not None and not shift:
         f.small(1, 48, "PLAYING ROW %d" % (sg.playing_row + 1))
     f.small(1, 56, "STEPS: ROWS  DEL+STEP: OUT")
 

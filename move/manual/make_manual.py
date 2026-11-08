@@ -348,6 +348,7 @@ story += [
          "the playing one blinks."),
         ("Delete + step button", "Take that row out."),
         ("Knobs 1-7", "The row's pattern for instruments 1-7 (all the way down: -, leave it as it is)."),
+        ("Shift + knobs 1-7", "The row's PUNCH FX pattern for instruments 1-7. While Shift is held the screen shows those (FX1, FX2...) in place of the note patterns."),
         ("Knob 8", "How many times the row plays (1-16)."),
         ("+ / -", "+ switches song mode on, - off. <b>Shift + left button 2</b> does the same from any page "
          "(the tape shows SONG in its top line while it's on). Off: the picked pattern plays, as usual."),
@@ -420,11 +421,10 @@ story += [
          "step buttons; the one knob 1 is on outlined, the held step framed white."),
     ]),
     p("Punch FX page", H2),
-    p("Left button 1 after AUTOMATION: OP-XY style punch-in effects on the instrument you're on. Each pattern keeps "
-      "its own, so song mode plays them with it. Pads 1-16 (the bottom two rows) are the effects. They stack: one "
-      "from each group plays at once (TIME: pads 1-8; FILTER: pads 9-11; BITCRUSH, GATE, PAN SWING, ECHO THROW and "
-      "KILL each on their own), and another from the same group replaces it. So REPEAT 1/16 + LOW PASS + BITCRUSH "
-      "works; REPEAT 1/16 + REVERSE is just REVERSE.", BODY),
+    p("Left button 1 after AUTOMATION: a sequencer of OP-XY style punch-in effects on the instrument you're on, one "
+      "lane per effect, each with its own length and rate (as the drum lanes, TRIPLETS too). Each instrument has 16 "
+      "punch patterns of its own, apart from its note patterns, and song mode picks them per row. Pads 1-16 (the "
+      "bottom two rows) are the effects:", BODY),
     table([
         ("Pads 1-5", "REPEAT 1/4, 1/8, 1/16, 1/32, 1/8T: the slice from when it starts, round and round."),
         ("Pad 6  REVERSE", "The beat just gone, backwards."),
@@ -434,22 +434,26 @@ story += [
         ("Pad 12  BITCRUSH", "Grit and lo-fi."),
         ("Pad 13  GATE 1/16", "Chopped in sixteenths."),
         ("Pad 14  PAN SWING", "The whole instrument sways left and right, once a beat."),
-        ("Pad 15  ECHO THROW", "Everything into the delay while held; the echoes ring on after."),
+        ("Pad 15  ECHO THROW", "Everything into the delay while it's on; the echoes ring on after."),
         ("Pad 16  KILL", "Silence."),
     ]),
+    p("They stack: one from each group plays at once (TIME: pads 1-8; FILTER: pads 9-11; BITCRUSH, GATE, PAN SWING, "
+      "ECHO THROW and KILL each on their own). Two lanes of the same group on at once: the one whose step started "
+      "last wins (the same moment: the higher pad).", BODY),
     table([
-        ("Hold pads", "The effects play while you hold them (several: stacked). Recording into the pattern (Record, playing): it also "
-         "goes on the steps it was held over."),
-        ("Hold a pad + tap steps", "The quickest way to step-sequence: hold an effect's pad and tap the steps you "
-         "want it on (tap again: off). The effect plays while you hold the pad, so you hear it as you place it."),
-        ("Hold a step + tap a pad", "Puts that effect on the step (the same pad again: off). The steps are "
-         "sixteenths, as many as the pattern is long."),
-        ("Shift + steps", "Pick several (they blink), then tap a pad: the effect on all of them. Tap a step "
-         "without Shift: done."),
-        ("Hold a step with effects", "They show with the chance; knob 1 sets the chance for all of them (100% down to 0%, or "
+        ("Tap a pad", "Its lane: the step buttons show its steps."),
+        ("Hold pads", "They play while held (several: stacked). Recording into the pattern (Record, playing): they "
+         "go on their lanes' steps they were held over."),
+        ("Step buttons", "The lane's steps: tap on / off. Hold one: knob 1 sets its chance (100% down to 0%, or "
          "1:2, 2:3...)."),
-        ("Delete + step", "Take its effect off."),
-        ("Shift + Delete", "Take every punch step off this pattern: it asks first (Shift + Delete again: yes)."),
+        ("Hold a step + tap pads", "Those effects' steps there on / off (each in its own lane)."),
+        ("Knob 1 / knob 2", "The lane's LENGTH (steps) and RATE (1/32 to 1/1; with TRIPLETS on they play as triplets)."),
+        ("Knob 8", "TIME SCALE (x1 to x32): every lane of the punch pattern that many times slower, for long "
+         "sweeps over many bars."),
+        ("Shift + pad 1-16", "Punch pattern 1-16 (lit: the current one bright, ones with steps dim). Playing: it "
+         "takes over when the instrument's pattern next comes round, from its step 1."),
+        ("Delete + step", "That step off."),
+        ("Shift + Delete", "Clear every lane of the punch pattern: it asks first (Shift + Delete again: yes)."),
         ("Undo", "Puts back what you changed."),
         ("Left / Right, the wheel", "Steps 17-32 and on."),
     ]),

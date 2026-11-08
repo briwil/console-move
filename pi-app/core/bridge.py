@@ -300,26 +300,26 @@ class CoreBridge:
         self._pu_sent.pop(k, None)
 
     def _punch_steps(self, plays, start, n, fpb):
-        """The steps' effects in the stretch just scheduled, sent at their frames (only where they change)."""
+        """The punch lanes' effects in the stretch just scheduled, sent at their frames (only where they change)."""
         if n <= 0 or not hasattr(self, "_pu"):
             return
         import punch
-        sf = fpb / punch.STEPS_PER_BEAT
         base = self.sched.start_frame
         for slot, seq in plays:
             k = slot.k
             if k not in self._pu:
                 continue
-            dec = self._pu_decided.setdefault(k, {})
             try:
-                f = seq.anchor + math.ceil((start - seq.anchor) / sf) * sf
-                points = ([start] if start == 0 or k not in self._pu_sent else []) + \
-                    [int(f + j * sf) for j in range(int(n / sf) + 2) if start <= f + j * sf < start + n]
-                for t in points:
-                    fx = punch.at(seq, t, fpb, dec)[0]
-                    if self._pu_sent.get(k) != fx:
-                        self._pu_sent[k] = fx
-                        self.core.punch_seq(k, fx, fpb, at=base + t)
+                with seq.lock:
+                    t = start
+                    first = start == 0 or k not in self._pu_sent
+                    while t is not None and t < start + n:
+                        m = punch.mask_at(seq, t, fpb)
+                        if first or self._pu_sent.get(k) != m:
+                            self._pu_sent[k] = m
+                            self.core.punch_seq(k, m, fpb, at=base + int(t))
+                        first = False
+                        t = punch.next_change(seq, t, fpb)
             except Exception as ex:                    # noqa: BLE001
                 print("punch steps:", ex)
         e = self.e
@@ -328,26 +328,26 @@ class CoreBridge:
         if mid and k in self._pu:                       # what the shown instrument plays now (the page's lights)
             seq = e.seqs.get(mid)
             try:
-                fx = punch.at(seq, int(self.sched.seq_frame()), fpb, self._pu_decided.setdefault(k, {}))[0]
+                m = punch.mask_at(seq, int(self.sched.seq_frame()), fpb)
             except Exception:                           # noqa: BLE001
-                fx = 0
+                m = 0
             live = e.punch_live[1] if e.punch_live and e.punch_live[0] == mid else 0
-            if live or fx:
-                e.punch_now[mid] = punch.over(fx, live)
+            if live or m:
+                e.punch_now[mid] = punch.over(m, live)
             else:
                 e.punch_now.pop(mid, None)
 
     def _punch_live(self):
-        """A pad held on the PUNCH FX page: on straight away; recording, it goes on the steps it's held over."""
+        """Pads held on the PUNCH FX page: on straight away; recording, each goes on its lane's steps it's held over."""
         if not hasattr(self, "_pu"):
             return
         e = self.e
         want = None
         if e.punch_live:
-            mid, fx = e.punch_live
+            mid, mask = e.punch_live
             k = next((k for k, v in self.slots.items() if v[0] == mid), None)
             if k is not None:
-                want = (k, fx)
+                want = (k, mask)
         if want != self._pu_live:
             if self._pu_live and (not want or want[0] != self._pu_live[0]):
                 self.core.punch_live(self._pu_live[0], 0, 0)
@@ -356,18 +356,17 @@ class CoreBridge:
             self._pu_live = want
         if want:
             if not self.sched.playing:
-                e.punch_now[e.punch_live[0]] = want[1]      # (playing: _punch_steps puts the pads over the steps)
+                e.punch_now[e.punch_live[0]] = want[1]      # (playing: _punch_steps puts the pads over the lanes)
             if e.punch_rec and e.playing and self.sched.playing:
                 import punch
                 seq = e.seqs.get(e.punch_live[0])
                 try:
-                    step = punch.at(seq, int(self.sched.seq_frame()), e.frames_per_beat())[1]
-                    if step is not None:
-                        with seq.lock:
-                            st = punch.of(seq.pattern)
-                            old = st.get(step, [0, 0])
-                            st[step] = [punch.over(old[0], want[1]), old[1]]
-                        self._pu_sent.pop(want[0], None)
+                    with seq.lock:
+                        pat = punch.state(seq).pattern
+                        for fx in punch.effects(want[1]):
+                            _k, i = punch.lane_pos(seq, fx - 1, int(self.sched.seq_frame()), e.frames_per_beat())
+                            if i is not None and i not in pat.lanes[fx - 1].steps:
+                                pat.lanes[fx - 1].steps[i] = 0
                 except Exception as ex:                # noqa: BLE001
                     print("punch record:", ex)
         elif not self.sched.playing:

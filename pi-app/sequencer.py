@@ -192,7 +192,7 @@ class Pattern:
         self.lanes = [Lane(length) for _ in range(LANES)]
 
     def empty(self):
-        return not any(s.on or s.locks for lane in self.lanes for s in lane.steps) and not getattr(self, "punch", None)
+        return not any(s.on or s.locks for lane in self.lanes for s in lane.steps)
 
 
 def euclid(hits, length, rotate=0):
@@ -276,6 +276,9 @@ class Sequencer:
             if not self.undo_stack:
                 return None
             n, pattern = self.undo_stack.pop()
+            import punch
+            if punch.undo_entry(self, n, pattern):
+                return self.current
             self.patterns[n] = pattern
             return n
 
@@ -381,6 +384,8 @@ class Sequencer:
             if self.queued is not None:
                 self.current, self.queued = self.queued, None
             self.anchor = 0.0
+            import punch
+            punch.stop(self)
             self._decided.clear()
             self._skip.clear()
             self._cyc.clear()
@@ -396,13 +401,15 @@ class Sequencer:
         out = []
         with self.lock:
             end = start + frames
-            if self.queued is not None or self.trip != TRIPLETS:
+            import punch
+            if self.queued is not None or self.trip != TRIPLETS or punch.pending(self):
                 length = self.pattern_frames(frames_per_beat)
                 boundary = self.anchor + math.ceil((start - self.anchor) / length - 1e-9) * length
                 if boundary < end:
                     out += self._events(start, boundary, start, frames_per_beat)
                     if self.queued is not None:
                         self.current, self.queued = self.queued, None
+                    punch.take_queued(self, boundary)
                     self.trip = TRIPLETS                 # (triplets on / off: from the pattern's start)
                     self.anchor = boundary
                     self._decided.clear()
@@ -559,22 +566,25 @@ class Sequencer:
                                              {str(k): v for k, v in s.locks.items()}, dict(s.comp)]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
                 import lfo
-                import punch
-                pats.append({"lanes": lanes, "lfos": lfo.to_json(p), "punch": punch.to_json(p)})
-            return {"current": self.current, "patterns": pats}
+                pats.append({"lanes": lanes, "lfos": lfo.to_json(p)})
+            import punch
+            return {"current": self.current, "patterns": pats, "punchfx": punch.to_json(self)}
 
     def from_json(self, data):
         with self.lock:
             self.patterns = [Pattern(self.new_length()) for _ in range(PATTERNS)]
             self.current, self.queued, self.anchor = 0, None, 0.0
+            import punch
+            punch.from_json(self, None)
             if not isinstance(data, dict):
                 return
+            old = [(n, max(ld.get("length", 16) for ld in pd.get("lanes") or [{}]), pd.get("punch"))
+                   for n, pd in enumerate(data.get("patterns", [])) if isinstance(pd, dict) and pd.get("punch")]
+            punch.from_json(self, data.get("punchfx"), old)
             try:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     import lfo
                     lfo.from_json(p, pd.get("lfos"))
-                    import punch
-                    punch.from_json(p, pd.get("punch"))
                     for ln, ld in zip(p.lanes, pd.get("lanes", [])):
                         ln.length = max(1, min(MAX_STEPS, int(ld.get("length", 16))))
                         ln.rate = max(0, min(len(RATES) - 1, int(ld.get("rate", 0))))

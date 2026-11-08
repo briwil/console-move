@@ -2873,41 +2873,31 @@ class Engine:
         return x, mon, mon_rev, mon_dly
 
     def _punch_segments(self, i, mid, sounding, frames, fpb):
-        """A block's punch-in effect, split where the steps change: [(from, to, effect, beat at from)]. A pad
-        held wins over the steps; while recording it also goes on them."""
+        """A block's punch-in effects, split where the lanes change: [(from, to, mask, beat at from)]. Pads held
+        win their groups over the lanes; while recording they also go on their lanes."""
         live = self.punch_live[1] if self.punch_live and self.punch_live[0] == mid else 0
         seq = self.seqs.get(mid)
         if not (self.playing and i in sounding and seq is not None):
             return [(0, frames, live, -1.0)]
         t = self.seq_clock + self.read_ahead
-        sf = fpb / punch.STEPS_PER_BEAT
-        cuts = [0]
-        try:
-            nxt = seq.anchor + math.ceil((t - seq.anchor) / sf) * sf - t
-            while nxt < frames:
-                if nxt > 0:
-                    cuts.append(int(nxt))
-                nxt += sf
-        except (AttributeError, ValueError, ZeroDivisionError):
-            pass
-        cuts.append(frames)
         out = []
-        decided = self._punch_decided.setdefault(mid, {})
-        for a, b in zip(cuts, cuts[1:]):
-            if b <= a:
-                continue
-            try:
-                fx, step, beat = punch.at(seq, t + a, fpb, decided)
-            except Exception:                            # noqa: BLE001
-                fx, step, beat = 0, None, -1.0
-            if live:
-                if self.punch_rec and step is not None:
-                    with seq.lock:
-                        pst = punch.of(seq.pattern)
-                        old = pst.get(step, [0, 0])
-                        pst[step] = [punch.over(old[0], live), old[1]]
-                fx = punch.over(fx, live)
-            out.append((a, b, fx, beat))
+        try:
+            with seq.lock:
+                st = punch.state(seq)
+                if live and self.punch_rec:
+                    for fx in punch.effects(live):
+                        _k, step = punch.lane_pos(seq, fx - 1, t, fpb)
+                        if step is not None:
+                            st.pattern.lanes[fx - 1].steps.setdefault(step, 0)
+                a = 0
+                while a < frames:
+                    nxt = punch.next_change(seq, t + a, fpb)
+                    b = frames if nxt is None else max(a + 1, min(frames, int(math.ceil(nxt - t))))
+                    m = punch.over(punch.mask_at(seq, t + a, fpb), live)
+                    out.append((a, b, m, (t + a - st.anchor) / fpb))
+                    a = b
+        except Exception:                                # noqa: BLE001
+            out = [(0, frames, live, -1.0)]
         return out
 
     def _punch_run(self, mid, seq_voices, live_voices, segs, fpb):

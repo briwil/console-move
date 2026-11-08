@@ -72,7 +72,7 @@ class NotePattern:
         return RATES[self.rate][1]
 
     def empty(self):
-        return not any(self.notes.values()) and not getattr(self, "punch", None)
+        return not any(self.notes.values())
 
     def at(self, step):
         return self.notes.get(step) or {}
@@ -207,6 +207,9 @@ class NoteSequencer:
             if not self.undo_stack:
                 return None
             n, pattern = self.undo_stack.pop()
+            import punch
+            if punch.undo_entry(self, n, pattern):
+                return self.current
             self.patterns[n] = pattern
             return n
 
@@ -324,6 +327,8 @@ class NoteSequencer:
             if self.queued is not None:
                 self.current, self.queued = self.queued, None
             self.anchor = 0.0
+            import punch
+            punch.stop(self)
             self._decided.clear()
             self._skip.clear()
             self._cyc.clear()
@@ -338,13 +343,15 @@ class NoteSequencer:
         out = []
         with self.lock:
             end = start + frames
-            if self.queued is not None or self.trip != sequencer.TRIPLETS:
+            import punch
+            if self.queued is not None or self.trip != sequencer.TRIPLETS or punch.pending(self):
                 length = self.pattern_frames(frames_per_beat)
                 boundary = self.anchor + math.ceil((start - self.anchor) / length - 1e-9) * length
                 if boundary < end:
                     out += self._events(start, boundary, start, frames_per_beat)
                     if self.queued is not None:
                         self.current, self.queued = self.queued, None
+                    punch.take_queued(self, boundary)
                     self.trip = sequencer.TRIPLETS       # (triplets on / off: from the pattern's start)
                     self.anchor = boundary
                     self._decided.clear()
@@ -458,13 +465,12 @@ class NoteSequencer:
                         notes.setdefault(str(step), {})[str(pitch)] = [
                             n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge, dict(n.comp)]
                 import lfo
-                import punch
-                pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p), "punch": punch.to_json(p),
+                pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
                              "lanes": {str(k): v for k, v in p.lane_len.items()},
                              "lane_rates": {str(k): v for k, v in p.lane_rate.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
                     "low": self.low, "move_type": getattr(self, "move_type", 0), "patterns": pats,
-                    "arp": dict(self.arp_cfg)}
+                    "arp": dict(self.arp_cfg), "punchfx": __import__("punch").to_json(self)}
 
     def from_json(self, data):
         with self.lock:
@@ -472,8 +478,13 @@ class NoteSequencer:
             self.current, self.queued, self.anchor = 0, None, 0.0
             self.arp_cfg.clear()
             self.arp_cfg.update(arp.clean(data.get("arp") if isinstance(data, dict) else None))
+            import punch
+            punch.from_json(self, None)
             if not isinstance(data, dict) or data.get("kind") != "notes":
                 return
+            old = [(n, pd.get("length", 16), pd.get("punch"))
+                   for n, pd in enumerate(data.get("patterns", [])) if isinstance(pd, dict) and pd.get("punch")]
+            punch.from_json(self, data.get("punchfx"), old)
             try:
                 self.root = int(data.get("root", 0)) % 12
                 self.scale = max(0, min(len(SCALES) - 1, int(data.get("scale", 0))))
@@ -484,8 +495,6 @@ class NoteSequencer:
                     p.rate = max(0, min(len(RATES) - 1, int(pd.get("rate", 0))))
                     import lfo
                     lfo.from_json(p, pd.get("lfos"))
-                    import punch
-                    punch.from_json(p, pd.get("punch"))
                     p.lane_len = {int(k): max(1, min(MAX_STEPS, int(v))) for k, v in (pd.get("lanes") or {}).items()
                                   if 0 <= int(k) <= 127 and int(v) != p.length}
                     p.lane_rate = {int(k): max(0, min(len(RATES) - 1, int(v)))

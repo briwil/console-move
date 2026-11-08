@@ -226,8 +226,9 @@ class MoveBoard:
         if not vel and p in T.punch.pads_down:
             T.punch.pad(p, vel)                            # a punch FX pad let go (even with Shift held)
             return
-        if T.punch.active() and self.shift and (T.punch.selected or T.punch.held is not None):
-            T.punch.pad(p, vel)                            # (steps picked with Shift: the pad is an effect, Shift still down)
+        if T.punch.active() and self.shift and p < 16:
+            if vel:
+                self.keys.put(("PUNCHPAT", p))             # the PUNCH FX page: Shift + pad picks a punch pattern
             return
         if self.shift and p < 16:                          # Shift + pad: the instrument's pattern 1-16
             if vel:
@@ -435,12 +436,12 @@ class Lights:
         # pads
         out = [0] * 32
         q = pattern_seq(T)
-        if board.shift and q is not None:                  # Shift: the patterns (the current one bright)
+        if T.punch.active():
+            out = T.punch.pad_lights(board.shift)          # (Shift: the punch patterns)
+        elif board.shift and q is not None:                # Shift: the patterns (the current one bright)
             for p in range(16):
                 pat = q.patterns[p]
                 out[p] = 127 if p == q.current else 20 if not pat.empty() else 0
-        elif T.punch.active():
-            out = T.punch.pad_lights()
         elif T.auto.active() and not T.synth_shown():
             out = T.auto.pad_lights()
         elif T.msyn.active():
@@ -982,13 +983,17 @@ def handle(name, T, m, e):
             e.seq_changed()
             T.say("PATTERN %d%s" % (name[1] + 1, "  (NEXT)" if e.playing and q.queued is not None else ""), 2)
         return
+    if isinstance(name, tuple) and name[0] == "PUNCHPAT":
+        if T.punch.active():
+            T.punch.pattern_pad(name[1])
+        return
     if isinstance(name, tuple) and name[0] == "ROW":
         T.song.row_button(name[1], name[2])
         return
     menus = m.open or m.kits.open
     if T.song_page and not menus and not (T.seq_page or T.drum_page or T.inst_page or T.fx_page):
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
-            T.song.knob(name[1], name[2])
+            T.song.knob(name[1], name[2], T.shift_held())    # (Shift: the instruments' punch FX patterns)
             return
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 9:
             T.song.set_on(name[2] > 0)                     # +: song mode on, -: off

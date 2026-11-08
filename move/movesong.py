@@ -4,6 +4,7 @@ times it plays. With song mode on, PLAY starts at row 1 and the rows follow each
   step buttons 1-16   the rows (press one past the end: a new row, a copy of the last). Lit: the rows there are;
                       bright: the row picked; blinking: the row playing
   knobs 1-7           the picked row's pattern for instruments 1-7 (turned all the way down: "-", leave it as is)
+  Shift + knobs 1-7   the picked row's PUNCH FX pattern for them (the screen shows those while Shift is held)
   knob 8              how many times the row plays (1-16)
   + / -               song mode on / off
   Delete + a row      take the row out
@@ -24,7 +25,7 @@ REPEAT_KNOB = 8
 class Song:
     def __init__(self, T):
         self.T = T
-        self.rows = []              # [{"pats": {slot: pattern or None}, "repeat": n}]
+        self.rows = []              # [{"pats": {slot: pattern or None}, "punch": {slot: punch pattern or None}, "repeat": n}]
         self.on = False
         self.pick = 0               # the row the knobs change
         self.playing_row = None     # the row playing (song mode on and playing)
@@ -51,7 +52,9 @@ class Song:
             for r in d.get("rows", [])[:MAX_ROWS]:
                 pats = {int(k): (None if v is None else max(0, min(PATTERNS - 1, int(v))))
                         for k, v in r.get("pats", {}).items()}
-                self.rows.append({"pats": pats, "repeat": max(1, min(16, int(r.get("repeat", 1))))})
+                pun = {int(k): (None if v is None else max(0, min(PATTERNS - 1, int(v))))
+                       for k, v in (r.get("punch") or {}).items()}
+                self.rows.append({"pats": pats, "punch": pun, "repeat": max(1, min(16, int(r.get("repeat", 1))))})
         except (OSError, ValueError, TypeError, AttributeError):
             pass
 
@@ -60,6 +63,7 @@ class Song:
             os.makedirs(os.path.dirname(self.path()), exist_ok=True)
             with open(self.path(), "w") as fh:
                 json.dump({"on": self.on, "rows": [{"pats": {str(k): v for k, v in r["pats"].items()},
+                                                    "punch": {str(k): v for k, v in r.get("punch", {}).items()},
                                                     "repeat": r["repeat"]} for r in self.rows]}, fh)
         except OSError as ex:
             print("Song mode: couldn't save (%s)" % ex)
@@ -101,16 +105,20 @@ class Song:
                 return
             if self.rows:
                 last = self.rows[-1]
-                self.rows.append({"pats": dict(last["pats"]), "repeat": last["repeat"]})
+                self.rows.append({"pats": dict(last["pats"]), "punch": dict(last.get("punch", {})),
+                                  "repeat": last["repeat"]})
             else:
+                import punch
                 self.rows.append({"pats": {s: (getattr(self.seq_of(s), "current", 0)) for s in self.slots()},
+                                  "punch": {s: punch.state(self.seq_of(s)).current for s in self.slots()
+                                            if self.seq_of(s) is not None},
                                   "repeat": 1})
             i = len(self.rows) - 1
             self.T.say("ROW %d ADDED" % (i + 1), 2)
             self.save()
         self.pick = i
 
-    def knob(self, number, delta):
+    def knob(self, number, delta, shift=False):
         if not self.rows:
             self.T.say("PRESS STEP BUTTON 1 TO ADD A ROW", 2)
             return
@@ -126,11 +134,14 @@ class Song:
             if number > len(slots):
                 return
             s = slots[number - 1]
-            v = row["pats"].get(s)
+            key = "punch" if shift else "pats"
+            pats = row.setdefault(key, {})
+            v = pats.get(s)
             v = -1 if v is None else v
             v = max(-1, min(PATTERNS - 1, v + way))
-            row["pats"][s] = None if v < 0 else v
-            self.T.say("ROW %d  %s  %s" % (self.pick + 1, self.short(s), "-" if v < 0 else "PATTERN %d" % (v + 1)), 2)
+            pats[s] = None if v < 0 else v
+            self.T.say("ROW %d  %s  %s" % (self.pick + 1, self.short(s), "-" if v < 0 else
+                                            ("PUNCH FX %d" if shift else "PATTERN %d") % (v + 1)), 2)
         self.save()
 
     def set_on(self, on):
@@ -155,10 +166,15 @@ class Song:
         return None
 
     def apply(self, i, playing):
+        import punch
         for s, p in self.rows[i]["pats"].items():
             q = self.seq_of(s)
             if q is not None and p is not None:
                 q.choose_pattern(p, playing)
+        for s, p in self.rows[i].get("punch", {}).items():
+            q = self.seq_of(s)
+            if q is not None and p is not None:
+                punch.choose(q, p, playing)
         self.T.engine.seq_changed()
 
     def tick(self):

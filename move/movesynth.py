@@ -480,7 +480,7 @@ class MoveSynth:
         if self.selected:
             if self.sel is None:
                 return self.lock_choice(n)
-            if n == 3:
+            if n == 2:
                 return self.pad_items()[self.sel][0] in CKEYS
             if n != 1:
                 return False
@@ -535,7 +535,7 @@ class MoveSynth:
             if self.sel is not None:
                 if number == 1:
                     self.set_selected(delta, shift)
-                elif number == 3:
+                elif number == 2:
                     self.set_chance(delta, shift)
             else:
                 self.lock_knob(number, delta, shift)

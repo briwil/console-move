@@ -334,7 +334,7 @@ story += [
         ("Pads 10-32", "The drum's own sound settings (TUNE, DECAY...): a parameter lock for these steps."),
     ]),
     p("<b>Chance for a component.</b> With MULTIPLY, PULSE, HOLD, JUMP, RANDOM, RAMP UP / DOWN or NUDGE set on a "
-      "step, knob 3 sets how likely that component is to happen each time round (100% down to 0%, or 1:2, "
+      "step, knob 2 sets how likely that component is to happen each time round (100% down to 0%, or 1:2, "
       "2:3...). When it doesn't happen the step just plays plain. The same on the synth sequencer."),
     p("Pitch moves use the drum's TUNE (or PITCH) setting, so how far a semitone goes depends on the drum "
       "machine. BEND, PORTAMENTO and TONALITY are for the synth sequencer, still to come.", SMALL),
@@ -388,7 +388,7 @@ story += [
         ("Shift + steps", "Select steps: the pads are their settings. LENGTH, VELOCITY, CHANCE, MULTIPLY, "
          "<b>NUDGE</b> (a step early or late, -50 to +50 %), PULSE, HOLD, JUMP (PER NOTE type only), RANDOM, "
          "RAMP UP, RAMP DOWN (pitch), then the synth's own settings as parameter locks. "
-         "Knob 1 sets the picked one; on a component (MULTIPLY, NUDGE, PULSE...) knob 3 sets its chance. With no pad picked, knobs 1-8 are the synth's sound page: turn one to lock "
+         "Knob 1 sets the picked one; on a component (MULTIPLY, NUDGE, PULSE...) knob 2 sets its chance. With no pad picked, knobs 1-8 are the synth's sound page: turn one to lock "
          "it (Left / Right: its other pages; Shift + touch a knob: the lock off)."),
         ("Record", "On an instrument's sound, sequencer or automation page: recording into the pattern while it "
          "plays. The pads you play go in (a synth note lasts as long as you hold the pad; chromatic drum pads keep "

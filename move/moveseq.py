@@ -205,7 +205,7 @@ class MoveSeq:
         if not self.engaged(key):
             popup.show(self.T, self.which(), label + " CHANCE", "SET KNOB 1 FIRST")
             return
-        sp._edit(("knob3", self.sel, self.held))
+        sp._edit(("knob2", self.sel, self.held))
         with seq.lock:
             for j in self.selected:
                 if j < seq.lane(lane).length:
@@ -239,7 +239,7 @@ class MoveSeq:
             popup.show(self.T, self.which(), label, "OFF" if was_set else "")
         else:
             self.sel = p
-            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1" + (", 3: CHANCE" if key in CKEYS else ""))
+            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1" + (", 2: CHANCE" if key in CKEYS else ""))
         e.seq_changed()
 
     def which(self):
@@ -427,7 +427,7 @@ class MoveSeq:
         if self.sel is not None:
             if number == 1:
                 self.set_selected(delta, shift)
-            elif number == 3:
+            elif number == 2:
                 self.set_chance(delta, shift)
             return
         self.lock_knob(number, delta, shift)

@@ -746,7 +746,7 @@ def synth_seq_page(f, T):
         f.centre(64, 28, str(label)[:16])
         f.centre(64, 38, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
         if ct is not None:
-            f.centre(64, 44, ("KNOB 3 CHANCE: %s" % ct)[:28], small=True)
+            f.centre(64, 44, ("KNOB 2 CHANCE: %s" % ct)[:28], small=True)
         f.centre(64, 50 if ct is not None else 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
         return
     if ms.down:
@@ -868,7 +868,7 @@ def seq_page(f, T):
             f.centre(64, 28, str(label)[:16])
             f.centre(64, 38, ("KNOB 1: %s" % value)[:22], small=True)
             if ct is not None:
-                f.centre(64, 44, ("KNOB 3 CHANCE: %s" % ct)[:28], small=True)
+                f.centre(64, 44, ("KNOB 2 CHANCE: %s" % ct)[:28], small=True)
             f.centre(64, 50 if ct is not None else 46, "SAME PAD AGAIN: OFF" if on else "TURN KNOB 1 TO SET IT", small=True)
         return
     # the knobs

@@ -76,6 +76,7 @@ import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
 import moveauto                   # noqa: E402
 import movepunch                  # noqa: E402
+import opening                    # noqa: E402
 import samplebrowse              # noqa: E402
 import fxpicker                  # noqa: E402
 import pagefx                    # noqa: E402
@@ -589,6 +590,9 @@ def main():
     elif crashed:
         T.say("CONSOLE CRASHED LAST TIME. SAVED IN CONSOLE/CRASHES: %s" % crashed.upper(), 6)
     frame = Frame()
+    intro = opening.Opening()                        # the opening animation, on the screen while it starts
+    if st is not None:
+        intro.stop()                                 # (not over a test)
     if st is not None and hasattr(st, "watch_frame"):
         st.watch_frame(frame)                        # the menu test: what each screen draws
     lights = Lights(core)
@@ -620,6 +624,7 @@ def main():
                         icon_k = (icon_k + (1 if name[2] > 0 else -1)) % 16
                     continue
                 T.pagefx.cancel()                         # any control cuts the page card short
+                intro.stop()                              # ... and the opening animation
                 if st is not None and getattr(st, "catch", False):
                     st.handle(handle, name, T, m, e)      # the menu test: an error is noted, and it goes on
                 else:
@@ -689,7 +694,8 @@ def main():
                     T.sbrowse.close(False)                # (went to another page: the sample browser closes, the old sample stays)
                 T.pagefx.update(T, m)
                 drew_at = time.monotonic()
-                pages.draw(frame, T, m)
+                if not intro.draw(frame, drew_at):
+                    pages.draw(frame, T, m)
                 if st is not None and hasattr(st, "drawn"):
                     st.drawn(frame, time.monotonic() - drew_at)
                 if screenview is not None:

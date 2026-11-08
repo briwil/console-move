@@ -91,6 +91,7 @@ class Lane:
         self.length = length
         self.rate = 0                       # a place in sequencer.RATES
         self.steps = {}                     # step -> chance (a place in sequencer.CHANCES): the steps that are on
+        self.lens = {}                      # step -> how many steps it lasts (hold a step, tap a later one); 1 if not here
 
 
 class Pattern:
@@ -169,6 +170,18 @@ def _passes(seq, st, li, k, ch, n):
     return ok
 
 
+def covered(ln, trip):
+    """The steps a long step lasts over (not its first)."""
+    n = max(1, sequencer.live_len(ln.length, trip))
+    out = set()
+    for i, L in getattr(ln, "lens", {}).items():
+        if i in ln.steps and not sequencer.dark(i, trip):
+            a = sequencer.played(i, trip)
+            for d in range(1, min(L, n)):
+                out.add(sequencer.phys((a + d) % n, trip))
+    return out
+
+
 def mask_at(seq, frame, fpb):
     """The effects the punch lanes play at sequencer time frame (a mask)."""
     st = state(seq)
@@ -178,12 +191,26 @@ def mask_at(seq, frame, fpb):
     for li, ln in enumerate(pat.lanes):
         if not ln.steps:
             continue
-        k, i = lane_pos(seq, li, frame, fpb)
-        if k is None or i not in ln.steps:
+        k, _i = lane_pos(seq, li, frame, fpb)
+        if k is None:
             continue
-        if not _passes(seq, st, li, k, ln.steps[i], sequencer.live_len(ln.length, trip)):
+        n = max(1, sequencer.live_len(ln.length, trip))
+        lens = getattr(ln, "lens", {})
+        reach = min(n, max(lens.values(), default=1))
+        hit = None
+        for d in range(reach):                      # this step, or a long step before it still going (a later step on ends it)
+            kk = k - d
+            if kk < 0:
+                break
+            i = sequencer.phys(kk % n, trip)
+            if i not in ln.steps or not _passes(seq, st, li, kk, ln.steps[i], n):
+                continue
+            if lens.get(i, 1) > d:
+                hit = kk
+            break
+        if hit is None:
             continue
-        start = st.anchor + k * step_frames(seq, ln, pat, fpb)
+        start = st.anchor + hit * step_frames(seq, ln, pat, fpb)
         g = group(li + 1)
         if g not in best or (start, li) > best[g]:
             best[g] = (start, li)
@@ -276,7 +303,9 @@ def to_json(seq):
         for li, ln in enumerate(p.lanes):
             if ln.steps or ln.length != 16 or ln.rate:
                 lanes[str(li)] = {"length": ln.length, "rate": ln.rate,
-                                  "steps": {str(i): sequencer.CHANCES[c] for i, c in ln.steps.items()}}
+                                  "steps": {str(i): sequencer.CHANCES[c] for i, c in ln.steps.items()},
+                                  "lens": {str(i): v for i, v in getattr(ln, "lens", {}).items()
+                                           if i in ln.steps and v > 1}}
         pats[str(n)] = {"scale": p.scale, "lanes": lanes}
     if not pats and not st.current:
         return None
@@ -305,6 +334,8 @@ def from_json(seq, data, old=None):
                     ln.rate = max(0, min(len(sequencer.RATES) - 1, int(ld.get("rate", 0))))
                     ln.steps = {int(i): sequencer.chance_index(c) for i, c in (ld.get("steps") or {}).items()
                                 if 0 <= int(i) < sequencer.MAX_STEPS}
+                    ln.lens = {int(i): max(1, min(sequencer.MAX_STEPS, int(v))) for i, v in (ld.get("lens") or {}).items()
+                               if int(i) in ln.steps}
         except (TypeError, ValueError, AttributeError):
             pass
     for n, length, steps in old or []:

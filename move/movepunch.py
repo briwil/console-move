@@ -7,6 +7,7 @@ one lane per effect (see punch.py).
   Shift + pad 1-16              punch pattern 1-16 (its own, apart from the note patterns; playing: it takes
                                 over when the instrument's pattern next comes round)
   step buttons                  the lane's steps: tap on / off. Hold one: knob 1 is its chance. Hold one + tap
+                                a later step: it lasts until there (again: back to one step). Hold one + tap
                                 pads: those effects' steps there on / off. Delete + step: off
   knob 1, 2 (nothing held)      the lane's LENGTH and RATE (as the drum lanes; TRIPLETS too)
   knob 8                        TIME SCALE: every lane's steps that many times longer (long sweeps)
@@ -135,11 +136,13 @@ class Punch:
                     shown = self.ln()
                     if not self.held_was_on and not self.held_used and p != self.lane:
                         shown.steps.pop(i, None)         # (pressing the step put the shown lane's on: you meant this one)
+                        shown.lens.pop(i, None)
                     on = i not in ln.steps
                     if on:
                         ln.steps[i] = 0
                     else:
                         ln.steps.pop(i, None)
+                        ln.lens.pop(i, None)
                 self.held_used = True
                 e.seq_changed()
                 popup.show(self.T, "STEP %d" % (i + 1), punch.name(p + 1), "ON" if on else "OFF")
@@ -165,17 +168,22 @@ class Punch:
                     self._snapshot(("off", self.lane, i))
                     with self.seq.lock:
                         ln.steps.pop(i, None)
+                        ln.lens.pop(i, None)
                     self.T.engine.seq_changed()
                 self.held = None
                 self._snapped = None
             return
         if i >= ln.length or sequencer.dark(i, self.trip()):
             return
+        if self.held is not None and i != self.held and not deleting and not shift:
+            self._span(self.held, i)                     # a step held + a later one tapped: it lasts until there
+            return
         if deleting:
             if i in ln.steps:
                 punch.snapshot(self.seq)
                 with self.seq.lock:
                     ln.steps.pop(i, None)
+                    ln.lens.pop(i, None)
                 self.T.engine.seq_changed()
             return
         if shift:
@@ -187,6 +195,24 @@ class Punch:
             with self.seq.lock:
                 ln.steps[i] = 0
             self.T.engine.seq_changed()
+
+    def _span(self, i, j):
+        """Step i held, step j tapped: i lasts until j (counted round the lane's end; j already its end: one step)."""
+        ln, trip = self.ln(), self.trip()
+        n = max(1, sequencer.live_len(ln.length, trip))
+        L = (sequencer.played(j, trip) - sequencer.played(i, trip)) % n + 1
+        self._snapshot(("span", self.lane, i, time.monotonic()))
+        with self.seq.lock:
+            ln.steps.setdefault(i, 0)
+            if ln.lens.get(i, 1) == L:
+                L = 1
+            if L > 1:
+                ln.lens[i] = L
+            else:
+                ln.lens.pop(i, None)
+        self.held_used = True
+        self.T.engine.seq_changed()
+        popup.show(self.T, "STEP %d" % (i + 1), punch.name(self.lane + 1), "%d STEP%s LONG" % (L, "" if L == 1 else "S"))
 
     def knob(self, number, delta, shift):
         e = self.T.engine
@@ -244,6 +270,7 @@ class Punch:
             with self.seq.lock:
                 for ln in self.pattern().lanes:
                     ln.steps.clear()
+                    ln.lens.clear()
             self.confirm_until = 0.0
             self.T.engine.seq_changed()
             self.T.say("PUNCH PATTERN %d CLEARED" % (self.st().current + 1), 2)
@@ -269,6 +296,7 @@ class Punch:
         ln = self.ln()
         now, trip = self.playing_step(), self.trip()
         colour = COLOUR[self.lane]
+        tails = punch.covered(ln, trip)
         out = []
         for k in range(16):
             i = self.page * 16 + k
@@ -277,7 +305,7 @@ class Punch:
             elif i == self.held or i == now:
                 out.append(120 if i in ln.steps or i == self.held else sequencer.STEP_IDLE)
             else:
-                out.append(colour if i in ln.steps else sequencer.STEP_IDLE)
+                out.append(colour if i in ln.steps or i in tails else sequencer.STEP_IDLE)
         return out
 
     def pad_lights(self, shift=False):

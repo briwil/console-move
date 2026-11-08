@@ -830,6 +830,7 @@ def punch_page(f, T):
     now = pu.now() or pu.held_mask()
     f.right(127, 12, punch.label(now, short=True)[:10] if now else "", small=True)
     trip, at = pu.trip(), pu.playing_step()
+    tails = punch.covered(ln, trip)
     for k in range(16):
         i = pu.page * 16 + k
         x, y = 1 + k * 8, 21
@@ -839,7 +840,12 @@ def punch_page(f, T):
             f.dot(x + 3, y + 3)
             continue
         on = i in ln.steps
-        (f.rect if on else f.frame)(x, y, 7, 7)
+        if i in tails and not on:
+            f.rect(x - 1, y + 2, 9, 3)                   # a long step going on through here
+        else:
+            (f.rect if on else f.frame)(x, y, 7, 7)
+        if on and ln.lens.get(i, 1) > 1:
+            f.rect(x + 7, y + 2, 1, 3)
         if i == pu.held:
             f.frame(x - 1, y - 1, 9, 9)
         if at is not None and i == at:
@@ -852,7 +858,8 @@ def punch_page(f, T):
         f.centre(64, 48, "SHIFT + DELETE AGAIN: YES", small=True)
     elif pu.held is not None and pu.held in ln.steps:
         f.frame(4, 37, 120, 18)
-        f.centre(64, 39, "STEP %d" % (pu.held + 1))
+        L = ln.lens.get(pu.held, 1)
+        f.centre(64, 39, "STEP %d" % (pu.held + 1) + ("  %d LONG" % L if L > 1 else ""))
         f.centre(64, 48, "KNOB 1 CHANCE: %s" % sequencer.CHANCES[ln.steps[pu.held]], small=True)
     else:
         f.small(1, 39, "1 LENGTH %d" % ln.length)

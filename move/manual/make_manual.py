@@ -446,6 +446,8 @@ story += [
          "go on their lanes' steps they were held over."),
         ("Step buttons", "The lane's steps: tap on / off. Hold one: knob 1 sets its chance (100% down to 0%, or "
          "1:2, 2:3...)."),
+        ("Hold a step + tap a later step", "The effect lasts from the held step until that one, as a note's length "
+         "(tap the same end again: back to one step). A later step that's on cuts it short."),
         ("Hold a step + tap pads", "Those effects' steps there on / off (each in its own lane)."),
         ("Knob 1 / knob 2", "The lane's LENGTH (steps) and RATE (1/32 to 1/1; with TRIPLETS on they play as triplets)."),
         ("Knob 8", "TIME SCALE (x1 to x32): every lane of the punch pattern that many times slower, for long "

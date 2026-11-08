@@ -75,6 +75,7 @@ import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
 import moveauto                   # noqa: E402
+import movepunch                  # noqa: E402
 import samplebrowse              # noqa: E402
 import fxpicker                  # noqa: E402
 import pagefx                    # noqa: E402
@@ -154,6 +155,8 @@ class MoveBoard:
                 k.put("SELECT")
             elif val and self.shift and name == "CUT" and T.auto.active():
                 k.put("AUTO_CLEAR")                        # the automation page: this setting off every step
+            elif val and self.shift and name == "CUT" and T.punch.active():
+                k.put("PUNCH_CLEAR")                       # the punch FX page: every punch step off
             elif val and not self.shift:
                 self.held.add(name)
                 k.put(("HOLD", name))
@@ -183,6 +186,9 @@ class MoveBoard:
             if getattr(T, "song_page", False) and not T.seq_page:
                 if val:
                     k.put(("ROW", n, "CUT" in self.held))  # song mode's rows (Delete + a row: take it out)
+                return
+            if T.seq_page and T.punch.active():
+                k.put(("PUNCHSTEP", n, bool(val), self.shift, "CUT" in self.held))
                 return
             if T.seq_page and T.auto.active():
                 k.put(("AUTOSTEP", n, bool(val), "CUT" in self.held))   # hold: its value; Delete + step: off
@@ -216,9 +222,15 @@ class MoveBoard:
         T, e = self.T, self.T.engine
         if e is None or e.slot is None or not e.drums:
             return
+        if not vel and T.punch.pad_down == p:
+            T.punch.pad(p, vel)                            # a punch FX pad let go (even with Shift held)
+            return
         if self.shift and p < 16:                          # Shift + pad: the instrument's pattern 1-16
             if vel:
                 self.keys.put(("PATTERN", p))
+            return
+        if T.punch.active() or (not vel and T.punch.pad_down == p):
+            T.punch.pad(p, vel)                            # the PUNCH FX page: the pads are effects
             return
         mid = e.slots[e.slot]
         if e.is_synth(mid):
@@ -394,7 +406,9 @@ class Lights:
             self.cc(b, b == page)
         # step buttons: the tracks (the selected one bright), or the sequencer's steps
         syn = T.msyn.active()
-        seq_lights = T.auto.step_lights() if T.auto.active() else T.msyn.step_lights() if syn else \
+        if T.punch.pad_down is not None and not T.punch.active():
+            T.punch.leave()                                # (left the page with a pad held)
+        seq_lights = T.punch.step_lights() if T.punch.active() else T.auto.step_lights() if T.auto.active() else T.msyn.step_lights() if syn else \
             T.mseq.step_lights() if T.mseq.active() else T.mlfo.step_lights() if T.mlfo.active() else None
         song = getattr(T, "song_page", False) and not T.seq_page and T.song.step_lights()
         flash = getattr(T, "len_flash", None)
@@ -421,6 +435,8 @@ class Lights:
             for p in range(16):
                 pat = q.patterns[p]
                 out[p] = 127 if p == q.current else 20 if not pat.empty() else 0
+        elif T.punch.active():
+            out = T.punch.pad_lights()
         elif T.auto.active() and not T.synth_shown():
             out = T.auto.pad_lights()
         elif T.msyn.active():
@@ -540,8 +556,9 @@ def main():
     T.msyn = movesynth.MoveSynth(T)
     T.mlfo = movelfo.MoveLFO(T)
     T.auto = moveauto.Auto(T)                        # the AUTOMATION page (left button 1 after the sequencer)
-    T.auto_page = False
+    T.auto_page = False                              # True: AUTOMATION; "punch": PUNCH FX (after it)
     T.has_auto_page = True
+    T.punch = movepunch.Punch(T)                     # the PUNCH FX page
     T.list_is_top = True                             # left button 1 rounds an instrument's pages; Back: the list
     T.knob_recorded = lambda param: moveauto.record(T, param)   # recording into the pattern: knob moves too
     T.sbrowse = samplebrowse.SampleBrowser(T)
@@ -749,7 +766,7 @@ def choice_knob(T, m, e, name):
         return T.mlfo.is_choice(n)
     if T.fx_page:
         return n == 1 and T.fx_page == "delay"                              # the delay's TIME steps through note lengths
-    if T.auto.active():
+    if T.auto.active() or T.punch.active():
         return True                                            # (the automation page counts its own clicks)
     ms = T.mseq
     if T.seq_page and ms.active():
@@ -913,6 +930,14 @@ def handle(name, T, m, e):
         if T.auto.active():
             T.auto.clear()
         return
+    if isinstance(name, tuple) and name[0] == "PUNCHSTEP":
+        if T.punch.active():
+            T.punch.step(name[1], name[2], name[3], name[4])
+        return
+    if name == "PUNCH_CLEAR":
+        if T.punch.active():
+            T.punch.clear()
+        return
     if isinstance(name, tuple) and name[0] == "STEP":
         if ms.active():
             ms.step(name[1], name[2], name[3])
@@ -975,10 +1000,27 @@ def handle(name, T, m, e):
         T.song_page = False
     if name == "DRUMS" and T.drum_page and not T.fx_page and not (m.open or m.kits.open):
         # an instrument's pages round: sound -> sequencer -> automation -> sound (ARP: Shift + step 3)
+        if T.seq_page and getattr(T, "auto_page", False) is True:
+            T.auto_page = "punch"                        # automation -> punch FX
+            T.punch.page = 0
+            return
         if T.seq_page and getattr(T, "auto_page", False):
+            T.punch.leave()
             T.auto_page = T.seq_page = False
             T.seqp.held, T.synthp.held = {}, {}
             T.mlfo.tab = None
+            return
+    if T.punch.active() and not (m.open or m.kits.open) and T.fx_page is None:
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:
+            T.punch.knob(name[1], name[2], name[3])
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
+            way = knobgate.gate(("wheel-pages",), name[2], False, 1)
+            if way:
+                T.punch.arrows(way)
+            return
+        if name in ("LEFT", "RIGHT"):
+            T.punch.arrows(-1 if name == "LEFT" else 1)
             return
     if T.auto.active() and not (m.open or m.kits.open) and T.fx_page is None:
         if isinstance(name, tuple) and name[0] == "KNOB" and name[1] <= 8:

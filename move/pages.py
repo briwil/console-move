@@ -49,6 +49,8 @@ def draw(f, T, menu=None):
             input_popup(f, T)
         elif T.fx_page:                                   # left button 3: over the instrument's pages too
             fx_page(f, T)
+        elif T.seq_page and getattr(T, "punch", None) is not None and T.punch.active():
+            punch_page(f, T)
         elif T.seq_page and getattr(T, "auto", None) is not None and T.auto.active():
             auto_page(f, T)
         elif T.seq_page:
@@ -812,6 +814,54 @@ def auto_page(f, T):
         f.centre(64, 44, "STEP %d  %s" % (a.held + 1, a.value_text(a.held, key)))
     else:
         f.small(1, 43, "HOLD A LIT STEP: KNOB 1 SETS IT")
+        f.small(1, 50, "DEL+STEP: OFF  SHIFT+DEL: ALL")
+
+
+def punch_page(f, T):
+    """PUNCH FX (left button 1 after AUTOMATION): the effect playing, the steps that have one, a held step's
+    effect and chance (see movepunch.py)."""
+    import punch
+    pu = T.punch
+    e = T.engine
+    name = (e.slots[e.slot] or "").upper() if e.slot is not None else ""
+    header(f, "PUNCH FX", name[:12])
+    st = pu.steps()
+    now = pu.now() or ((pu.pad_down + 1) if pu.pad_down is not None else 0)
+    if now:
+        f.centre(64, 12, punch.name(now))
+    else:
+        f.centre(64, 13, "HOLD A PAD: ITS EFFECT", small=True)
+    length, at = pu.length(), pu.playing_step()
+    for k in range(16):
+        i = pu.page * 16 + k
+        x, y = 1 + k * 8, 23
+        if i >= length:
+            f.dot(x + 3, y + 3)
+            continue
+        on = i in st
+        (f.rect if on else f.frame)(x, y, 7, 7)
+        if i == pu.held or i in pu.selected:
+            f.frame(x - 1, y - 1, 9, 9)
+        if at is not None and i == at:
+            f.rect(x + 2, y + 2, 3, 3, 0 if on else 1)
+    f.small(1, 33, "STEPS %d-%d OF %d   %d SET" % (pu.page * 16 + 1, min(pu.page * 16 + 16, length), length,
+                                                  len(st)))
+    if pu.confirming():
+        f.frame(4, 40, 120, 17)
+        f.centre(64, 43, "TAKE OFF ALL %d PUNCH STEPS?" % len(st), small=True)
+        f.centre(64, 50, "SHIFT + DELETE AGAIN: YES", small=True)
+    elif pu.selected:
+        f.small(1, 43, "%d STEPS PICKED: TAP A PAD" % len(pu.selected))
+        f.small(1, 50, "A STEP (NO SHIFT): DONE")
+    elif pu.held is not None and pu.held in st:
+        fx, ch = st[pu.held]
+        f.frame(4, 37, 120, 18)
+        f.centre(64, 39, "STEP %d  %s" % (pu.held + 1, punch.SHORT[fx - 1]))
+        f.centre(64, 48, "KNOB 1 CHANCE: %s" % sequencer.CHANCES[ch], small=True)
+    elif pu.held is not None:
+        f.small(1, 43, "STEP %d: TAP A PAD TO ADD" % (pu.held + 1))
+    else:
+        f.small(1, 43, "HOLD STEP + PAD: PUT IT ON")
         f.small(1, 50, "DEL+STEP: OFF  SHIFT+DEL: ALL")
 
 

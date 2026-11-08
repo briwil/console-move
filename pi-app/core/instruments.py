@@ -82,6 +82,7 @@ class Slot:
         if k is not None:
             voices = drums.VOICES if self.kind == "lxr" else (m.voices if self.kind == "engine" else 2)
             core.slot(k, self.seq, self.live, voices)
+            self.voices = voices
             for v, lane in self.lanes(voices).items():
                 core.slot_lane(k, v, lane)
             try:

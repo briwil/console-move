@@ -56,6 +56,13 @@ class Core:
                 ("core_ext_monitor", [C.c_float, i32], None), ("core_capture", [i32], None), ("core_capture_get", [i32, C.POINTER(f32), i32], i32)]:
             f = getattr(lib, fname)
             f.argtypes, f.restype = args, res
+        try:                                   # (newer cores: the punch-in effects)
+            lib.core_slot_punch.argtypes, lib.core_slot_punch.restype = [i32, vp, vp, vp], None
+            lib.core_punch_live.argtypes, lib.core_punch_live.restype = [i32, i32, f32], None
+            lib.core_punch_seq.argtypes, lib.core_punch_seq.restype = [ip, ip, ip], None
+            self.has_punch = True
+        except AttributeError:
+            self.has_punch = False
         try:                                   # (newer cores: an insert's wet/dry per instrument)
             lib.core_slot_insert_mix.argtypes, lib.core_slot_insert_mix.restype = [i32, i32, f32], None
         except AttributeError:
@@ -222,6 +229,23 @@ class Core:
     def slot_monitor(self, k, gain):
         """How loud slot k is heard (0: not heard; it still makes its recording inputs)."""
         self.lib.core_slot_monitor(k, gain)
+
+    def slot_punch(self, k, fn, seq_h, live_h):
+        if self.has_punch:
+            self.lib.core_slot_punch(k, fn, seq_h, live_h)
+
+    def punch_live(self, k, fx, fpb):
+        if self.has_punch:
+            self.lib.core_punch_live(k, int(fx), float(fpb))
+
+    def punch_seq(self, k, fx, fpb, at=0):
+        """Slot k's steps' punch-in effect from core frame `at` (0: now)."""
+        if not self.has_punch:
+            return
+        if at:
+            self.call(self.lib.core_punch_seq, k, int(fx), int(fpb), at=at)
+        else:
+            self.lib.core_punch_seq(k, int(fx), int(fpb))
 
     def slot_effects(self, k, reverb, delay):
         self.lib.core_slot_effects(k, reverb, delay)

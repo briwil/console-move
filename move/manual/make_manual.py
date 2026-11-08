@@ -183,7 +183,7 @@ story += [
     ]),
 
     p("Page names", H2),
-    p("Going to another page (left button 1's INSTRUMENT, SEQUENCER, AUTOMATION; left button 3's MIXER, REVERB, "
+    p("Going to another page (left button 1's INSTRUMENT, SEQUENCER, AUTOMATION, PUNCH FX; left button 3's MIXER, REVERB, "
       "DELAY, SONG INSERT 1 and 2; the instruments list, song mode, the tape), its name slides in on a black screen "
       "for about 0.6 of a second, on the Move and the phone. Moving between an instrument's own pages (its sound pages, "
       "LFOs, inserts, SENDS, ARP, PADS) shows no card. Any button, knob or pad cuts it short.", BODY),
@@ -213,7 +213,7 @@ story += [
          "wheel to untick one and it no longer appears in the list when you choose an instrument; tick it to bring it "
          "back. A song that already uses an unticked instrument keeps it. Back returns to the list."),
         ("Step buttons 1-8", "Mute / unmute a slot."),
-        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, then the sound "
+        ("Left button 1 (in an instrument)", "Round its own pages: sound, sequencer, AUTOMATION, PUNCH FX, then the sound "
          "again (ARP: Shift + step button 3). Back (or Shift + left button 1), from any of them: this page."),
     ]),
     p("A synth's settings that are a switch (an oscillator's SAW or PULSE, HOLD...) show <b>OFF</b> / <b>ON</b> "
@@ -418,6 +418,35 @@ story += [
         ("Left / Right, the wheel", "Steps 17-32 and on."),
         ("External screen", "Every locked setting as a row, each step's value in it, in the same colours as the "
          "step buttons; the one knob 1 is on outlined, the held step framed white."),
+    ]),
+    p("Punch FX page", H2),
+    p("Left button 1 after AUTOMATION: OP-XY style punch-in effects on the instrument you're on. Each pattern keeps "
+      "its own, so song mode plays them with it. Pads 1-16 (the bottom two rows) are the effects:", BODY),
+    table([
+        ("Pads 1-5", "REPEAT 1/4, 1/8, 1/16, 1/32, 1/8T: the slice from when it starts, round and round."),
+        ("Pad 6  REVERSE", "The beat just gone, backwards."),
+        ("Pad 7  TAPE STOP", "Slows to a halt over a beat."),
+        ("Pad 8  HALF SPEED", "An octave down, slowed."),
+        ("Pads 9-11", "LOW PASS (sweeps down), HIGH PASS (sweeps up), RESO PEAK (a ringing wah)."),
+        ("Pad 12  BITCRUSH", "Grit and lo-fi."),
+        ("Pad 13  GATE 1/16", "Chopped in sixteenths."),
+        ("Pad 14  PAN SWING", "The whole instrument sways left and right, once a beat."),
+        ("Pad 15  ECHO THROW", "Everything into the delay while held; the echoes ring on after."),
+        ("Pad 16  KILL", "Silence."),
+    ]),
+    table([
+        ("Hold a pad", "The effect plays while you hold it. Recording into the pattern (Record, playing): it also "
+         "goes on the steps it was held over."),
+        ("Hold a step + tap a pad", "Puts that effect on the step (the same pad again: off). The steps are "
+         "sixteenths, as many as the pattern is long."),
+        ("Shift + steps", "Pick several (they blink), then tap a pad: the effect on all of them. Tap a step "
+         "without Shift: done."),
+        ("Hold a step with an effect", "Its effect and chance show; knob 1 sets the chance (100% down to 0%, or "
+         "1:2, 2:3...)."),
+        ("Delete + step", "Take its effect off."),
+        ("Shift + Delete", "Take every punch step off this pattern: it asks first (Shift + Delete again: yes)."),
+        ("Undo", "Puts back what you changed."),
+        ("Left / Right, the wheel", "Steps 17-32 and on."),
     ]),
 
     p("Pads: key and scale (synths)", H2),

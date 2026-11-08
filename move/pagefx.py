@@ -17,7 +17,8 @@ def label(T):
         return {"reverb": "REVERB", "delay": "DELAY", "song1": "SONG INSERT 1", "song2": "SONG INSERT 2",
                 "mixer": "MIXER"}.get(fx)
     if T.seq_page:
-        return "AUTOMATION" if getattr(T, "auto_page", False) else "SEQUENCER"
+        ap = getattr(T, "auto_page", False)
+        return "PUNCH FX" if ap == "punch" else "AUTOMATION" if ap else "SEQUENCER"
     if T.drum_page:
         return "INSTRUMENT"                              # (all of an instrument's pages: LFO, INSERT, SENDS, ARP, PADS too)
     if T.inst_page:

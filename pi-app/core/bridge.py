@@ -12,6 +12,7 @@ starts a CoreBridge instead. Every few milliseconds it:
   - copies back where the tape is, the sequencer's clock, the input meters
 The core also reads the Move's pads, knobs and buttons; they're queued in engine.move_midi for the app.
 """
+import math
 import os
 import queue
 import sys
@@ -152,8 +153,12 @@ class CoreBridge:
         except Exception as ex:                            # noqa: BLE001
             print("LFO:", ex)
         if self.sched.playing:
-            self.sched.tick(self._plays(), e.frames_per_beat(), on_events=self._hits)
+            sent = self.sched.sent
+            plays = self._plays()
+            self.sched.tick(plays, e.frames_per_beat(), on_events=self._hits)
+            self._punch_steps(plays, sent, self.sched.sent - sent, e.frames_per_beat())
             e.seq_clock = int(self.sched.seq_frame())
+        self._punch_live()
         self._take_recorded()
         self._read_back()
         for _frame, msg in c.read_midi():
@@ -262,6 +267,7 @@ class CoreBridge:
                 if m is not None:
                     slot = Slot(self.core, m, k)
                     self.slots[k] = (mid, slot)
+                    self._punch_slot(k, slot)
                     self._fx = None                     # its effects get the settings on the next look
         if e.bpm != self._bpm:
             self._bpm = e.bpm
@@ -276,6 +282,91 @@ class CoreBridge:
             if self._monitor.get(k) != g:
                 self._monitor[k] = g
                 self.core.slot_monitor(k, g)
+
+    # ---- the punch-in effects (PUNCH FX page): two per slot, made once and kept (the core uses them)
+    def _punch_slot(self, k, slot):
+        import effects
+        if not (getattr(effects, "PUNCH", False) and getattr(self.core, "has_punch", False)):
+            return
+        if not hasattr(self, "_pu"):
+            self._pu, self._pu_sent, self._pu_live, self._pu_decided = {}, {}, None, {}
+        if k not in self._pu:
+            self._pu[k] = (effects.Punch(self.core.rate), effects.Punch(self.core.rate))
+        a, b = self._pu[k]
+        a.prepare(getattr(slot, "voices", 2))           # (the hand-played one makes its own when it's first needed)
+        self.core.slot_punch(k, effects._lib.punch_process, a.h, b.h)
+        self._pu_sent.pop(k, None)
+
+    def _punch_steps(self, plays, start, n, fpb):
+        """The steps' effects in the stretch just scheduled, sent at their frames (only where they change)."""
+        if n <= 0 or not hasattr(self, "_pu"):
+            return
+        import punch
+        sf = fpb / punch.STEPS_PER_BEAT
+        base = self.sched.start_frame
+        for slot, seq in plays:
+            k = slot.k
+            if k not in self._pu:
+                continue
+            dec = self._pu_decided.setdefault(k, {})
+            try:
+                f = seq.anchor + math.ceil((start - seq.anchor) / sf) * sf
+                points = ([start] if start == 0 or k not in self._pu_sent else []) + \
+                    [int(f + j * sf) for j in range(int(n / sf) + 2) if start <= f + j * sf < start + n]
+                for t in points:
+                    fx = punch.at(seq, t, fpb, dec)[0]
+                    if self._pu_sent.get(k) != fx:
+                        self._pu_sent[k] = fx
+                        self.core.punch_seq(k, fx, fpb, at=base + t)
+            except Exception as ex:                    # noqa: BLE001
+                print("punch steps:", ex)
+        e = self.e
+        mid = e.slots[e.slot] if e.slot is not None else None
+        k = e.slot
+        if mid and k in self._pu:                       # what the shown instrument plays now (the page's lights)
+            seq = e.seqs.get(mid)
+            try:
+                fx = punch.at(seq, int(self.sched.seq_frame()), fpb, self._pu_decided.setdefault(k, {}))[0]
+            except Exception:                           # noqa: BLE001
+                fx = 0
+            live = e.punch_live[1] if e.punch_live and e.punch_live[0] == mid else 0
+            if live or fx:
+                e.punch_now[mid] = live or fx
+            else:
+                e.punch_now.pop(mid, None)
+
+    def _punch_live(self):
+        """A pad held on the PUNCH FX page: on straight away; recording, it goes on the steps it's held over."""
+        if not hasattr(self, "_pu"):
+            return
+        e = self.e
+        want = None
+        if e.punch_live:
+            mid, fx = e.punch_live
+            k = next((k for k, v in self.slots.items() if v[0] == mid), None)
+            if k is not None:
+                want = (k, fx)
+        if want != self._pu_live:
+            if self._pu_live and (not want or want[0] != self._pu_live[0]):
+                self.core.punch_live(self._pu_live[0], 0, 0)
+            if want:
+                self.core.punch_live(want[0], want[1], e.frames_per_beat())
+            self._pu_live = want
+        if want:
+            e.punch_now[e.punch_live[0]] = want[1]
+            if e.punch_rec and e.playing and self.sched.playing:
+                import punch
+                seq = e.seqs.get(e.punch_live[0])
+                try:
+                    step = punch.at(seq, int(self.sched.seq_frame()), e.frames_per_beat())[1]
+                    if step is not None:
+                        with seq.lock:
+                            punch.of(seq.pattern)[step] = [want[1], 0]
+                        self._pu_sent.pop(want[0], None)
+                except Exception as ex:                # noqa: BLE001
+                    print("punch record:", ex)
+        elif not self.sched.playing:
+            e.punch_now.clear()
 
     def _plays(self):
         e = self.e
@@ -327,10 +418,16 @@ class CoreBridge:
             c.transport(K.T_PLAY, e.pos, at=at)
             self._play_at = at
             self.sched.start_frame, self.sched.sent, self.sched.playing = at, 0, True
+            if hasattr(self, "_pu_sent"):
+                self._pu_sent.clear()
             e.seq_clock = 0
         elif not e.playing and self._was_playing:
             c.transport(K.T_STOP)
             self.sched.stop()
+            for k in getattr(self, "_pu", {}):
+                c.punch_seq(k, 0, 0)                     # the steps' effects stop with the sequencers
+            if hasattr(self, "_pu_sent"):
+                self._pu_sent.clear()
             self._stop_instruments()
         if e.recording and not self._was_recording:
             self._start_recording()

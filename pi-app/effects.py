@@ -56,6 +56,11 @@ def _load():
                             ("dly_params", [p, f, f, f], None), ("dly_process", [p, p, p, p, p, i], None)]:
         fn = getattr(lib, name)
         fn.argtypes, fn.restype = args, res
+    if hasattr(lib, "punch_new"):                     # (an older library has no punch-in effects)
+        lib.punch_new.argtypes, lib.punch_new.restype = [f], p
+        lib.punch_free.argtypes, lib.punch_free.restype = [p], None
+        lib.punch_prepare.argtypes, lib.punch_prepare.restype = [p, i], None
+        lib.punch_process.argtypes, lib.punch_process.restype = [p, p, i, i, i, f, ctypes.c_double], i
     if hasattr(lib, "rev_width"):                     # (an older library has no WIDTH: the reverb stays as it was)
         lib.rev_width.argtypes, lib.rev_width.restype = [p, f], None
     return lib
@@ -131,3 +136,31 @@ def step_delay_time(name, delta):
     names = [n for n, _ in DELAY_TIMES]
     i = names.index(name) if name in names else names.index("1/8.")
     return names[max(0, min(len(names) - 1, i + delta))]
+
+
+PUNCH = AVAILABLE and hasattr(_lib, "punch_new")
+
+
+class Punch:
+    """One instrument's punch-in effect (see punch.py), on its voices, in place."""
+    def __init__(self, rate):
+        self.h = _lib.punch_new(rate)
+
+    def prepare(self, channels):
+        """Make its history for this many channels now (else the first effect does, in the audio thread)."""
+        _lib.punch_prepare(self.h, int(channels))
+
+    def process(self, x, fx, frames_per_beat, beat=-1.0):
+        """x: (frames, channels) float32, C order: changed in place. Returns True while an effect sounds."""
+        if not len(x) or not x.shape[1]:
+            return False
+        return bool(_lib.punch_process(self.h, x.ctypes.data, len(x), x.shape[1], int(fx),
+                                       float(frames_per_beat), float(beat)))
+
+    def __del__(self):
+        try:
+            if self.h:
+                _lib.punch_free(self.h)
+                self.h = None
+        except Exception:
+            pass

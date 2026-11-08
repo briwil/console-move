@@ -178,7 +178,13 @@ typedef struct {
                                                  it: 0-1 its own INSERT 1 / 2, 2-3 its copy of the song's SONG INSERT 1 / 2 */
     float ins_dry[4];                         /* how much of each insert is left dry (0: all through it, the default; 1: skipped) */
     int64_t fx_tail;                          /* frames its effects keep running after the sends go to 0 */
+    void *pu_h[2];                            /* its punch-in effects (fx.c's punch_process): on the seq and live voices */
+    int pu_seq, pu_live, pu_cur;              /* the effect the steps say, the pad held (wins), the one playing */
+    int pu_busy[2];                           /* still sounding (fading out) */
+    float pu_fpb;                             /* frames per beat */
+    int64_t pu_age;                           /* frames since pu_cur started (PAN SWING's sway) */
 } Slot;
+static int (*pu_fn)(void *, float *, int, int, int, float, double);
 static Slot slots[SLOTS];
 static float inputs[IN_CHANNELS][MAX_BLOCK];
 static float in_peak[IN_CHANNELS];            /* loudest sample since Python last asked */
@@ -337,16 +343,31 @@ static void slots_cycle(int n) {
         Source *a = sl->src[0] >= 0 ? &sources[sl->src[0]] : NULL;
         Source *b = (sl->src[1] >= 0 && sl->src[1] != sl->src[0]) ? &sources[sl->src[1]] : NULL;
         int aon = a && a->kind && a->on && !a->silent, bon = b && b->kind && b->on && !b->silent;
+        /* the punch-in effect (PUNCH FX page): on each source's voices, before anything is mixed */
+        int pfx = sl->pu_live ? sl->pu_live : sl->pu_seq;
+        if (pfx != sl->pu_cur) { sl->pu_cur = pfx; sl->pu_age = 0; }
+        float swing = 0.0f;
+        int throw_ = 0;
+        if (pu_fn && (pfx || sl->pu_busy[0] || sl->pu_busy[1])) {
+            if (aon && sl->pu_h[0]) sl->pu_busy[0] = pu_fn(sl->pu_h[0], a->buf, n, a->voices, pfx, sl->pu_fpb, -1.0);
+            if (bon && sl->pu_h[1]) sl->pu_busy[1] = pu_fn(sl->pu_h[1], b->buf, n, b->voices, pfx, sl->pu_fpb, -1.0);
+            if (pfx == 14 && sl->pu_fpb > 0.0f)                       /* PAN SWING: the whole instrument sways */
+                swing = 0.9f * sinf(6.2831853f * (float)sl->pu_age / sl->pu_fpb);
+            throw_ = pfx == 15;                                       /* ECHO THROW: all of it into the delay */
+        }
+        sl->pu_age += n;
         int fx = sl->frev && sl->fdly && rev_process && dly_process;
         int sending = 0;
         for (int v = 0; v < sl->voices; v++) if (sl->rev[v] > 0.0f || sl->dly[v] > 0.0f) sending = 1;
+        if (sl->pu_cur == 15 || (sl->pu_live ? sl->pu_live : sl->pu_seq) == 15) sending = 1;
         int run_fx = fx && (sending || sl->fx_tail > 0);
         if (run_fx) for (int k = 0; k < 4; k++) memset(slot_send[k], 0, sizeof(float) * n);
         float *kl = inputs[s * SLOT_CH + DRUM_KIT], *kr = inputs[s * SLOT_CH + DRUM_KIT + 1];
         if (aon || bon) {
             int V = sl->voices;
             for (int v = 0; v < V; v++) {
-                float pl = sl->pan[v][0], pr = sl->pan[v][1], rs = sl->rev[v], ds = sl->dly[v], g = sl->monitor;
+                float pl = sl->pan[v][0] * (1.0f - swing), pr = sl->pan[v][1] * (1.0f + swing);
+                float rs = sl->rev[v], ds = throw_ && sl->dly[v] < 0.85f ? 0.85f : sl->dly[v], g = sl->monitor;
                 int ln = sl->lane[v];
                 float *lane = (ln >= 0 && ln < DRUM_KIT) ? inputs[s * SLOT_CH + ln] : NULL;
                 const float *xa = aon ? a->buf + v : NULL, *xb = bon ? b->buf + v : NULL;
@@ -782,6 +803,7 @@ int core_slot(int k, int seq, int live, int voices) {
     memset(sl->pan, 0, sizeof sl->pan); memset(sl->rev, 0, sizeof sl->rev); memset(sl->dly, 0, sizeof sl->dly);
     for (int v = 0; v < MAX_VOICES; v++) sl->lane[v] = -1;
     sl->voices = voices; sl->src[0] = seq; sl->src[1] = live; sl->monitor = 0.0f; sl->fx_tail = 0;
+    sl->pu_seq = sl->pu_live = sl->pu_cur = 0; sl->pu_busy[0] = sl->pu_busy[1] = 0;
     if (seq >= 0 && seq < MAX_SOURCES) sources[seq].slot = k;
     if (live >= 0 && live < MAX_SOURCES) sources[live].slot = k;
     sl->used = 1;
@@ -796,6 +818,24 @@ void core_slot_lane(int k, int v, int lane) { if (k >= 0 && k < SLOTS && v >= 0 
 void core_slot_mix(int k, int v, float l, float r, float rev, float dly) {
     if (k < 0 || k >= SLOTS || v < 0 || v >= MAX_VOICES) return;
     slots[k].pan[v][0] = l; slots[k].pan[v][1] = r; slots[k].rev[v] = rev; slots[k].dly[v] = dly;
+}
+/* the punch-in effects: fn (fx.c's punch_process) and slot k's two (made and kept by Python) */
+void core_slot_punch(int k, void *fn, void *seq_h, void *live_h) {
+    if (k < 0 || k >= SLOTS) return;
+    if (fn) pu_fn = (int (*)(void *, float *, int, int, int, float, double))fn;
+    slots[k].pu_h[0] = seq_h; slots[k].pu_h[1] = live_h;
+}
+/* the effect slot k's steps say from now (0: none); called at its frame (EV_CALL) or straight away */
+void core_punch_seq(intptr_t k, intptr_t fx, intptr_t fpb) {
+    if (k < 0 || k >= SLOTS) return;
+    slots[k].pu_seq = (int)fx;
+    if (fpb > 0) slots[k].pu_fpb = (float)fpb;
+}
+/* the pad held on the PUNCH FX page (0: let go); wins over the steps */
+void core_punch_live(int k, int fx, float fpb) {
+    if (k < 0 || k >= SLOTS) return;
+    slots[k].pu_live = fx;
+    if (fpb > 0.0f) slots[k].pu_fpb = fpb;
 }
 void core_slot_monitor(int k, float g) { if (k >= 0 && k < SLOTS) slots[k].monitor = g; }
 void core_slot_effects(int k, void *rev, void *dly) { if (k >= 0 && k < SLOTS) { slots[k].frev = rev; slots[k].fdly = dly; } }

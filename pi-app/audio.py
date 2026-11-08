@@ -23,6 +23,7 @@ Needs python3-numpy and python3-alsaaudio (installed by setup.sh).
 import bisect
 import datetime
 import json
+import math
 import os
 import random
 import re
@@ -52,6 +53,7 @@ except Exception as _e:                     # carry on without the drum synth
 
 import drumparams
 import notes
+import punch
 import sequencer
 
 # On the Ableton Move the sound goes out through JACK (console mode) instead of ALSA, and the input is
@@ -564,6 +566,12 @@ class Engine:
         self.seq_clock = 0                      # the sequencer's own clock: frames since PLAY (tape loops don't touch it)
         self._slot_fx = {}                      # machine -> [reverb, delay, frames to keep ringing]: each
                                                 # instrument's own effects, printed into its KIT inputs
+        self._punch = {}                        # machine -> [its sequencer's effect, its hand-played one, busy, busy]
+        self.punch_live = None                  # (machine, effect): a punch-in pad held now
+        self.punch_rec = False                  # ... and recording it into the pattern's steps
+        self.punch_now = {}                     # machine -> the punch-in effect it's playing (for the lights)
+        self._punch_decided = {}                # machine -> {slot: its chance's answer}
+        self._punch_clock = 0                   # frames, always counting (PAN SWING's beat when stopped)
         self._seq_fifos = {}                    # machine -> its sequencer's sound waiting read_ahead frames
         self.drums = drums.Drums() if (drums and drums.AVAILABLE) else None
         self.seq = sequencer.Sequencer()        # the shown instrument's patterns (saved with the song) ...
@@ -2834,14 +2842,23 @@ class Engine:
                             self.seq_hits[lane] = soon + offset / self.rate
             jobs.append((i, mid, m, events, i == current))
         for i, mid, m, events, live in jobs:
-            if not events and getattr(m, "asleep", lambda: False)() and self._slot_fx.get(mid, (0, 0, 0))[2] <= 0:
+            segs = self._punch_segments(i, mid, sounding, frames, fpb)
+            pst = self._punch.get(mid)
+            if not events and getattr(m, "asleep", lambda: False)() and self._slot_fx.get(mid, (0, 0, 0))[2] <= 0 \
+                    and not any(f for _a, _b, f, _bt in segs) and not (pst and (pst[2] or pst[3])):
+                self.punch_now.pop(mid, None)
                 continue                                 # nothing to play and nothing ringing: costs nothing
             seq_voices, live_voices = m.render(frames, events, with_live=live)
+            seq_voices, live_voices, swing, throw = self._punch_run(mid, seq_voices, live_voices, segs, fpb)
             # what's recorded (at pos, where you pressed): your hits now, and the sequencer's from read_ahead
             # frames ago (they were made that far ahead, to sound on time). What you hear: both, now
             voices = live_voices + self._delay_sequencer(mid, seq_voices)
             rev_g, dly_g = m.sends()                     # each drum's sends to the reverb and delay
             p = m.pans()
+            if swing is not None:                        # PAN SWING: the whole instrument goes left and right
+                p = p * np.array([1.0 - swing, 1.0 + swing], np.float32)
+            if throw:                                    # ECHO THROW: everything into the delay while it's held
+                dly_g = np.maximum(dly_g, 0.85).astype(np.float32)
             x[:, i * SLOT_CH:(i + 1) * SLOT_CH] = self._drum_input(mid, m, voices, rev_g, dly_g, p)
             heard = seq_voices + live_voices
             pans = p * DRUMS_MONITOR
@@ -2852,7 +2869,73 @@ class Engine:
                 mon_dly = (heard * dly_g) @ pans + (0 if mon_dly is None else mon_dly)
         if self.playing:
             self.seq_clock += frames
+        self._punch_clock += frames
         return x, mon, mon_rev, mon_dly
+
+    def _punch_segments(self, i, mid, sounding, frames, fpb):
+        """A block's punch-in effect, split where the steps change: [(from, to, effect, beat at from)]. A pad
+        held wins over the steps; while recording it also goes on them."""
+        live = self.punch_live[1] if self.punch_live and self.punch_live[0] == mid else 0
+        seq = self.seqs.get(mid)
+        if not (self.playing and i in sounding and seq is not None):
+            return [(0, frames, live, -1.0)]
+        t = self.seq_clock + self.read_ahead
+        sf = fpb / punch.STEPS_PER_BEAT
+        cuts = [0]
+        try:
+            nxt = seq.anchor + math.ceil((t - seq.anchor) / sf) * sf - t
+            while nxt < frames:
+                if nxt > 0:
+                    cuts.append(int(nxt))
+                nxt += sf
+        except (AttributeError, ValueError, ZeroDivisionError):
+            pass
+        cuts.append(frames)
+        out = []
+        decided = self._punch_decided.setdefault(mid, {})
+        for a, b in zip(cuts, cuts[1:]):
+            if b <= a:
+                continue
+            try:
+                fx, step, beat = punch.at(seq, t + a, fpb, decided)
+            except Exception:                            # noqa: BLE001
+                fx, step, beat = 0, None, -1.0
+            if live:
+                if self.punch_rec and step is not None:
+                    with seq.lock:
+                        punch.of(seq.pattern)[step] = [live, 0]
+                fx = live
+            out.append((a, b, fx, beat))
+        return out
+
+    def _punch_run(self, mid, seq_voices, live_voices, segs, fpb):
+        """The punch-in effect on an instrument's voices: (seq voices, live voices, PAN SWING amount or None,
+        ECHO THROW on)."""
+        fx_now = segs[0][2]
+        st = self._punch.get(mid)
+        if not any(f for _a, _b, f, _bt in segs) and not (st and (st[2] or st[3])):
+            self.punch_now.pop(mid, None)
+            return seq_voices, live_voices, None, False
+        if not (effects and getattr(effects, "PUNCH", False)):
+            return seq_voices, live_voices, None, False
+        if st is None:
+            st = self._punch[mid] = [effects.Punch(self.rate), effects.Punch(self.rate), False, False]
+        seq_voices = np.ascontiguousarray(seq_voices, np.float32)
+        live_voices = np.ascontiguousarray(live_voices, np.float32)
+        do_live = st[3] or bool(live_voices.any())
+        for a, b, f, beat in segs:
+            st[2] = st[0].process(seq_voices[a:b], f, fpb, beat)
+            if do_live:
+                st[3] = st[1].process(live_voices[a:b], f, fpb, beat)
+        if fx_now:
+            self.punch_now[mid] = fx_now
+        else:
+            self.punch_now.pop(mid, None)
+        swing = None
+        if fx_now == punch.PAN_SWING:
+            beat = segs[0][3] if segs[0][3] >= 0 else self._punch_clock / fpb
+            swing = 0.9 * math.sin(2 * math.pi * beat)
+        return seq_voices, live_voices, swing, fx_now == punch.ECHO_THROW
 
     def _drum_input(self, mid, m, voices, rev_g, dly_g, p=None):
         """What one instrument puts on tape, as its SLOT_CH input channels: 0-7 each drum on its own (DRUM 1-8:

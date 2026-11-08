@@ -317,3 +317,209 @@ void dly_process(Delay *d, const float *in_l, const float *in_r, float *out_l, f
         d->w = (d->w + 1) & d->mask;
     }
 }
+
+/* ------------------------------------------------------------------ punch-in effects
+ *
+ * One instrument's punch-in effect (OP-XY style), on its voices before they're panned and sent: buf is
+ * (frames, chans) float32, row after row, changed in place. fx 0 is none; the others as PUNCH_NAMES in
+ * punch.py. A short history of the input is always kept (REVERSE plays the beat just gone). Changing the
+ * effect fades over a few ms so nothing clicks. */
+
+#define PU_MAXCH 64
+#define PU_SECONDS 1.6f                    /* the history: enough for a beat down to about 80 BPM */
+
+typedef struct {
+    float rate;
+    int chans, len, w;                     /* history: len frames x chans, w the next frame written */
+    float *hist;
+    int cur;                               /* the effect running (it fades out after fx goes to 0) */
+    long age;                              /* frames since it started */
+    int start;                             /* where in the history it started */
+    double pos;                            /* TAPE STOP / HALF SPEED: how far into the history they've read */
+    float mix, gate;
+    int crush_n;
+    float held[PU_MAXCH];
+    float z1[PU_MAXCH], z2[PU_MAXCH];      /* the filters' states */
+    float b0, b1, b2, a1, a2;
+} Punch;
+
+Punch *punch_new(float rate) {
+    Punch *p = (Punch *)calloc(1, sizeof(Punch));
+    if (p)
+        p->rate = rate;
+    return p;
+}
+
+/* make the history for this many channels now (not in the audio thread) */
+void punch_prepare(Punch *p, int chans) {
+    if (!p || chans < 1 || chans > PU_MAXCH || (p->hist && p->chans == chans))
+        return;
+    float *old = p->hist;
+    p->len = (int)(p->rate * PU_SECONDS);
+    p->hist = (float *)calloc((size_t)p->len * chans, sizeof(float));
+    p->chans = p->hist ? chans : 0;
+    p->w = 0;
+    p->cur = 0;
+    p->mix = 0.0f;
+    free(old);
+}
+
+void punch_free(Punch *p) {
+    if (p) {
+        free(p->hist);
+        free(p);
+    }
+}
+
+static void pu_biquad(Punch *p, int kind, float f, float q) {   /* kind 0 low pass, 1 high pass, 2 band pass */
+    float nyq = p->rate * 0.45f;
+    if (f > nyq) f = nyq;
+    if (f < 10.0f) f = 10.0f;
+    float w0 = 2.0f * 3.14159265f * f / p->rate, cw = cosf(w0), al = sinf(w0) / (2.0f * q);
+    float a0 = 1.0f + al;
+    if (kind == 0) {
+        p->b0 = (1.0f - cw) * 0.5f / a0; p->b1 = (1.0f - cw) / a0; p->b2 = p->b0;
+    } else if (kind == 1) {
+        p->b0 = (1.0f + cw) * 0.5f / a0; p->b1 = -(1.0f + cw) / a0; p->b2 = p->b0;
+    } else {
+        p->b0 = al / a0; p->b1 = 0.0f; p->b2 = -al / a0;
+    }
+    p->a1 = -2.0f * cw / a0;
+    p->a2 = (1.0f - al) / a0;
+}
+
+static inline float pu_hist(Punch *p, long frame, int c) {   /* frame: any whole number, wrapped */
+    long i = frame % p->len;
+    if (i < 0) i += p->len;
+    return p->hist[i * p->chans + c];
+}
+
+static inline float pu_hist_f(Punch *p, double frame, int c) {
+    long i = (long)floor(frame);
+    float t = (float)(frame - i);
+    return pu_hist(p, i, c) * (1.0f - t) + pu_hist(p, i + 1, c) * t;
+}
+
+static const float PU_REPEAT[] = {0, 1.0f, 0.5f, 0.25f, 0.125f, 1.0f / 3.0f};   /* fx 1-5: beats per slice */
+
+/* fpb: frames per beat. beat: where the block starts in beats (for GATE), or < 0: count from the start.
+   Returns 1 while an effect is still sounding (running or fading), else 0. */
+int punch_process(Punch *p, float *buf, int frames, int chans, int fx, float fpb, double beat) {
+    if (chans < 1 || chans > PU_MAXCH || frames <= 0)
+        return 0;
+    if (chans != p->chans || !p->hist) {
+        free(p->hist);
+        p->len = (int)(p->rate * PU_SECONDS);
+        p->hist = (float *)calloc((size_t)p->len * chans, sizeof(float));
+        p->chans = chans;
+        p->w = 0;
+        p->cur = 0;
+        p->mix = 0.0f;
+        if (!p->hist)
+            return 0;
+    }
+    if (fpb < 16.0f) fpb = 16.0f;
+    if (fpb > p->len * 0.45f) fpb = p->len * 0.45f;          /* (a very slow tempo: shorter, so it fits) */
+    if (fx != 0 && fx != p->cur) {                           /* a new effect: start it */
+        p->cur = fx;
+        p->age = 0;
+        p->start = p->w;
+        p->pos = 0.0;
+        p->mix = 0.0f;
+        p->gate = 1.0f;
+        p->crush_n = 0;
+        memset(p->z1, 0, sizeof p->z1);
+        memset(p->z2, 0, sizeof p->z2);
+    }
+    float target = fx ? 1.0f : 0.0f;
+    float ramp = 1.0f / (0.004f * p->rate);
+    if (p->cur == 0 && p->mix <= 0.0f) {                     /* nothing running: just keep the history */
+        for (int i = 0; i < frames; i++) {
+            memcpy(p->hist + (size_t)p->w * chans, buf + (size_t)i * chans, sizeof(float) * chans);
+            if (++p->w >= p->len) p->w = 0;
+        }
+        return 0;
+    }
+    int cur = p->cur;
+    float wet[PU_MAXCH];
+    for (int i = 0; i < frames; i++) {
+        float *x = buf + (size_t)i * chans;
+        memcpy(p->hist + (size_t)p->w * chans, x, sizeof(float) * chans);
+        long age = p->age;
+        if ((age & 15) == 0) {                               /* the filters move every 16 frames */
+            float t = age / fpb;
+            if (cur == 9)
+                pu_biquad(p, 0, 18000.0f * powf(250.0f / 18000.0f, t > 1.0f ? 1.0f : t), 1.0f);
+            else if (cur == 10)
+                pu_biquad(p, 1, 30.0f * powf(3000.0f / 30.0f, t > 1.0f ? 1.0f : t), 1.0f);
+            else if (cur == 11)
+                pu_biquad(p, 2, 350.0f * powf(2.0f, 2.6f * (0.5f - 0.5f * cosf(6.2831853f * t))), 5.0f);
+        }
+        if (cur >= 1 && cur <= 5) {                          /* REPEAT: the first slice plays, then loops */
+            long L = (long)(PU_REPEAT[cur] * fpb);
+            if (L < 32) L = 32;
+            if (age < L) {
+                for (int c = 0; c < chans; c++) wet[c] = x[c];
+            } else {
+                long k = age % L;
+                float g = 1.0f;
+                if (k < 48) g = k / 48.0f;
+                else if (L - k < 48) g = (L - k) / 48.0f;
+                for (int c = 0; c < chans; c++) wet[c] = pu_hist(p, p->start + k, c) * g;
+            }
+        } else if (cur == 6) {                               /* REVERSE: the beat just gone, backwards, round */
+            long L = (long)fpb;
+            long k = age % L;
+            float g = 1.0f;
+            if (k < 48) g = k / 48.0f;
+            else if (L - k < 48) g = (L - k) / 48.0f;
+            for (int c = 0; c < chans; c++) wet[c] = pu_hist(p, p->start - 1 - k, c) * g;
+        } else if (cur == 7) {                               /* TAPE STOP: slows to a halt over a beat */
+            float r = 1.0f - age / fpb;
+            if (r < 0.0f) r = 0.0f;
+            float g = r < 0.05f ? r / 0.05f : 1.0f;
+            for (int c = 0; c < chans; c++) wet[c] = pu_hist_f(p, p->start + p->pos, c) * g;
+            p->pos += r;
+        } else if (cur == 8) {                               /* HALF SPEED: an octave down, catching up each half beat */
+            double lag = age - p->pos;
+            if (lag > fpb * 0.5) p->pos += fpb * 0.5;
+            double ph = fmod(p->pos, fpb * 0.25);
+            float g = ph < 48 ? (float)(ph / 48.0) : 1.0f;
+            for (int c = 0; c < chans; c++) wet[c] = pu_hist_f(p, p->start + p->pos, c) * g;
+            p->pos += 0.5;
+        } else if (cur >= 9 && cur <= 11) {                  /* LOW PASS / HIGH PASS sweeps, RESO PEAK (a wah) */
+            for (int c = 0; c < chans; c++) {
+                float in = x[c];
+                float y = p->b0 * in + p->z1[c];
+                p->z1[c] = p->b1 * in - p->a1 * y + p->z2[c];
+                p->z2[c] = p->b2 * in - p->a2 * y;
+                wet[c] = cur == 11 ? 0.35f * in + 2.2f * y : y;
+            }
+        } else if (cur == 12) {                              /* BITCRUSH: fewer samples, fewer steps */
+            if (p->crush_n == 0)
+                for (int c = 0; c < chans; c++) p->held[c] = roundf(x[c] * 12.0f) / 12.0f;
+            if (++p->crush_n >= 6) p->crush_n = 0;
+            for (int c = 0; c < chans; c++) wet[c] = p->held[c];
+        } else if (cur == 13) {                              /* GATE 1/16: on for the first half of each 16th */
+            double b = beat >= 0 ? beat + i / fpb : age / fpb;
+            double ph = (b * 4.0) - floor(b * 4.0);
+            float want = ph < 0.5 ? 1.0f : 0.0f;
+            p->gate += (want - p->gate) * 0.02f;
+            for (int c = 0; c < chans; c++) wet[c] = x[c] * p->gate;
+        } else if (cur == 16) {                              /* KILL */
+            for (int c = 0; c < chans; c++) wet[c] = 0.0f;
+        } else {                                             /* (PAN SWING, ECHO THROW: done outside) */
+            for (int c = 0; c < chans; c++) wet[c] = x[c];
+        }
+        float m = p->mix;
+        for (int c = 0; c < chans; c++) x[c] += m * (wet[c] - x[c]);
+        if (m < target) { m += ramp; if (m > 1.0f) m = 1.0f; }
+        else if (m > target) { m -= ramp; if (m < 0.0f) m = 0.0f; }
+        p->mix = m;
+        p->age++;
+        if (++p->w >= p->len) p->w = 0;
+    }
+    if (p->mix <= 0.0f && fx == 0)
+        p->cur = 0;
+    return p->cur != 0;
+}

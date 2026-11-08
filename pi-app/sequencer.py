@@ -192,7 +192,7 @@ class Pattern:
         self.lanes = [Lane(length) for _ in range(LANES)]
 
     def empty(self):
-        return not any(s.on or s.locks for lane in self.lanes for s in lane.steps)
+        return not any(s.on or s.locks for lane in self.lanes for s in lane.steps) and not getattr(self, "punch", None)
 
 
 def euclid(hits, length, rotate=0):
@@ -559,7 +559,8 @@ class Sequencer:
                                              {str(k): v for k, v in s.locks.items()}, dict(s.comp)]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
                 import lfo
-                pats.append({"lanes": lanes, "lfos": lfo.to_json(p)})
+                import punch
+                pats.append({"lanes": lanes, "lfos": lfo.to_json(p), "punch": punch.to_json(p)})
             return {"current": self.current, "patterns": pats}
 
     def from_json(self, data):
@@ -572,6 +573,8 @@ class Sequencer:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     import lfo
                     lfo.from_json(p, pd.get("lfos"))
+                    import punch
+                    punch.from_json(p, pd.get("punch"))
                     for ln, ld in zip(p.lanes, pd.get("lanes", [])):
                         ln.length = max(1, min(MAX_STEPS, int(ld.get("length", 16))))
                         ln.rate = max(0, min(len(RATES) - 1, int(ld.get("rate", 0))))

@@ -754,6 +754,8 @@ def choice_knob(T, m, e, name):
     ms = T.mseq
     if T.seq_page and ms.active():
         if ms.selected:
+            if n == 3 and ms.sel is not None:
+                return ms.pad_items()[ms.sel][0] in moveseq.CKEYS     # (its chance: counted in set_chance)
             if n == 1 and ms.sel is not None:
                 key = ms.pad_items()[ms.sel][0]
                 return (key not in ("vel", "chance")) if isinstance(key, str) else knobgate.is_choice(e.drums, key)

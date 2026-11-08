@@ -406,17 +406,21 @@ class NoteSequencer:
                     if self.anchor + (k + 1) * step_frames <= b:
                         self._skip.discard((pitch, k))
                     continue
-                t0 = self.anchor + k * step_frames + n.nudge / 100 * step_frames
-                out_pitch = pitch
                 c = n.comp
-                if c.keys() & {"rand", "rup", "rdown"}:          # a pitch movement (a chord moves together in UNIFIED)
+                nudge = n.nudge if n.nudge and sequencer.cpass(c, "nudge", loop, random.Random(hash((self.seed, pitch, k, "n")))) else 0
+                t0 = self.anchor + k * step_frames + nudge / 100 * step_frames
+                out_pitch = pitch
+                crng = random.Random(hash((self.seed, pitch if per_note else -1, k, "c")))
+                if c.keys() & {"rand", "rup", "rdown"} and sequencer.cpass(
+                        c, "rand" if "rand" in c else "rup" if "rup" in c else "rdown", loop, crng):   # a pitch movement (a chord moves together in UNIFIED)
                     name = "rand" if "rand" in c else "rup" if "rup" in c else "rdown"
                     cnt, octs = (int(v) for v in sequencer.COMPONENTS[name][c[name]].replace("OCT", "").split("/"))
                     rng = random.Random(hash((self.seed, pitch if per_note else -1, k)))
                     d = rng.randrange(cnt) if name == "rand" else loop % cnt
                     out_pitch = max(0, min(127, pitch + round(d * 12 * octs / cnt) * (-1 if name == "rdown" else 1)))
-                each = step_frames / n.ratchet
-                for r in range(n.ratchet):
+                nh = n.ratchet if sequencer.cpass(c, "ratchet", loop, random.Random(hash((self.seed, pitch, k, "r")))) else 1
+                each = step_frames / nh
+                for r in range(nh):
                     t = t0 + r * each
                     if a <= t < b:
                         key = (pitch, k)
@@ -424,7 +428,7 @@ class NoteSequencer:
                             self._decided[key] = chance_passes(n.chance, loop)
                         if self._decided[key]:
                             # a ratchet's notes share the note's length; the last one holds to its end
-                            gate = each * 0.9 if r < n.ratchet - 1 else n.length * step_frames - r * each - 1
+                            gate = each * 0.9 if r < nh - 1 else n.length * step_frames - r * each - 1
                             locks = dict(n.locks)
                             locks["gate"] = max(1, int(gate))
                             out.append((int(t - block_start), out_pitch, n.vel, locks))
@@ -498,7 +502,7 @@ class NoteSequencer:
                             n.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
                             n.nudge = max(-50, min(50, int(v[5]))) if len(v) > 5 else 0
                             n.comp = {k: int(x) for k, x in (v[6] if len(v) > 6 else {}).items()
-                                      if k in sequencer.COMPONENTS and k != "nudge" and 0 <= int(x) < len(sequencer.COMPONENTS[k])}
+                                      if k != "nudge" and sequencer.comp_ok(k, int(x))}
                             p.notes.setdefault(step, {})[pitch] = n
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))
             except (TypeError, ValueError, KeyError, IndexError, AttributeError) as e:

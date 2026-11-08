@@ -739,12 +739,15 @@ def synth_seq_page(f, T):
         if ms.sel is None:
             lock_knobs(f, ms)
             return
-        f.frame(8, 27, 112, 26)
-        f.rect(9, 28, 110, 24, 0)
+        f.frame(8, 26, 112, 32)
+        f.rect(9, 27, 110, 30, 0)
         key, label = ms.pad_items()[ms.sel]
-        f.centre(64, 30, str(label)[:16])
-        f.centre(64, 40, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
-        f.centre(64, 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
+        ct = ms.chance_text(key)
+        f.centre(64, 28, str(label)[:16])
+        f.centre(64, 38, ("KNOB 1: %s" % ms.item_value(key))[:22], small=True)
+        if ct is not None:
+            f.centre(64, 44, ("KNOB 3 CHANCE: %s" % ct)[:28], small=True)
+        f.centre(64, 50 if ct is not None else 46, "SAME PAD AGAIN: OFF" if ms.engaged(key) else "TURN KNOB 1 TO SET IT", small=True)
         return
     if ms.down:
         f.small(1, 28, "PADS: ADD / TAKE OFF NOTES")
@@ -856,13 +859,17 @@ def seq_page(f, T):
         if not knobs:
             lock_knobs(f, ms)
             return
-        f.frame(8, 27, 112, 26)
-        f.rect(9, 28, 110, 24, 0)
+        f.frame(8, 26, 112, 32)
+        f.rect(9, 27, 110, 30, 0)
         if True:
             label, value, on = knobs[0]
-            f.centre(64, 30, str(label)[:16])
-            f.centre(64, 40, ("KNOB 1: %s" % value)[:22], small=True)
-            f.centre(64, 46, "SAME PAD AGAIN: OFF" if on else "TURN KNOB 1 TO SET IT", small=True)
+            key = ms.pad_items()[ms.sel][0]
+            ct = ms.chance_text(key)
+            f.centre(64, 28, str(label)[:16])
+            f.centre(64, 38, ("KNOB 1: %s" % value)[:22], small=True)
+            if ct is not None:
+                f.centre(64, 44, ("KNOB 3 CHANCE: %s" % ct)[:28], small=True)
+            f.centre(64, 50 if ct is not None else 46, "SAME PAD AGAIN: OFF" if on else "TURN KNOB 1 TO SET IT", small=True)
         return
     # the knobs
     knobs = ms.knob_list()

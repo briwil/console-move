@@ -29,6 +29,7 @@ STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("
              ("rdown", "RAMP DOWN")]
 PATH_ONLY = ("pulse", "hold", "jump")             # these change the order the steps play in: PER NOTE only
 COMPS = ("pulse", "hold", "jump", "rand", "rup", "rdown")
+CKEYS = ("ratchet", "nudge") + COMPS               # the components knob 3 gives a chance
 LANE_KNOBS = ["length", "rate", "type", "lane", "key", "scale"]
 LABELS = {"length": "LENGTH", "rate": "RATE", "type": "TYPE", "lane": "NOTE LEN", "key": "KEY", "scale": "SCALE"}
 
@@ -324,6 +325,40 @@ class MoveSynth:
         d = self.d
         return d.value_text(key, nt.locks[key]) if key in nt.locks else d.value_text(key)
 
+    def chance_text(self, key):
+        """Knob 3's line for the picked pad: the component's chance, or None if the pad has none."""
+        if key not in CKEYS:
+            return None
+        nts = self._notes_of(self.selected[0])
+        if not nts or not self.engaged(key):
+            return "SET KNOB 1 1ST"
+        return CHANCES[nts[0][1].comp.get(key + "_c", 0)]
+
+    def set_chance(self, delta, shift):
+        """Knob 3 while steps are selected and a component pad picked: how likely it is to happen."""
+        key, label = self.pad_items()[self.sel]
+        if key not in CKEYS:
+            return
+        one = knobgate.gate(("synchance", key), delta, shift)
+        if not one:
+            return
+        if not self.engaged(key):
+            popup.show(self.T, self.which(), label + " CHANCE", "SET KNOB 1 FIRST")
+            return
+        seq = self.seq
+        with seq.lock:
+            for i in self.selected:
+                for _n, nt in self._notes_of(i):
+                    on = nt.ratchet != 1 if key == "ratchet" else nt.nudge != 0 if key == "nudge" else key in nt.comp
+                    if on:
+                        v = max(0, min(len(CHANCES) - 1, nt.comp.get(key + "_c", 0) + one))
+                        if v:
+                            nt.comp[key + "_c"] = v
+                        else:
+                            nt.comp.pop(key + "_c", None)
+        self.T.engine.seq_changed()
+        popup.show(self.T, self.which(), label + " CHANCE", self.chance_text(key))
+
     def which(self):
         return "STEP %d" % (self.selected[0] + 1) if len(self.selected) == 1 else "%d STEPS" % len(self.selected)
 
@@ -347,10 +382,13 @@ class MoveSynth:
                             nt.chance = 0
                         elif key == "ratchet":
                             nt.ratchet = 1
+                            nt.comp.pop("ratchet_c", None)
                         elif key == "nudge":
                             nt.nudge = 0
+                            nt.comp.pop("nudge_c", None)
                         elif key in COMPS:
                             nt.comp.pop(key, None)
+                            nt.comp.pop(key + "_c", None)
                         else:
                             nt.locks.pop(key, None)
             self.sel = None
@@ -442,6 +480,8 @@ class MoveSynth:
         if self.selected:
             if self.sel is None:
                 return self.lock_choice(n)
+            if n == 3:
+                return self.pad_items()[self.sel][0] in CKEYS
             if n != 1:
                 return False
             key = self.pad_items()[self.sel][0]
@@ -481,6 +521,7 @@ class MoveSynth:
                             for other in ("rand", "rup", "rdown"):
                                 if other != key:
                                     nt.comp.pop(other, None)
+                                    nt.comp.pop(other + "_c", None)
                     else:
                         nt.locks[key] = self.d.stepped(key, nt.locks.get(key, self.d.get_param(key)), clicks)
         e.seq_changed()
@@ -494,6 +535,8 @@ class MoveSynth:
             if self.sel is not None:
                 if number == 1:
                     self.set_selected(delta, shift)
+                elif number == 3:
+                    self.set_chance(delta, shift)
             else:
                 self.lock_knob(number, delta, shift)
             return

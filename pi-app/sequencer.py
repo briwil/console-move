@@ -116,6 +116,31 @@ COMPONENTS = {"pulse": _N9, "hold": _N9, "jump": ["1", "5", "9", "13", "+1", "-1
 PITCH = None            # set by the Move app: PITCH(lane, locks, semitones) -> locks with the pitch moved
 
 
+def cpass(comp, name, cycle, rng):
+    """Does a step component happen this time? Its chance is kept in the same dict, as comp[name + "_c"]
+    (a place in CHANCES; missing: 100%). rng: a random.Random, so the answer is the same for the same slot."""
+    idx = comp.get(name + "_c", 0)
+    if not idx:
+        return True
+    c = CHANCES[idx]
+    if c.endswith("%"):
+        return rng.random() * 100 < int(c[:-1])
+    a, b = (int(v) for v in c.split(":"))
+    return cycle % b == a - 1
+
+
+def comp_ok(key, x):
+    """Is this a saved component (or its chance, "pulse_c") with a place that exists?"""
+    if key.endswith("_c") and key[:-2] in COMPONENTS or key == "ratchet_c":
+        return 0 <= x < len(CHANCES)
+    return key in COMPONENTS and 0 <= x < len(COMPONENTS[key])
+
+
+def comp_keys(comp):
+    """The step's components only (without their chances)."""
+    return {k for k in comp if k in COMPONENTS}
+
+
 class Step:
     __slots__ = ("on", "vel", "chance", "ratchet", "locks", "comp")
 
@@ -404,6 +429,12 @@ class Sequencer:
                 break
             c = ln.steps[i].comp
             path.append((i, True))
+            if "pulse" in c and not cpass(c, "pulse", cycle, rng):
+                c = {k: v for k, v in c.items() if k != "pulse"}
+            if "hold" in c and not cpass(c, "hold", cycle, rng):
+                c = {k: v for k, v in c.items() if k != "hold"}
+            if "jump" in c and not cpass(c, "jump", cycle, rng):
+                c = {k: v for k, v in c.items() if k != "jump"}
             if "pulse" in c:
                 n = c["pulse"] + 1 if c["pulse"] < 9 else rng.randint(1, 9)
                 path += [(i, True)] * n
@@ -469,15 +500,22 @@ class Sequencer:
                         self._skip.discard((li, k))
                     continue
                 t0 = self.anchor + k * step_frames
-                if "nudge" in s.comp:
+                crng = random.Random(hash((self.seed, li, k, "c")))
+                if "nudge" in s.comp and cpass(s.comp, "nudge", cycle, crng):
                     t0 += float(COMPONENTS["nudge"][s.comp["nudge"]].rstrip("%")) / 100 * step_frames
                 rng = random.Random(hash((self.seed, li, k)))
                 hits = s.ratchet if s.ratchet else rng.randint(1, MAX_RATCHET)
+                if hits > 1 and not cpass(s.comp, "ratchet", cycle, crng):
+                    hits = 1                                  # (MULTIPLY didn't happen this time: one hit)
                 vel = s.vel if s.vel else rng.randint(1, 127)
                 locks = dict(s.locks)
                 c = s.comp
+                name = None
                 if PITCH and c.keys() & {"rand", "rup", "rdown"}:
                     name = "rand" if "rand" in c else "rup" if "rup" in c else "rdown"
+                    if not cpass(c, name, cycle, crng):
+                        name = None
+                if PITCH and name:
                     n, octs = (int(v) for v in COMPONENTS[name][c[name]].replace("OCT", "").split("/"))
                     d = rng.randrange(n) if name == "rand" else cycle % n
                     semis = round(d * 12 * octs / n) * (-1 if name == "rdown" else 1)
@@ -547,7 +585,7 @@ class Sequencer:
                                 s.ratchet = max(0, min(MAX_RATCHET, s.ratchet))
                                 s.locks = {int(k): int(x) for k, x in (v[4] if len(v) > 4 else {}).items()}
                                 s.comp = {k: int(x) for k, x in (v[5] if len(v) > 5 else {}).items()
-                                          if k in COMPONENTS and 0 <= int(x) < len(COMPONENTS[k])}
+                                          if comp_ok(k, int(x))}
                 self.current = max(0, min(PATTERNS - 1, int(data.get("current", 0))))
             except (TypeError, ValueError, KeyError, IndexError, AttributeError) as e:
                 print("Sequencer: couldn't read the saved patterns:", e)

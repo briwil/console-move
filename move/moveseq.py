@@ -29,6 +29,7 @@ LABELS = dict(seqpage.STEP_LABELS, rate="RATE", hits="EUCLID", rotate="SHIFT")
 STEP_PADS = [("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("pulse", "PULSE"),
              ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"), ("rdown", "RAMP DOWN"),
              ("nudge", "NUDGE")]
+CKEYS = ("ratchet", "pulse", "hold", "jump", "rand", "rup", "rdown", "nudge")   # the components knob 3 gives a chance
 RATCHETS = [1, 2, 3, 4, 5, 6, 7, 8, 0]            # MULTIPLY's values in knob order (0: random)
 SEMI = 2                                          # knob clicks of a drum's pitch setting per semitone (a guess)
 PITCH_WORDS = ("TUNE", "PITCH", "COARSE", "FREQ", "NOTE")
@@ -184,6 +185,40 @@ class MoveSeq:
             return sequencer.COMPONENTS[key][st.comp[key]] if key in st.comp else "OFF"
         return d.value_text(key, st.locks[key]) if key in st.locks else d.value_text(key)
 
+    def chance_text(self, key):
+        """Knob 3's line for the picked pad: the component's chance, or None if the pad has none."""
+        if key not in CKEYS:
+            return None
+        st = self.held_step()
+        return sequencer.CHANCES[st.comp.get(key + "_c", 0)] if self.engaged(key) else "SET KNOB 1 1ST"
+
+    def set_chance(self, delta, shift):
+        """Knob 3 while a step is held and a component pad picked: how likely it is to happen on those steps."""
+        key, label = self.pad_items()[self.sel]
+        if key not in CKEYS:
+            return
+        one = knobgate.gate(("compchance", key), delta, shift)
+        if not one:
+            return
+        sp, seq, e = self.sp, self.seq, self.T.engine
+        lane = sp.lane
+        if not self.engaged(key):
+            popup.show(self.T, self.which(), label + " CHANCE", "SET KNOB 1 FIRST")
+            return
+        sp._edit(("knob3", self.sel, self.held))
+        with seq.lock:
+            for j in self.selected:
+                if j < seq.lane(lane).length:
+                    st = seq.step(lane, j)
+                    if (st.ratchet != 1) if key == "ratchet" else (key in st.comp):
+                        v = max(0, min(len(sequencer.CHANCES) - 1, st.comp.get(key + "_c", 0) + one))
+                        if v:
+                            st.comp[key + "_c"] = v
+                        else:
+                            st.comp.pop(key + "_c", None)
+        e.seq_changed()
+        popup.show(self.T, self.which(), label + " CHANCE", self.chance_text(key))
+
     def step_pad(self, p):
         """A pad while a step is held: pick that setting (it's on), or the picked one again: off."""
         if self.held is None:
@@ -204,7 +239,7 @@ class MoveSeq:
             popup.show(self.T, self.which(), label, "OFF" if was_set else "")
         else:
             self.sel = p
-            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1")
+            popup.show(self.T, self.which(), label, self.item_value(key), "KNOB 1" + (", 3: CHANCE" if key in CKEYS else ""))
         e.seq_changed()
 
     def which(self):
@@ -223,8 +258,10 @@ class MoveSeq:
                 st.chance = 0
             elif key == "ratchet":
                 st.ratchet = 1
+                st.comp.pop("ratchet_c", None)
             elif isinstance(key, str):
                 st.comp.pop(key, None)
+                st.comp.pop(key + "_c", None)
             else:
                 st.locks.pop(key, None)
 
@@ -274,6 +311,7 @@ class MoveSeq:
                     for other in ("rand", "rup", "rdown"):
                         if other != key:
                             st.comp.pop(other, None)
+                            st.comp.pop(other + "_c", None)
             else:
                 st.locks[key] = e.drums.stepped(key, st.locks.get(key, e.drums.get_param(key)), clicks)
 
@@ -389,6 +427,8 @@ class MoveSeq:
         if self.sel is not None:
             if number == 1:
                 self.set_selected(delta, shift)
+            elif number == 3:
+                self.set_chance(delta, shift)
             return
         self.lock_knob(number, delta, shift)
 

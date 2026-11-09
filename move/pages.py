@@ -816,7 +816,7 @@ def auto_page(f, T):
         f.frame(8, 40, 112, 17)
         f.centre(64, 44, "STEP %d  %s" % (a.held + 1, a.value_text(a.held, key)))
     else:
-        f.small(1, 43, "HOLD A LIT STEP: KNOB 1 SETS IT")
+        f.small(1, 43, "KNOB 2: LENGTH  HOLD: KNOB 1" if a.rec(key) else "HOLD A LIT STEP: KNOB 1 SETS IT")
         f.small(1, 50, "DEL+STEP: OFF  SHIFT+DEL: ALL")
 
 

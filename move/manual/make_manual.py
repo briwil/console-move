@@ -418,7 +418,10 @@ story += [
     p("Automation page", H2),
     p("Left button 1 after the sequencer: what is locked on this pattern's steps, one setting at a time. Recorded "
       "knob moves show here (their name + REC: any step can have one, notes or not), and so do step locks and "
-      "step settings made with Shift + steps. When it stops, the sound goes back to the knobs.", BODY),
+      "step settings made with Shift + steps. A recorded setting has its own length: on its page, knob 2 changes "
+      "it (the pattern's or the lane's length it was recorded with at first), and it loops at that length "
+      "whatever the notes do. Between steps with different values it glides. "
+      "When it stops, the sound goes back to the knobs.", BODY),
     table([
         ("Knob 1", "Go through the settings that are set on some step: the step settings (VELOCITY, CHANCE, "
          "MULTIPLY, PULSE...) first, then the sound's (BLEND, CUTOFF...). Each has its own colour on the step "

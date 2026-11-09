@@ -294,6 +294,9 @@ class Auto:
 
     # ------------------------------------------------------------ controls
     def knob(self, number, delta, shift):
+        if number == 2:
+            self.set_length(delta, shift)
+            return
         if number != 1:
             return
         key = self.key()
@@ -320,6 +323,31 @@ class Auto:
         if n:
             self.pick = (self.pick + (1 if way > 0 else -1)) % n
         self.confirm_until = 0.0
+
+    def set_length(self, delta, shift):
+        """Knob 2: a recorded setting's own length (its steps are kept when it's shortened)."""
+        key = self.key()
+        if not self.rec(key):
+            if key is not None:
+                self.T.say("KNOB 2 SETS A RECORDED SETTING'S LENGTH", 2)
+            return
+        one = knobgate.gate(("auto-length",), delta, shift, 2)
+        if not one:
+            return
+        now = time.monotonic()
+        if now - getattr(self, "_len_at", 0) > 2.0:           # one undo per turn of the knob
+            self.seq.snapshot()
+        self._len_at = now
+        with self.seq.lock:
+            ln = self.rec_lane(key)
+            if not ln:
+                return
+            ln.length = max(1, min(sequencer.MAX_STEPS, ln.length + one))
+            n = ln.length
+        self.held = None
+        self.page = max(0, min(self.page, (n - 1) // 16))
+        self.T.engine.seq_changed()
+        popup.show(self.T, self.label(key)[:12], "LENGTH", "%d STEPS" % n)
 
     def step(self, n, down, deleting):
         i = self.page * 16 + n - 1

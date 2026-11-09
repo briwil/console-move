@@ -249,6 +249,9 @@ class Slot:
             for p, v in d.items():
                 if not (isinstance(p, int) and 0 <= p < len(m.values)):
                     continue
+                if isinstance(v, autom.Glide) and getattr(m, "params", None) and p < len(m.params) \
+                        and m.params[p].get("kind") in ("menu", "onoff"):
+                    continue                                 # (a menu jumps from step to step)
                 if v is None:
                     auto.pop(p, None)
                     v = m.values[p]

@@ -55,28 +55,50 @@ def record(seq, pattern, param, value, frame, fpb, length, rate):
     return i
 
 
+GLIDE_GAP = 128                        # frames between glide points at the closest (about 3 ms)
+
+
+class Glide(int):
+    """A value on the way from one step's value to the next (a menu setting skips these: it only takes the
+    steps' own values)."""
+
+
 def events(seq, start, n, fpb):
-    """The automation in sequencer frames [start, start + n): [(offset, AUTO, 0, {setting: value or None})]."""
+    """The automation in sequencer frames [start, start + n): [(offset, AUTO, 0, {setting: value or None})].
+    Two steps in a row with values: the setting glides from one to the other over the step."""
     a = getattr(seq.pattern, "auto", None)
     if not a:
         return []
     trip = getattr(seq, "trip", False)
     out = {}
+
+    def put(t, param, v):
+        if start <= t < start + n:
+            out.setdefault(int(round(t - start)), {})[param] = v
+
     for param, ln in a.items():
         if not ln.steps:
             continue
         sf = step_frames(seq, ln, fpb)
         live = max(1, sequencer.live_len(ln.length, trip))
-        k = max(0, math.ceil((start - seq.anchor) / sf - 1e-9))
+        k = max(0, math.ceil((start - seq.anchor) / sf - 1e-9) - 1)     # (the step before: its glide may reach in)
         while True:
             t = seq.anchor + k * sf
             if t >= start + n:
                 break
             i = sequencer.phys(k % live, trip)
             if i in ln.steps:
-                out.setdefault(int(round(t - start)), {})[param] = ln.steps[i]
+                v = ln.steps[i]
+                put(t, param, v)
+                nxt = sequencer.phys((k + 1) % live, trip)
+                if nxt in ln.steps and ln.steps[nxt] != v and t + sf > start:
+                    w = ln.steps[nxt]
+                    diff = w - v
+                    points = min(abs(diff), max(1, int(sf // GLIDE_GAP)))
+                    for j in range(1, points):                  # (the next step's own value comes at its start)
+                        put(t + sf * j / points, param, Glide(round(v + diff * j / points)))
             elif k == 0 or sequencer.phys((k - 1) % live, trip) in ln.steps:
-                out.setdefault(int(round(t - start)), {})[param] = None       # back to the knob's own value
+                put(t, param, None)                              # back to the knob's own value
             k += 1
     return [(off, AUTO, 0, d) for off, d in sorted(out.items())]
 

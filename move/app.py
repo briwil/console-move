@@ -154,9 +154,9 @@ class MoveBoard:
             name = HOLD[num]
             if val and self.shift and name == "COPY":
                 k.put("SELECT")
-            elif val and self.shift and name == "CUT" and T.auto.active():
+            elif val and self.shift and name == "CUT" and self.T.auto.active():
                 k.put("AUTO_CLEAR")                        # the automation page: this setting off every step
-            elif val and self.shift and name == "CUT" and T.punch.active():
+            elif val and self.shift and name == "CUT" and self.T.punch.active():
                 k.put("PUNCH_CLEAR")                       # the punch FX page: every punch step off
             elif val and not self.shift:
                 self.held.add(name)

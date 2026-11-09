@@ -1116,11 +1116,20 @@ class Engine:
             meta = {}
         except ValueError:
             return False
-        for data in [meta.get("drum_seq")] + list((meta.get("drum_seqs") or {}).values()):
-            seq = sequencer.Sequencer()
-            seq.from_json(data)
-            if not all(p.empty() for p in seq.patterns):
-                return False
+        if any(m for m in (meta.get("slots") or []) if m):
+            return False                                # (an instrument loaded counts, as in is_empty)
+        saved = dict(meta.get("drum_seqs") or {})
+        if meta.get("drum_seq") is not None:
+            saved[meta.get("drum_machine", "lxr")] = meta["drum_seq"]
+        for mid, data in saved.items():
+            if data:
+                try:
+                    seq = notes.NoteSequencer() if self.is_synth(mid) else sequencer.Sequencer()
+                    seq.from_json(data)
+                    if not all(p.empty() for p in seq.patterns):
+                        return False
+                except Exception:                       # noqa: BLE001
+                    return False                        # can't tell: keep it
         if self.drums:
             kits = dict(meta.get("drum_kits") or {})
             if meta.get("drum_kit"):

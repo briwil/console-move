@@ -1,18 +1,20 @@
 """The PRESETS page: the first sound page of a synth.
 
-    the wheel        through the presets: yours (saved with Menu > SAVE PRESET) first, then the synth's own;
-                     each one is heard as you land on it
+    the wheel        through the presets: yours (saved with Menu > SAVE PRESET, marked *) first, then the
+                     synth's own, then Console's (pi-app/presets/<synth>/, marked +); each heard as you land on it
     push the wheel   keep it
     Back             the sound you had before you started turning
     knob 1           the synth's bank (OB-Xd, Dexed and others with more than one)
     Left / Right     the other pages (what you landed on is kept)
 """
 import json
+import os
 import time
 
 import kitmenu
 
 PAGE = "PRESETS"
+OURS = os.path.join(os.path.dirname(os.path.abspath(kitmenu.__file__)), "presets")    # Console's own (make_presets.py)
 NAME_WAIT = 0.25                        # the synth needs a moment after a preset before its name is read
 
 
@@ -25,6 +27,7 @@ class Presets:
         self.landed = 0.0
         self.names = {}                 # (machine, bank, n) -> name, as they're read
         self.mine = []
+        self.ours = []
         self._seen = None
 
     # ------------------------------------------------------------ what's shown
@@ -52,13 +55,25 @@ class Presets:
         return d.preset_count() if d.has_presets() else 0
 
     def total(self):
-        return len(self.mine) + self.builtin()
+        return len(self.mine) + self.builtin() + len(self.ours)
+
+    def _ours_path(self, i):
+        """i: a place in the list; Console's own preset there, or None."""
+        k = i - len(self.mine) - self.builtin()
+        if 0 <= k < len(self.ours):
+            return os.path.join(OURS, self.d().machine, self.ours[k] + ".json")
+        return None
 
     def sync(self):
         """Coming to the page (or another synth): the list, and where its current sound is in it."""
         d = self.d()
         key = (d.machine, d.bank() if d.has_presets() else 0)
         self.mine = kitmenu.kit_names(d.machine)
+        try:
+            self.ours = sorted((f[:-5] for f in os.listdir(os.path.join(OURS, d.machine)) if f.endswith(".json")),
+                               key=str.lower)
+        except OSError:
+            self.ours = []
         if self._seen != key and self.orig is None:
             self.pos = len(self.mine) + (d.preset_now() if d.has_presets() else 0)
             self.pos = max(0, min(self.total() - 1, self.pos))
@@ -68,6 +83,8 @@ class Presets:
         d = self.d()
         if i < len(self.mine):
             return "* " + self.mine[i].upper()
+        if self._ours_path(i):
+            return "+ " + self.ours[i - len(self.mine) - self.builtin()].upper()
         n = i - len(self.mine)
         bank = d.bank()
         key = (d.machine, bank, n)
@@ -95,9 +112,10 @@ class Presets:
     def _apply(self):
         d = self.d()
         self.landed = time.monotonic()
-        if self.pos < len(self.mine):
+        path = kitmenu.kit_path(self.mine[self.pos], d.machine) if self.pos < len(self.mine) else self._ours_path(self.pos)
+        if path:
             try:
-                with open(kitmenu.kit_path(self.mine[self.pos], d.machine)) as f:
+                with open(path) as f:
                     d.load_kit(list(json.load(f)["values"]))
             except (OSError, ValueError, KeyError, TypeError):
                 self.T.say("COULDN'T READ THAT PRESET", 2)
@@ -126,7 +144,7 @@ class Presets:
             self.kits.pick = self.pos
             self.kits.load()
         else:
-            self.T.say("PRESET: %s" % self.label(self.pos).split(" ", 1)[-1].upper(), 2)
+            self.T.say("PRESET: %s" % self.label(self.pos).split(" ", 1)[-1].upper(), 2)   # (already playing it)
         self._done()
 
     def leave(self):

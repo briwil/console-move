@@ -143,9 +143,27 @@ def fetch_asset(m):
             shutil.copy2(os.path.join(dest, dsp), os.path.join(dest, "dsp.so"))
 
 
+EXTRAS = os.path.join(HERE, "extras")    # our own additions to a module's folder (more preset banks), kept in git
+
+
+def add_extras(mid, out_dir):
+    """extras/<id>/ copied into the built module's folder (OB-Xd's presets/, Dexed's banks/...)."""
+    src = os.path.join(EXTRAS, mid)
+    if not os.path.isdir(src):
+        return
+    for root, _dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        dst = os.path.normpath(os.path.join(out_dir, rel))
+        os.makedirs(dst, exist_ok=True)
+        for f in files:
+            if not f.endswith(".py"):
+                shutil.copy2(os.path.join(root, f), os.path.join(dst, f))
+
+
 def build(m):
     """Fetch and compile one module. Returns None if it worked, else what went wrong."""
     if built(m):
+        add_extras(m["id"], os.path.join(OUT, m["id"]))     # (added to since it was built: copied in now)
         return None
     if m.get("asset"):
         try:
@@ -192,6 +210,7 @@ def build(m):
                 shutil.copytree(src, dst)
             elif os.path.exists(src):
                 shutil.copy2(src, dst)              # keeps a helper program runnable
+        add_extras(m["id"], out_dir)
         if m.get("roms"):
             # the module looks for ROMs in its own roms/ folder: that's ~/console-data/roms/<name>, which
             # the file page (http://console.local) can upload to

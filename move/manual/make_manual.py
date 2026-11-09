@@ -251,6 +251,18 @@ story += [
         ("COPY / PASTE PATTERN", "Copy the pattern and paste it onto another pattern or another instrument of the same kind."),
         ("CLEAR PATTERN / CLEAR LOCKS", "Empty the pattern, or only the step settings. Both ask ARE YOU SURE? first."),
     ]),
+    p("Presets page (synths)", H2),
+    p("A synth's first sound page. It lists your presets (*, saved with SAVE PRESET), then the synth's own, then "
+      "Console's (+, for synths that come with none: Plaits and Maze Voice). OB-Xd has 128 factory presets plus "
+      "six banks converted from OB-Xf's free patches (Xf Bass, Xf Leads, Xf Pads, Xf Keys, Xf Brass FX, Xf Atmos); "
+      "Dexed has 38 banks of 32, among them Yamaha's ROM1A and four Sega Genesis style banks.", BODY),
+    table([
+        ("The wheel", "The next / previous preset: you hear it as you land on it."),
+        ("Push the wheel", "Keep it (one of yours comes back with its inserts too)."),
+        ("Back", "The sound you had before you started turning."),
+        ("Knob 1", "The bank (OB-Xd, Dexed and other synths with more than one)."),
+        ("Left / Right", "The other sound pages; the preset you landed on stays."),
+    ]),
     p("Naming screen", H2),
     p("Used for songs, presets and renaming. The letter you are on is shown inverted, in a white box.", BODY),
     table([

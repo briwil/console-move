@@ -205,6 +205,9 @@ class Slot:
                 elif what == "param":
                     for inst in insts:
                         m._apply(_InstCalls(c, inst), t[1], t[2])
+                elif what == "raw":                              # a module setting that isn't a knob (a bank)
+                    for inst in insts:
+                        _InstCalls(c, inst).set(t[1], t[2])
                 elif what == "refresh":
                     self._refresh_after = c.now() + 2 * c.block
         self.sync_mix()

@@ -75,6 +75,7 @@ import movesong                   # noqa: E402
 import movesynth                  # noqa: E402
 import movelfo                    # noqa: E402
 import moveauto                   # noqa: E402
+import movepresets                # noqa: E402
 import movepunch                  # noqa: E402
 import opening                    # noqa: E402
 import samplebrowse              # noqa: E402
@@ -537,6 +538,8 @@ def main():
     m = menu_mod.Menu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits = kitmenu.KitMenu(os.path.join(APP, "layouts", "menu.ui"), T)
     m.kits.main = m
+    T.presets = movepresets.Presets(T, m.kits)     # a synth's PRESETS page (its first sound page)
+    T.presets_page = True
     kit_turn = m.kits.turn
 
     def kit_list_turn(delta, k=m.kits):                # the drums menu's list stops at its ends (it wrapped round)
@@ -878,6 +881,23 @@ def handle(name, T, m, e):
           and not T.mlfo.active()):                    # (its sound page only: not LFO, INSERT, SENDS, ARP, PADS)
         sb.open(e.drums, T.drum_voice)                 # push the wheel on a sampler drum: choose its sample
         return
+    pr = T.presets
+    if pr.orig is not None and not pr.on_page():
+        pr.leave()                                     # (off the PRESETS page while trying them: kept)
+    if pr.on_page() and not (m.open or m.kits.open or fp.active or sb.active):
+        if isinstance(name, tuple) and name[0] == "KNOB" and name[1] == 11:
+            pr.turn(name[2])                           # the wheel: the presets (heard as you land on them)
+            return
+        if name == "HOME":
+            pr.keep()
+            return
+        if name == "BACK" and pr.back():
+            return
+        if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8:
+            pr.knob(name[1], name[2])                  # knob 1: the bank
+            return
+        if name in ("LEFT", "RIGHT"):
+            pr.leave()
     if isinstance(name, tuple) and name[0] == "KNOB" and 1 <= name[1] <= 8 and not choice_knob(T, m, e, name):
         way = knobgate.numeric(("num", name[1], name[3]), name[2])    # every number knob: SPEED clicks a step
         if not way:

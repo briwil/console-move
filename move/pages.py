@@ -652,6 +652,9 @@ def sound_page(f, T):
     if T.mlfo.active():
         lfo_page(f, T)
         return
+    if getattr(T, "presets", None) is not None and T.presets.on_page():
+        presets_page(f, T)
+        return
     e = T.engine
     d = e.drums
     pages = T.drum_pages()
@@ -1072,6 +1075,26 @@ def confirm_page(f, k):
         f.small(2, 37, "PASTING REPLACES THEM")
     f.small(1, 51, "PLAY: YES")
     f.small(1, 58, "BACK: NO, KEEP IT")
+
+
+def presets_page(f, T):
+    """A synth's PRESETS page: yours (*) then its own; the one you're on in the middle."""
+    pr = T.presets
+    pr.sync()
+    n = pr.total()
+    pages = T.drum_pages()
+    header(f, "PRESETS", ("%d/%d" % (pr.pos + 1, n)) if n else "")
+    bank = pr.bank_label()
+    if bank:
+        f.small(1, 11, ("1 BANK: " + bank.upper())[:31])
+    if not n:
+        f.centre(W // 2, 28, "NO PRESETS YET", small=True)
+        f.centre(W // 2, 38, "MENU > SAVE PRESET", small=True)
+        return
+    first = max(0, min(pr.pos - 2, n - 4))
+    rows = [pr.label(i).upper()[:21] if first <= i < first + 4 else "" for i in range(n)]   # (only the ones shown)
+    biglist(f, rows, pr.pos, fit=4, top=20 if bank else 13)
+    f.small(1, 58, ("PUSH: KEEP   BACK: UNDO" if pr.orig is not None else "WHEEL: BROWSE")[:31])
 
 
 def preset_list(f, k):

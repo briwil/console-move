@@ -217,6 +217,16 @@ class Module:
                         if p["key"] not in {c.get("key") for c in chain}:
                             chain.append(q)
         list_skip = set()
+        self.preset_info = None                       # the preset list (and banks) the module says it has
+        levels_all = list((ui.get("levels") or {}).values()) + list(((caps.get("ui_hierarchy") or {}).get("levels") or {}).values())
+        for lvl in levels_all:
+            if lvl.get("list_param") in ("preset", "patch") and lvl.get("count_param") and self.preset_info is None:
+                self.preset_info = {"list": lvl["list_param"], "count": lvl.get("count_param"),
+                                    "name": lvl.get("name_param")}
+        for lvl in levels_all:
+            if self.preset_info is not None and lvl.get("items_param") and lvl.get("select_param"):
+                self.preset_info.update(items=lvl["items_param"], select=lvl["select_param"])
+                break
         # a preset / kit list the module says the length of (OB-Xd: 0-9999 in chain_params, but 128 real presets)
         for lvl in list((ui.get("levels") or {}).values()) + list(((caps.get("ui_hierarchy") or {}).get("levels") or {}).values()):
             lp, cp = lvl.get("list_param"), lvl.get("count_param")
@@ -454,6 +464,98 @@ class Module:
     def get_param(self, index):
         return self.values[index] if 0 <= index < self.param_count else 0
 
+    # ------------------------------------------------------------ the module's own presets (the PRESETS page)
+    def has_presets(self):
+        if self.preset_info is None and "preset" in self.index:
+            p = self.params[self.index["preset"]]
+            if p.get("kind") == "menu" and len(p.get("options") or []) > 2:
+                self.preset_info = {"list": "preset", "count": None, "name": None, "menu": True}   # names in the menu
+            elif p.get("int"):
+                self.preset_info = {"list": "preset", "count": None, "name": None}     # a preset knob, no names
+        return self.preset_info is not None
+
+    def preset_param(self):
+        pi = self.preset_info
+        return self.index.get(pi["list"]) if pi else None
+
+    def set_preset(self, n):
+        """The module's own preset n (the rest of the settings follow it)."""
+        pi = self.preset_info
+        if not pi:
+            return
+        i = self.preset_param()
+        if pi.get("menu"):
+            self.set_param(i, n)
+            return
+        with self._lock:
+            if i is not None:
+                self.values[i] = n
+            self._pending.append(("raw", pi["list"], str(int(n))))
+            self._pending.append(("refresh",))
+
+    def preset_now(self):
+        pi = self.preset_info
+        if pi and pi.get("menu"):
+            return self.values[self.preset_param()]
+        n = _number(self._seq.get(pi["list"])) if pi else None
+        if n is None and pi and self.preset_param() is not None:
+            n = self.values[self.preset_param()]
+        return int(n or 0)
+
+    def preset_count(self):
+        pi = self.preset_info
+        if not pi:
+            return 0
+        if pi.get("menu"):
+            return len(self.params[self.preset_param()]["options"])
+        n = _number(self._seq.get(pi["count"])) if pi.get("count") else None
+        i = self.preset_param()
+        if n is None and i is not None:
+            n = self.params[i]["steps"] + 1
+        n = int(n or 0)
+        if i is not None and n >= 1:
+            self.params[i]["steps"] = max(1, n - 1)  # (a bank change changes how many there are)
+        return n
+
+    def preset_name(self):
+        pi = self.preset_info
+        if pi and pi.get("menu"):
+            opts = self.params[self.preset_param()]["options"]
+            n = self.values[self.preset_param()]
+            return opts[n].title() if 0 <= n < len(opts) else None
+        name = self._seq.get(pi["name"]) if pi and pi.get("name") else None
+        return (name or "").strip() or None
+
+    def banks(self):
+        """[(label, index)] of the module's banks, or []."""
+        pi = self.preset_info
+        if not pi or not pi.get("items"):
+            return []
+        try:
+            items = json.loads(self._seq.get(pi["items"], big=True) or "[]")
+        except ValueError:
+            return []
+        out = []
+        for n, it in enumerate(items if isinstance(items, list) else []):
+            if isinstance(it, dict):
+                out.append((str(it.get("label") or it.get("name") or n + 1), int(_number(it.get("index")) if it.get("index") is not None else n)))
+            else:
+                out.append((str(it), n))
+        return out
+
+    def bank(self):
+        pi = self.preset_info
+        n = _number(self._seq.get(pi["select"])) if pi and pi.get("select") else None
+        return int(n or 0)
+
+    def set_bank(self, index):
+        pi = self.preset_info
+        if pi and pi.get("select"):
+            with self._lock:
+                self._pending.append(("all_off",))
+                self._pending.append(("raw", pi["select"], str(int(index))))
+                self._pending.append(("refresh",))
+
     # kept after the module's own settings in kit(): SENDS_MARK, reverb, delay (an older kit just hasn't got them)
     SENDS_MARK = -9
 
@@ -544,6 +646,9 @@ class Module:
             elif t[0] == "param":
                 for inst in engines:
                     self._apply(inst, t[1], t[2])
+            elif t[0] == "raw":
+                for inst in engines:
+                    inst.set(t[1], t[2])
             elif t[0] == "refresh":
                 refresh = True
         if refresh:
@@ -679,6 +784,9 @@ class SynthModule(Module):
             elif t[0] == "param":
                 for inst in engines:
                     self._apply(inst, t[1], t[2])
+            elif t[0] == "raw":
+                for inst in engines:
+                    inst.set(t[1], t[2])
             elif t[0] == "refresh":
                 refresh = True
             elif t[0] == "all_off":

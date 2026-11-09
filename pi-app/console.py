@@ -637,7 +637,10 @@ class Transport:
     def drum_pages(self):
         d = self.engine.drums
         self.drum_voice = min(self.drum_voice, d.voices - 1)
-        return d.pages(self.drum_voice)
+        pages = d.pages(self.drum_voice)
+        if getattr(self, "presets_page", False) and self.engine.is_synth(d.machine) and hasattr(d, "has_presets"):
+            pages = [("PRESETS", [])] + list(pages)      # (the Move: a synth's first page is its presets)
+        return pages
 
     def drum_knob(self, number, delta, shift):
         """On the drum page: knobs 1-8 are the settings on the page, knob 9 turns the page."""

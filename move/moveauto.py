@@ -1,8 +1,8 @@
 """The AUTOMATION page (left button 1 after the sequencer), and recording knob moves into a pattern.
 
 Recording: while recording into the pattern (Record on a sound or sequencer page, playing), turning one of the
-sound page's knobs puts its value on the step playing, as a step lock (a drum: only on steps that play; a synth:
-on the notes that start there). The lock replaces one already there; the other steps keep theirs.
+sound page's knobs puts its value on the step playing, every step, notes or not (autom.py): it plays back as
+the steps go by, so a sweep over a held note is heard as a sweep. On the page it's the setting's name + REC.
 
 The page: knob 1 goes through what has locks in this pattern (the step settings, VELOCITY, CHANCE, MULTIPLY...,
 then the sound's), the step buttons light where it is set. Tap a lit step: it goes from that step. Tap an unlit
@@ -12,6 +12,7 @@ puts any of it back. A drum machine: tap a drum's pad to see its own. < > (or th
 """
 import time
 
+import autom
 import knobgate
 import popup
 import sequencer
@@ -37,27 +38,18 @@ def record(T, param):
     if not d.lockable(param):
         return
     value = d.get_param(param)
-    try:
-        at = seq.position(e._heard_frame(), e.frames_per_beat())
-    except Exception:                                    # noqa: BLE001
-        return
     now = time.monotonic()
     if now - getattr(T, "_auto_rec_at", 0) > 2.0:      # one undo per knob gesture, not one per click
         seq.snapshot()
     T._auto_rec_at = now
     with seq.lock:
+        pat = seq.pattern
         if T.synth_shown():
-            for n in seq.pattern.at(at[0]).values():
-                n.locks[param] = int(value)
+            length, rate = pat.length, pat.rate
         else:
-            voice = d.params[param].get("voice") if hasattr(d, "params") and param < len(d.params) else None
-            lanes = [ln for ln in range(d.lanes) if voice is None and ln == T.seqp.lane
-                     or voice is not None and ln < len(d.lane_voice) and d.lane_voice[ln] == voice]
-            for ln in lanes:
-                if ln < len(at):
-                    st = seq.step(ln, at[ln])
-                    if st.on:                            # (a drum's lock only counts on a step that plays)
-                        st.locks[param] = int(value)
+            ln = seq.lane(T.seqp.lane)
+            length, rate = ln.length, ln.rate
+        autom.record(seq, pat, param, value, e._heard_frame(), e.frames_per_beat(), length, rate)
     e.seq_changed()
 
 
@@ -84,8 +76,18 @@ class Auto:
     def synth(self):
         return self.T.synth_shown()
 
-    def length(self):
+    @staticmethod
+    def rec(key):
+        return isinstance(key, tuple) and key[0] == "rec"
+
+    def rec_lane(self, key):
+        return autom.lanes(self.seq.pattern).get(key[1])
+
+    def length(self, key=None):
         seq = self.seq
+        if self.rec(key):
+            ln = self.rec_lane(key)
+            return ln.length if ln else 16
         return seq.pattern.length if self.synth() else seq.lane(self.T.seqp.lane).length
 
     def units(self, i):
@@ -120,7 +122,8 @@ class Auto:
                             found.add(k)
                     found.update(u.locks)
         steps = [k for k, _l in STEP_KEYS if k in found]
-        return steps + sorted(k for k in found if not isinstance(k, str))
+        recs = [("rec", p) for p in sorted(autom.lanes(self.seq.pattern)) if autom.lanes(self.seq.pattern)[p].steps]
+        return steps + sorted(k for k in found if not isinstance(k, str)) + recs
 
     def key(self):
         ks = self.keys()
@@ -130,6 +133,8 @@ class Auto:
         return ks[self.pick]
 
     def label(self, key):
+        if self.rec(key):
+            return self.T.engine.drums.label(key[1]) + " REC"
         if isinstance(key, str):
             return STEP_LABELS.get(key, key.upper())
         return self.T.engine.drums.label(key)
@@ -137,10 +142,16 @@ class Auto:
     def steps_with(self, key):
         if key is None:
             return set()
+        if self.rec(key):
+            ln = self.rec_lane(key)
+            return {i for i in ln.steps if i < ln.length} if ln else set()
         with self.seq.lock:
             return {i for i in range(self.length()) if any(self.has(u, key) for u in self.units(i))}
 
     def value_text(self, i, key):
+        if self.rec(key):
+            ln = self.rec_lane(key)
+            return self.T.engine.drums.value_text(key[1], ln.steps[i]) if ln and i in ln.steps else "-"
         us = [u for u in self.units(i) if self.has(u, key)]
         if not us:
             return "-"
@@ -166,6 +177,14 @@ class Auto:
     def change(self, i, key, clicks, one):
         d = self.T.engine.drums
         self._keep(i, key)
+        if self.rec(key):
+            with self.seq.lock:
+                ln = self.rec_lane(key)
+                if ln and i in ln.steps:
+                    v = ln.steps[i]
+                    ln.steps[i] = int(d.stepped(key[1], v, clicks)) if hasattr(d, "stepped") else max(0, min(127, v + clicks))
+            self.T.engine.seq_changed()
+            return
         with self.seq.lock:
             for u in self.units(i):
                 if not self.has(u, key):
@@ -203,6 +222,14 @@ class Auto:
 
     def remove(self, i, key):
         self.seq.snapshot()
+        if self.rec(key):
+            with self.seq.lock:
+                ln = self.rec_lane(key)
+                if ln:
+                    ln.steps.pop(i, None)
+            self._snapped = None
+            self.T.engine.seq_changed()
+            return
         with self.seq.lock:
             for u in self.units(i):
                 self._reset(u, key)
@@ -228,6 +255,14 @@ class Auto:
             return False
         before = [k for k in lit if k < i]
         src_i = before[-1] if before else lit[-1]
+        if self.rec(key):                                 # recorded: any step can have it
+            self.seq.snapshot()
+            with self.seq.lock:
+                ln = self.rec_lane(key)
+                ln.steps[i] = ln.steps[src_i]
+            self._snapped = (i, key)
+            self.T.engine.seq_changed()
+            return True
         with self.seq.lock:
             ok = any(self.has(u, key) for u in self.units(src_i)) and \
                 any(self.synth() or getattr(u, "on", False) for u in self.units(i))
@@ -244,6 +279,12 @@ class Auto:
 
     def clear_key(self, key):
         self.seq.snapshot()
+        if self.rec(key):
+            with self.seq.lock:
+                autom.lanes(self.seq.pattern).pop(key[1], None)
+            self._snapped = None
+            self.T.engine.seq_changed()
+            return
         with self.seq.lock:
             for i in range(self.length()):
                 for u in self.units(i):
@@ -294,7 +335,7 @@ class Auto:
                 self._tap = False
             return
         key = self.key()
-        if i >= self.length() or key is None:
+        if key is None or i >= self.length(key):
             return
         if deleting:
             if i in self.steps_with(key):
@@ -329,7 +370,7 @@ class Auto:
         return time.monotonic() < self.confirm_until
 
     def arrows(self, way):
-        pages = max(1, (self.length() + 15) // 16)
+        pages = max(1, (self.length(self.key()) + 15) // 16)
         self.page = max(0, min(pages - 1, self.page + way))
 
     def lane_changed(self):
@@ -341,6 +382,10 @@ class Auto:
         if not e.playing:
             return None
         try:
+            key = self.key()
+            if self.rec(key):
+                ln = self.rec_lane(key)
+                return autom.position(self.seq, ln, e._heard_frame(), e.frames_per_beat())[1] if ln else None
             at = self.seq.position(e._heard_frame(), e.frames_per_beat())
             return at[0] if self.synth() else at[self.T.seqp.lane]
         except Exception:                                # noqa: BLE001
@@ -353,7 +398,7 @@ class Auto:
     def step_lights(self):
         key = self.key()
         on = self.steps_with(key)
-        length, now = self.length(), self.playing_step()
+        length, now = self.length(key), self.playing_step()
         colour = self.colour()
         out = []
         for k in range(16):

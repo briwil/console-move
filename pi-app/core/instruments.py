@@ -11,6 +11,8 @@ copy is one core source.
 import math
 import time
 
+import autom
+
 import arp as arplib
 import drums
 from core import Core  # noqa: F401  (for type hints in docs)
@@ -229,6 +231,41 @@ class Slot:
             self.arp.unhold()
 
     # ---- the sequencer's steps, at their frames
+    def _base(self, p):
+        """A setting's value between locks: the recorded automation's, or the knob's."""
+        return getattr(self.m, "_auto", {}).get(p, self.m.values[p])
+
+    def automate(self, events, base):
+        """Recorded automation: [(offset, AUTO, 0, {setting: value, or None: the knob's own})] (autom.events)."""
+        m, c = self.m, self.core
+        if m is None or not hasattr(m, "values"):
+            return
+        auto = m.__dict__.setdefault("_auto", {})
+        for offset, _lane, _vel, d in events:
+            at = int(base + offset)
+            for p, v in d.items():
+                if not (isinstance(p, int) and 0 <= p < len(m.values)):
+                    continue
+                if v is None:
+                    auto.pop(p, None)
+                    v = m.values[p]
+                else:
+                    auto[p] = v
+                if self.kind == "lxr":
+                    _Calls(c, self.seq_lib, at).drums_set_param(p, v)
+                    m._pans = None
+                elif self.kind == "engine":
+                    m._set(_Calls(c, self.seq_lib, at), p, v)
+                else:
+                    m._apply(_InstCalls(c, m._seq, at), p, v)
+
+    def auto_reset(self):
+        """Stopped: the settings back to the knobs."""
+        m = self.m
+        auto = getattr(m, "_auto", None)
+        if auto:
+            self.automate([(0, "auto", 0, {p: None for p in list(auto)})], self.core.now())
+
     def play(self, events, base):
         """events: from the sequencer, [(offset, lane or note, velocity, locks)]; base: the core frame offset 0
         is at."""
@@ -240,7 +277,7 @@ class Slot:
                 voice = min(lane, drums.VOICES - 1)
                 lib = _Calls(c, self.seq_lib, at)
                 for p in m._locked[voice] - set(locks):
-                    lib.drums_set_param(p, m.values[p])
+                    lib.drums_set_param(p, self._base(p))
                 for p, v in locks.items():
                     lib.drums_set_param(p, v)
                 if locks or m._locked[voice]:
@@ -253,7 +290,7 @@ class Slot:
                 voice = m.lane_voice[lane]
                 lib = _Calls(c, self.seq_lib, at)
                 for p in m._locked[voice] - set(locks):
-                    m._set(lib, p, m.values[p])
+                    m._set(lib, p, self._base(p))
                 for p, v in locks.items():
                     if 0 <= p < m.param_count:
                         m._set(lib, p, v)
@@ -264,7 +301,7 @@ class Slot:
                     continue
                 inst = _InstCalls(c, m._seq, at)
                 for p in m._locked[lane] - set(locks):
-                    m._apply(inst, p, m.values[p])
+                    m._apply(inst, p, self._base(p))
                 for p, v in locks.items():
                     if 0 <= p < m.param_count:
                         m._apply(inst, p, v)
@@ -279,7 +316,7 @@ class Slot:
                 gate = max(1, int(locks.pop("gate", 4410)))
                 inst = _InstCalls(c, m._seq, at)
                 for p in m._locked[0] - set(locks):
-                    m._apply(inst, p, m.values[p])
+                    m._apply(inst, p, self._base(p))
                 for p, v in locks.items():
                     if isinstance(p, int) and 0 <= p < m.param_count:
                         m._apply(inst, p, v)
@@ -336,6 +373,12 @@ class Scheduler:
         n = int(want - self.sent)
         for slot, seq in plays:
             ev = seq.events(self.sent, n, frames_per_beat)
+            try:
+                au = autom.events(seq, self.sent, n, frames_per_beat)
+                if au:
+                    slot.automate(au, self.start_frame + self.sent)    # (before the notes: a note's lock wins)
+            except Exception as e:                       # noqa: BLE001
+                print("Automation:", e)
             if ev:
                 slot.play(ev, self.start_frame + self.sent)
                 if on_events:

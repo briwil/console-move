@@ -789,7 +789,7 @@ def auto_page(f, T):
     on = a.steps_with(key)
     f.text(1, 12, ("1 %s" % a.label(key))[:16])
     f.right(W - 2, 13, "%d/%d" % (a.pick + 1, len(keys)), small=True)
-    length, now = a.length(), a.playing_step()
+    length, now = a.length(key), a.playing_step()
     for k in range(16):
         i = a.page * 16 + k
         x, y = 1 + k * 8, 23

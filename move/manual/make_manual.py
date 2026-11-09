@@ -393,9 +393,10 @@ story += [
          "it (Left / Right: its other pages; Shift + touch a knob: the lock off)."),
         ("Record", "On an instrument's sound, sequencer or automation page: recording into the pattern while it "
          "plays. The pads you play go in (a synth note lasts as long as you hold the pad; chromatic drum pads keep "
-         "their pitch), and so do the sound page's knobs: turning one puts its value on each step as it plays, as a "
-         "step lock (a drum: on the steps that have a hit; a synth: on the notes starting there), replacing what "
-         "was there. Press again to stop. It doesn't touch the tape. It turns itself off at Stop and when you "
+         "their pitch), and so do the sound page's knobs: turning one puts its value on every step as it plays, notes or "
+         "not, and it plays back as the steps go by (a filter sweep over a held note is heard as a sweep). Turn it "
+         "again on a later pass to record over those steps. It shows on the automation page as the setting's name "
+         "+ REC. Press again to stop. It doesn't touch the tape. It turns itself off at Stop and when you "
          "leave the instrument's pages."),
         ("Step settings colours", "Pads of tapped steps: yellow for the steps you picked, red for settings you changed, dim for the rest."),
         ("Stop", "Every sounding note is let go at Stop (Dexed and other synths too)."),
@@ -404,7 +405,8 @@ story += [
 
     p("Automation page", H2),
     p("Left button 1 after the sequencer: what is locked on this pattern's steps, one setting at a time. Recorded "
-      "knob moves show here, and so do step settings made with Shift + steps.", BODY),
+      "knob moves show here (their name + REC: any step can have one, notes or not), and so do step locks and "
+      "step settings made with Shift + steps. When it stops, the sound goes back to the knobs.", BODY),
     table([
         ("Knob 1", "Go through the settings that are set on some step: the step settings (VELOCITY, CHANCE, "
          "MULTIPLY, PULSE...) first, then the sound's (BLEND, CUTOFF...). Each has its own colour on the step "

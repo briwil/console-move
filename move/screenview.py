@@ -647,7 +647,7 @@ def auto_data(T):
         rows.append({"label": a.label(k), "steps": {str(i): a.value_text(i, k) for i in on}})
     held = a.held
     return {"title": str(title).upper(), "name": str(name).upper(), "slot": e.slot + 1, "pattern": seq.current + 1,
-            "length": a.length(), "rows": rows, "pick": keys.index(pick) if pick in keys else -1,
+            "length": a.length(pick), "rows": rows, "pick": keys.index(pick) if pick in keys else -1,
             "held": held, "held_value": a.value_text(held, pick) if (held is not None and pick is not None) else "",
             "first": a.page * 16, "at": a.playing_step(), "confirm": a.confirming(),
             "dark": bool(__import__("sequencer").TRIPLETS)}

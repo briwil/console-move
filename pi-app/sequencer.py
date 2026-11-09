@@ -566,7 +566,7 @@ class Sequencer:
                                              {str(k): v for k, v in s.locks.items()}, dict(s.comp)]
                     lanes.append({"length": ln.length, "rate": ln.rate, "hits": ln.hits, "rotate": ln.rotate, "steps": steps})
                 import lfo
-                pats.append({"lanes": lanes, "lfos": lfo.to_json(p)})
+                pats.append({"lanes": lanes, "lfos": lfo.to_json(p), "auto": __import__("autom").to_json(p)})
             import punch
             return {"current": self.current, "patterns": pats, "punchfx": punch.to_json(self)}
 
@@ -585,6 +585,7 @@ class Sequencer:
                 for p, pd in zip(self.patterns, data.get("patterns", [])):
                     import lfo
                     lfo.from_json(p, pd.get("lfos"))
+                    __import__("autom").from_json(p, pd.get("auto"))
                     for ln, ld in zip(p.lanes, pd.get("lanes", [])):
                         ln.length = max(1, min(MAX_STEPS, int(ld.get("length", 16))))
                         ln.rate = max(0, min(len(RATES) - 1, int(ld.get("rate", 0))))

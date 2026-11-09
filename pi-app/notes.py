@@ -465,7 +465,7 @@ class NoteSequencer:
                         notes.setdefault(str(step), {})[str(pitch)] = [
                             n.length, n.vel, CHANCES[n.chance], n.ratchet, {str(k): v for k, v in n.locks.items()}, n.nudge, dict(n.comp)]
                 import lfo
-                pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p),
+                pats.append({"length": p.length, "rate": p.rate, "notes": notes, "lfos": lfo.to_json(p), "auto": __import__("autom").to_json(p),
                              "lanes": {str(k): v for k, v in p.lane_len.items()},
                              "lane_rates": {str(k): v for k, v in p.lane_rate.items()}})
             return {"kind": "notes", "current": self.current, "root": self.root, "scale": self.scale,
@@ -495,6 +495,7 @@ class NoteSequencer:
                     p.rate = max(0, min(len(RATES) - 1, int(pd.get("rate", 0))))
                     import lfo
                     lfo.from_json(p, pd.get("lfos"))
+                    __import__("autom").from_json(p, pd.get("auto"))
                     p.lane_len = {int(k): max(1, min(MAX_STEPS, int(v))) for k, v in (pd.get("lanes") or {}).items()
                                   if 0 <= int(k) <= 127 and int(v) != p.length}
                     p.lane_rate = {int(k): max(0, min(len(RATES) - 1, int(v)))

@@ -446,6 +446,10 @@ class CoreBridge:
             seq = e.seqs.get(mid)
             if seq is not None:
                 seq.stop()
+            try:
+                _slot.auto_reset()                       # (recorded automation: the settings back to the knobs)
+            except Exception:                            # noqa: BLE001
+                pass
             m = e.drums.get(mid) if e.drums else None
             if hasattr(m, "all_off"):
                 m.all_off()

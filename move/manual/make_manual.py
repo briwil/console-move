@@ -386,7 +386,7 @@ story += [
          "remove notes. Hold a step and tap a later step: that is where the notes end (also across pages)."),
         ("Knobs (no step held)", "1 length, 2 rate, 3 type (UNIFIED: one sequence; PER NOTE: tap a pad to see only "
          "its steps), 4 the lit note's own length, 5 key, 6 scale."),
-        ("Shift + steps", "Select steps: the pads are their settings. LENGTH, VELOCITY, CHANCE, MULTIPLY, "
+        ("Shift + steps", "Select steps: the pads are their settings. VELOCITY, CHANCE, MULTIPLY, "
          "<b>NUDGE</b> (a step early or late, -50 to +50 %), PULSE, HOLD, JUMP (PER NOTE type only), RANDOM, "
          "RAMP UP, RAMP DOWN (pitch), then the synth's own settings as parameter locks. "
          "Knob 1 sets the picked one; on a component (MULTIPLY, NUDGE, PULSE...) knob 2 sets its chance. With no pad picked, knobs 1-8 are the synth's sound page: turn one to lock "

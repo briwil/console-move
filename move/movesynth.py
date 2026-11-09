@@ -24,7 +24,7 @@ from sequencer import CHANCES, MAX_RATCHET
 
 PAGE = 16
 TYPES = ["UNIFIED", "PER NOTE"]
-STEP_PADS = [("length", "LENGTH"), ("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("nudge", "NUDGE"),
+STEP_PADS = [("vel", "VELOCITY"), ("chance", "CHANCE"), ("ratchet", "MULTIPLY"), ("nudge", "NUDGE"),
              ("pulse", "PULSE"), ("hold", "HOLD"), ("jump", "JUMP"), ("rand", "RANDOM"), ("rup", "RAMP UP"),
              ("rdown", "RAMP DOWN")]
 PATH_ONLY = ("pulse", "hold", "jump")             # these change the order the steps play in: PER NOTE only

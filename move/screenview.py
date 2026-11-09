@@ -692,6 +692,34 @@ def seq_data(T):
         live.update({"shown": shown, "lane": ms.lane, "first": ms.first(), "page_len": ms.length(),
                      "down": sorted(ms.down), "selected": sorted(ms.selected),
                      "at": ms.playing_step() if playing else None})
+        if static["per_note"]:                           # PER NOTE: a lane per note, as the drums (own length, rate)
+            pitches = set(pat.lane_len) | set(pat.lane_rate) | {nt for d in pat.notes.values() for nt in d}
+            if ms.lane is not None:
+                pitches.add(ms.lane)
+            if pitches:
+                order = sorted(pitches, reverse=True)
+                lanes, ats = [], []
+                for pitch in order:
+                    n_len = pat.lane_length(pitch)
+                    steps = []
+                    for i in range(n_len):
+                        nt = pat.notes.get(i, {}).get(pitch)
+                        steps.append([1, nt.vel, nt.chance, nt.ratchet, len(nt.locks), len(nt.comp)] if nt else [0, 0, 0, 1, 0, 0])
+                    r = pat.lane_rate.get(pitch, pat.rate)
+                    lanes.append({"name": notes.note_name(pitch), "length": n_len, "rate": sequencer.RATES[r][0],
+                                  "spb": pat.steps_per_beat(pitch), "hits": 0, "group": sequencer.group_steps(
+                                      pat.steps_per_beat(pitch), tuple(getattr(e, "time_sig", (4, 4)))),
+                                  "straight": not any(st[5] for st in steps), "steps": steps})
+                    at = None
+                    if playing:
+                        try:
+                            k = seq.raw_step(e._heard_frame(), fpb, pitch)
+                            at = sequencer.phys(k % (sequencer.live_len(n_len, seq.trip) or 1), seq.trip)
+                        except Exception:                # noqa: BLE001
+                            at = None
+                    ats.append(at)
+                static.update({"kind": "drums", "lanes": lanes, "chances": sequencer.CHANCES})
+                live.update({"lane": order.index(ms.lane) if ms.lane in order else 0, "held": None, "at": ats})
         return static, live
     ms = T.mseq
     d = e.drums

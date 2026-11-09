@@ -302,8 +302,10 @@ class Punch:
             i = self.page * 16 + k
             if i >= ln.length or sequencer.dark(i, trip):
                 out.append(0)
-            elif i == self.held or i == now:
-                out.append(120 if i in ln.steps or i == self.held else sequencer.STEP_IDLE)
+            elif i == self.held:
+                out.append(120)
+            elif i == now:                                 # the playhead: on steps dim, off steps glow (as the drum lanes)
+                out.append(20 if i in ln.steps or i in tails else 60)
             else:
                 out.append(colour if i in ln.steps or i in tails else sequencer.STEP_IDLE)
         return out

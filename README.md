@@ -3,6 +3,8 @@
 An 8-track tape recorder with OP-1/OP-XY-style editing, up to 8 instruments (drum machines and synths, including
 ones from Schwung's catalog) and step sequencers, running as an app on an Ableton Move.
 
+- **Install:** the one-line command on [consoleforthemove.com](https://consoleforthemove.com) (needs RNBO Move Takeover on the Move)
+- **Releases and notes:** [Releases](https://github.com/briwil/console-move/releases)
 - **How to use it:** [move/manual/Console-on-Move-Manual.pdf](move/manual/Console-on-Move-Manual.pdf)
 - **How it works / notes:** [move/MOVE-NOTES.md](move/MOVE-NOTES.md)
 - **Updating the Move:** Menu, SETTINGS, SOFTWARE UPDATE (see [move/UPDATE.md](move/UPDATE.md))

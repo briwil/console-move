@@ -18,12 +18,23 @@ RESTART_CODE = 75
 
 
 def _get(url):
-    key = open(TOKEN).read().strip()
-    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + key,
-                                               "Accept": "application/vnd.github+json",
-                                               "User-Agent": "console-move-updater"})
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "console-move-updater"}
+    try:
+        headers["Authorization"] = "Bearer " + open(TOKEN).read().strip()       # (not needed: the repo is public)
+    except OSError:
+        pass
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
+
+
+def label(sha):
+    """What SOFTWARE UPDATE shows: the release number (move/VERSION), then the build's short code."""
+    try:
+        num = open(os.path.join(HERE, "VERSION")).read().strip()
+    except OSError:
+        num = ""
+    return ("v%s  %s" % (num, sha[:7]) if num else sha[:7]).strip()
 
 
 def installed():
@@ -44,7 +55,7 @@ class Updater:
         self.splash_changed = False
         self._new = None
         sha, date = installed()
-        self.version = ("%s  %s" % (sha[:7], date)).strip() if sha else "unknown"
+        self.version = label(sha) if sha else "unknown"
 
     @property
     def busy(self):
@@ -113,5 +124,5 @@ class Updater:
             self.state, self.detail = "error", (last[-1] if last else "FAILED").upper()[:60]
             return
         sha, date = installed()
-        self.version = ("%s  %s" % (sha[:7], date)).strip()
+        self.version = label(sha)
         self.state = "done"

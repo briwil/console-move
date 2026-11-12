@@ -15,7 +15,23 @@ import kitmenu
 
 PAGE = "PRESETS"
 OURS = os.path.join(os.path.dirname(os.path.abspath(kitmenu.__file__)), "presets")    # Console's own (make_presets.py)
+NAMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preset-names.json")   # the names that come with Console
 NAME_WAIT = 0.25                        # the synth needs a moment after a preset before its name is read
+
+
+def load_names(path=NAMES_FILE):
+    """preset-names.json: {"machine|bank|number": name} -> {(machine, int(bank), int(number)): name}. Missing or
+    broken: no names (they're read off the synth as you scroll)."""
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+        out = {}
+        for key, name in raw.items():
+            m, b, n = key.split("|")
+            out[(m, int(b), int(n))] = str(name)
+        return out
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
 
 
 class Presets:
@@ -25,7 +41,8 @@ class Presets:
         self.pos = 0
         self.orig = None                # the sound before you started turning (Back puts it back)
         self.landed = 0.0
-        self.names = {}                 # (machine, bank, n) -> name, as they're read
+        self.names = load_names()       # (machine, bank, n) -> name: the ones that come with Console, then as they're read
+        self._read = set()              # the ones read off the synth this time (they replace the built-in ones)
         self.mine = []
         self.ours = []
         self._seen = None
@@ -88,11 +105,16 @@ class Presets:
         n = i - len(self.mine)
         bank = d.bank()
         key = (d.machine, bank, n)
-        if key not in self.names and i == self.pos and time.monotonic() - self.landed > NAME_WAIT \
+        if (d.preset_info or {}).get("menu"):                  # a plain menu: every name is in its option list
+            opts = d.params[d.preset_param()]["options"]
+            if 0 <= n < len(opts):
+                self.names[key] = str(opts[n]).title()
+        elif key not in self._read and i == self.pos and time.monotonic() - self.landed > NAME_WAIT \
                 and d.preset_now() == n:
-            nm = d.preset_name()
+            nm = d.preset_name()                               # (what the synth says replaces the built-in name)
             if nm:
                 self.names[key] = nm
+                self._read.add(key)
         return "%d %s" % (n + 1, self.names.get(key, "")) if key in self.names else "%d" % (n + 1)
 
     def bank_label(self):
